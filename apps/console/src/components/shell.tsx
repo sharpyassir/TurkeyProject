@@ -35,9 +35,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
     document.documentElement.dir = RTL[locale] ? 'rtl' : 'ltr';
   }, [locale]);
 
+  // Read the token directly: `authed` state can lag one render behind a route change.
   useEffect(() => {
-    if (ready && !authed && pathname !== '/login') router.replace('/login');
-  }, [ready, authed, pathname, router]);
+    if (!ready) return;
+    const has = !!getToken();
+    if (!has && pathname !== '/login') router.replace('/login');
+    if (has && pathname === '/login') router.replace('/servers');
+  }, [ready, pathname, router]);
 
   const setLocale = (l: Locale) => {
     try { localStorage.setItem('pgcloud.locale', l); } catch { /* ignore */ }
