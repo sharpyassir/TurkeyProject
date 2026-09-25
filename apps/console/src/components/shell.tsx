@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { getToken, setToken } from '@/lib/api';
 import { getLocale, Locale, RTL, t } from '@/lib/i18n';
-import { ProductMenu } from './product-menu';
+import { DesktopNav, MobileNav } from './main-nav';
 
 interface Ctx {
   locale: Locale;
@@ -49,41 +49,41 @@ export function Shell({ children }: { children: React.ReactNode }) {
     router.replace('/login');
   };
 
-  const nav = [
-    { href: '/servers', label: t(locale, 'servers') },
-    { href: '/apps', label: t(locale, 'apps') },
-    { href: '/agents', label: t(locale, 'agents') },
-    { href: '/billing', label: t(locale, 'billing') },
-  ];
+  const account = (
+    <div className="flex items-center gap-3 text-sm">
+      <Link href="/billing" className={pathname.startsWith('/billing') ? 'font-medium' : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100'}>{t(locale, 'billing')}</Link>
+      <select className="input w-auto py-1" value={locale} onChange={(e) => setLocale(e.target.value as Locale)} aria-label="Language">
+        <option value="en">EN</option>
+        <option value="tr">TR</option>
+        <option value="ar">AR</option>
+      </select>
+      <button className="btn-ghost" onClick={signOut}>{t(locale, 'signOut')}</button>
+    </div>
+  );
 
   return (
     <ShellCtx.Provider value={{ locale, setLocale, authed, signOut }}>
       <header className="border-b border-neutral-200 dark:border-neutral-800">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <Link href="/servers" className="font-semibold tracking-tight">pgcloud</Link>
-          {authed && (
-            <>
-              <ProductMenu label={t(locale, 'products')} />
-              <nav className="hidden gap-4 text-sm sm:flex">
-                {nav.map((n) => (
-                  <Link key={n.href} href={n.href} className={pathname.startsWith(n.href) ? 'font-medium' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'}>
-                    {n.label}
-                  </Link>
-                ))}
-              </nav>
-            </>
-          )}
-          <div className="ms-auto flex items-center gap-3 text-sm">
-            <select className="input w-auto py-1" value={locale} onChange={(e) => setLocale(e.target.value as Locale)} aria-label="Language">
-              <option value="en">EN</option>
-              <option value="tr">TR</option>
-              <option value="ar">AR</option>
-            </select>
-            {authed && <button className="btn-ghost" onClick={signOut}>{t(locale, 'signOut')}</button>}
+        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
+          <Link href="/servers" className="me-2 font-semibold tracking-tight">pgcloud</Link>
+          {authed && <DesktopNav />}
+          <div className="ms-auto flex items-center gap-2">
+            {authed ? (
+              <>
+                <div className="hidden lg:block">{account}</div>
+                <MobileNav extra={account} />
+              </>
+            ) : (
+              <select className="input w-auto py-1" value={locale} onChange={(e) => setLocale(e.target.value as Locale)} aria-label="Language">
+                <option value="en">EN</option>
+                <option value="tr">TR</option>
+                <option value="ar">AR</option>
+              </select>
+            )}
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">{ready ? children : null}</main>
+      <main className="mx-auto max-w-7xl px-4 py-6">{ready ? children : null}</main>
     </ShellCtx.Provider>
   );
 }
