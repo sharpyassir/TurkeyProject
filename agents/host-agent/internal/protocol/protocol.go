@@ -1,0 +1,120 @@
+// Package protocol mirrors apps/api/src/drivers/agent-protocol.ts. Keep in sync.
+package protocol
+
+import "encoding/json"
+
+const (
+	JobCreate        = "vm.create"
+	JobWaitBoot      = "vm.wait_boot"
+	JobStart         = "vm.start"
+	JobStop          = "vm.stop"
+	JobReboot        = "vm.reboot"
+	JobDelete        = "vm.delete"
+	JobResize        = "vm.resize"
+	JobStatus        = "vm.status"
+	JobSnapshot      = "vm.snapshot"
+	JobSnapshotDel   = "snapshot.delete"
+	JobAttachIP      = "net.attach_ip"
+	JobDetachIP      = "net.detach_ip"
+	JobApplyFirewall = "net.apply_firewall"
+)
+
+type Job struct {
+	ID       string          `json:"id"`
+	Kind     string          `json:"kind"`
+	Params   json.RawMessage `json:"params"`
+	IssuedAt string          `json:"issuedAt"`
+}
+
+type JobError struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
+}
+
+type JobResult struct {
+	JobID  string      `json:"jobId"`
+	OK     bool        `json:"ok"`
+	Result interface{} `json:"result,omitempty"`
+	Error  *JobError   `json:"error,omitempty"`
+}
+
+type PublicIP struct {
+	Address string `json:"address"`
+	Gateway string `json:"gateway"`
+	Prefix  int    `json:"prefix"`
+}
+
+type VmSpec struct {
+	ServerID   string    `json:"serverId"`
+	Name       string    `json:"name"`
+	Hostname   string    `json:"hostname"`
+	Vcpu       int       `json:"vcpu"`
+	MemoryMb   int       `json:"memoryMb"`
+	DiskGb     int       `json:"diskGb"`
+	ImageRef   string    `json:"imageRef"` // {"template":9000}
+	SshKeys    []string  `json:"sshKeys"`
+	UserData   string    `json:"userData"`
+	NetworkRef string    `json:"networkRef"`
+	PublicIP   *PublicIP `json:"publicIp,omitempty"`
+}
+
+type VmHandle struct {
+	VmRef     string `json:"vmRef"`
+	PrivateIP string `json:"privateIp,omitempty"`
+}
+
+type VmStatus struct {
+	Power        string  `json:"power"` // running | stopped | unknown
+	CpuPercent   float64 `json:"cpuPercent,omitempty"`
+	MemoryUsedMb int64   `json:"memoryUsedMb,omitempty"`
+	UptimeSec    int64   `json:"uptimeSec,omitempty"`
+}
+
+type FirewallRule struct {
+	Direction string   `json:"direction"` // inbound | outbound
+	Protocol  string   `json:"protocol"`  // tcp | udp | icmp | any
+	Ports     string   `json:"ports,omitempty"`
+	Cidrs     []string `json:"cidrs"`
+}
+
+type Heartbeat struct {
+	HostID        string   `json:"hostId"`
+	Node          string   `json:"node"`
+	At            string   `json:"at"`
+	TotalVcpu     int      `json:"totalVcpu"`
+	TotalMemoryMb int64    `json:"totalMemoryMb"`
+	TotalDiskGb   int64    `json:"totalDiskGb"`
+	UsedVcpu      int      `json:"usedVcpu"`
+	UsedMemoryMb  int64    `json:"usedMemoryMb"`
+	UsedDiskGb    int64    `json:"usedDiskGb"`
+	Vms           []VmBrief `json:"vms"`
+	AgentVersion  string   `json:"agentVersion"`
+}
+
+type VmBrief struct {
+	VmRef string `json:"vmRef"`
+	Power string `json:"power"`
+}
+
+// UsageEvent is usage.v1: one per resource per minute.
+type UsageEvent struct {
+	V            int                    `json:"v"`
+	At           string                 `json:"at"`
+	ResourceType string                 `json:"resourceType"`
+	ResourceID   string                 `json:"resourceId"`
+	ProjectID    string                 `json:"projectId"`
+	HostID       string                 `json:"hostId"`
+	Quantity     float64                `json:"quantity"`
+	Unit         string                 `json:"unit"`
+	Meta         map[string]interface{} `json:"meta,omitempty"`
+}
+
+// VmRef is the opaque handle stored in Server.driverRef for the Proxmox driver.
+type VmRef struct {
+	VMID int    `json:"vmid"`
+	Node string `json:"node"`
+	// Carried so usage events can be attributed without a control-plane lookup.
+	ServerID  string `json:"serverId,omitempty"`
+	ProjectID string `json:"projectId,omitempty"`
+}

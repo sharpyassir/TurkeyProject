@@ -1,0 +1,98 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { createHmac } from 'node:crypto';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { NatsService, Subjects } from '../../common/nats/nats.service';
+import type { Actor } from '../../common/auth/actor';
+
+/** Public event names customers can subscribe to via webhooks. */
+export const CUSTOMER_EVENTS = [
+  'server.created', 'server.active', 'server.failed', 'server.deleted', 'server.resized',
+  'snapshot.completed', 'invoice.issued', 'invoice.paid', 'payment.failed',
+  'spend.alert', 'spend.limit_reached', 'account.suspended',
+] as const;
+
+export type EventName = (typeof CUSTOMER_EVENTS)[number] | (string & {});
+
+interface EmitContext {
+  teamId?: string;
+  actor?: Actor;
+  resource?: string;
+}
+
+/**
+ * Single place every domain event goes through:
+ *  1. audit log row
+ *  2. internal NATS fan-out (`pgcloud.events.<name>`) for other modules / AI ops
+ *  3. queued webhook deliveries for customer-facing events
+ */
+@Injectable()
+export class EventsService {
+  private readonly log = new Logger(EventsService.name);
+
+  constructor(private readonly prisma: PrismaService, private readonly nats: NatsService) {}
+
+  async emit(name: EventName, payload: Record<string, unknown>, ctx: EmitContext = {}) {
+    const teamId = ctx.teamId ?? ctx.actor?.teamId;
+    this.log.debug(`${name} ${JSON.stringify(payload)}`);
+
+    await this.prisma.auditLog.create({
+      data: {
+        teamId,
+        userId: ctx.actor?.userId,
+        tokenId: ctx.actor?.tokenId,
+        action: name,
+        resource: ctx.resource,
+        request: payload as Prisma.InputJsonValue,
+        status: 200,
+      },
+    });
+
+    this.nats.publish(Subjects.event(name), { name, teamId, payload, at: new Date().toISOString() });
+
+    if (teamId && (CUSTOMER_EVENTS as readonly string[]).includes(name)) {
+      const hooks = await this.prisma.webhook.findMany({ where: { teamId, active: true, events: { has: name } } });
+      if (hooks.length) {
+        await this.prisma.webhookDelivery.createMany({
+          data: hooks.map((h) => ({ webhookId: h.id, event: name, payload: payload as Prisma.InputJsonValue, nextAttemptAt: new Date() })),
+        });
+      }
+    }
+  }
+
+  /** Delivers queued webhooks. Called by the scheduler every 10s; retries with backoff. */
+  async deliverPending(batch = 50) {
+    const due = await this.prisma.webhookDelivery.findMany({
+      where: { deliveredAt: null, nextAttemptAt: { lte: new Date() }, attempts: { lt: 8 } },
+      include: { webhook: true },
+      take: batch,
+    });
+    for (const d of due) {
+      const body = JSON.stringify({ id: d.id, event: d.event, created_at: d.createdAt, data: d.payload });
+      const signature = createHmac('sha256', d.webhook.secret).update(body).digest('hex');
+      let status: number | undefined;
+      try {
+        const res = await fetch(d.webhook.url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-pgcloud-signature': `sha256=${signature}`, 'x-pgcloud-event': d.event },
+          body,
+          signal: AbortSignal.timeout(10_000),
+        });
+        status = res.status;
+      } catch {
+        status = 0;
+      }
+      const ok = status >= 200 && status < 300;
+      await this.prisma.webhookDelivery.update({
+        where: { id: d.id },
+        data: {
+          attempts: { increment: 1 },
+          lastStatus: status,
+          deliveredAt: ok ? new Date() : null,
+          nextAttemptAt: ok ? null : new Date(Date.now() + Math.min(2 ** d.attempts * 30_000, 6 * 3600_000)),
+        },
+      });
+    }
+    return due.length;
+  }
+}

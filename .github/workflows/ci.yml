@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  control-plane:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:2.17.2-pg16
+        env: { POSTGRES_USER: pgcloud, POSTGRES_PASSWORD: pgcloud, POSTGRES_DB: pgcloud }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U pgcloud" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://pgcloud:pgcloud@localhost:5432/pgcloud
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @pgcloud/api prisma:generate
+      - run: pnpm --filter @pgcloud/api prisma:deploy
+      - run: pnpm --filter @pgcloud/api seed
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+      - run: pnpm --filter @pgcloud/api build
+      - run: pnpm --filter @pgcloud/console build
+        env: { NEXT_PUBLIC_API_URL: http://localhost:4000 }
+
+  host-agent:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: agents/host-agent } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache-dependency-path: agents/host-agent/go.sum }
+      - run: go vet ./...
+      - run: go build -ldflags "-X main.version=${GITHUB_SHA::7}" -o host-agent .
+      - uses: actions/upload-artifact@v4
+        with: { name: host-agent-linux-amd64, path: agents/host-agent/host-agent }
+
+  openapi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx --yes @redocly/cli@1 lint packages/openapi/openapi.yaml

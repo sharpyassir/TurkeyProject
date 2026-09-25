@@ -1,0 +1,114 @@
+/* eslint-disable no-console */
+import { PrismaClient } from '@prisma/client';
+import * as argon2 from 'argon2';
+import { createHash, randomBytes } from 'node:crypto';
+import { MARKETPLACE_APPS } from './seed-apps';
+
+const prisma = new PrismaClient();
+
+/** Launch price book is valid from the start of the launch year so back-dated usage rates. */
+const PRICE_VALID_FROM = new Date(Date.UTC(2026, 0, 1));
+
+/** Prices in minor units. TRY roughly = USD × 40 for the placeholder book. */
+const SIZES = [
+  { id: 's-1vcpu-1gb', vcpu: 1, memoryMb: 1024, diskGb: 25, transferTb: 1, usd: 600, try: 24000 },
+  { id: 's-1vcpu-2gb', vcpu: 1, memoryMb: 2048, diskGb: 50, transferTb: 2, usd: 1200, try: 48000 },
+  { id: 's-2vcpu-4gb', vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4, usd: 2400, try: 96000 },
+  { id: 's-4vcpu-8gb', vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 5, usd: 4800, try: 192000 },
+  { id: 's-8vcpu-16gb', vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 6, usd: 9600, try: 384000 },
+];
+
+const DISTROS = [
+  { id: 'ubuntu-24-04', name: 'Ubuntu 24.04 LTS', distribution: 'ubuntu', version: '24.04', driverRef: '{"template":9000}' },
+  { id: 'ubuntu-22-04', name: 'Ubuntu 22.04 LTS', distribution: 'ubuntu', version: '22.04', driverRef: '{"template":9001}' },
+  { id: 'debian-12', name: 'Debian 12', distribution: 'debian', version: '12', driverRef: '{"template":9002}' },
+  { id: 'rocky-9', name: 'Rocky Linux 9', distribution: 'rocky', version: '9', driverRef: '{"template":9003}' },
+];
+
+async function main() {
+  await prisma.region.upsert({ where: { id: 'ist1' }, update: {}, create: { id: 'ist1', name: 'Istanbul 1', country: 'TR' } });
+
+  for (const [i, s] of SIZES.entries()) {
+    await prisma.size.upsert({ where: { id: s.id }, update: {}, create: { id: s.id, vcpu: s.vcpu, memoryMb: s.memoryMb, diskGb: s.diskGb, transferTb: s.transferTb, sortOrder: i } });
+    for (const [currency, monthlyMinor] of [['USD', s.usd], ['TRY', s.try]] as const) {
+      const exists = await prisma.price.findFirst({ where: { resourceType: 'server', sku: s.id, currency, validTo: null } });
+      if (!exists) await prisma.price.create({ data: { resourceType: 'server', sku: s.id, sizeId: s.id, currency, monthlyMinor, validFrom: PRICE_VALID_FROM } });
+    }
+  }
+  for (const [sku, type, usd, tr] of [
+    ['public_ip', 'public_ip', 300, 12000],
+    ['snapshot_gb', 'snapshot', 6, 240],
+    ['bandwidth_gb', 'bandwidth', 1, 40],
+  ] as const) {
+    for (const [currency, monthlyMinor] of [['USD', usd], ['TRY', tr]] as const) {
+      const exists = await prisma.price.findFirst({ where: { resourceType: type, sku, currency, validTo: null } });
+      if (!exists) await prisma.price.create({ data: { resourceType: type, sku, currency, monthlyMinor, validFrom: PRICE_VALID_FROM } });
+    }
+  }
+
+  for (const d of DISTROS) {
+    await prisma.image.upsert({ where: { id: d.id }, update: {}, create: { ...d, kind: 'distribution' } });
+  }
+
+  for (const app of MARKETPLACE_APPS) {
+    const imageId = `app-${app.slug}`;
+    await prisma.image.upsert({
+      where: { id: imageId },
+      update: {},
+      create: { id: imageId, kind: 'marketplace', name: `${app.name} on Ubuntu 24.04`, distribution: 'ubuntu', version: '24.04', driverRef: `{"template":${9100 + MARKETPLACE_APPS.indexOf(app)}}`, minMemoryMb: 1024 },
+    });
+    await prisma.marketplaceApp.upsert({
+      where: { id: app.slug },
+      update: { version: app.version, cloudInit: app.cloudInit, variables: app.variables, status: 'published' },
+      create: { id: app.slug, imageId, slug: app.slug, name: app.name, category: app.category, summary: app.summary, description: app.description, version: app.version, minSizeId: app.minSizeId, ports: app.ports, variables: app.variables, cloudInit: app.cloudInit, status: 'published', publishedAt: new Date() },
+    });
+  }
+
+  // A fake host + a /28 of public IPs so the fake driver can provision.
+  const host = await prisma.host.upsert({
+    where: { name: 'fake1' },
+    update: {},
+    create: { name: 'fake1', regionId: 'ist1', driver: 'fake', driverRef: '{"node":"fake1"}', totalVcpu: 64, totalMemoryMb: 262144, totalDiskGb: 4000, overcommitCpu: 4 },
+  });
+  await prisma.host.update({ where: { id: host.id }, data: { driverRef: JSON.stringify({ node: 'fake1', hostId: host.id }) } });
+
+  const block = await prisma.ipBlock.upsert({ where: { cidr: '203.0.113.0/28' }, update: {}, create: { regionId: 'ist1', cidr: '203.0.113.0/28', gateway: '203.0.113.1' } });
+  for (let i = 2; i < 15; i++) {
+    const address = `203.0.113.${i}`;
+    await prisma.publicIp.upsert({ where: { address }, update: {}, create: { regionId: 'ist1', blockId: block.id, address } });
+  }
+
+  // Dev user + team + token
+  const email = 'dev@pgcloud.local';
+  let user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        email,
+        name: 'Dev User',
+        isStaff: true, // so the seeded admin token works locally
+        passwordHash: await argon2.hash('devpassword123'),
+        memberships: { create: { role: 'owner', team: { create: { name: 'Dev Team', slug: 'dev', country: 'TR', currency: 'TRY', status: 'active', kycLevel: 1, projects: { create: { name: 'Default', slug: 'default' } } } } } },
+      },
+    });
+    const team = await prisma.team.findUniqueOrThrow({ where: { slug: 'dev' } });
+    await prisma.credit.create({ data: { teamId: team.id, kind: 'promo', currency: 'TRY', amountMinor: 400000, remainingMinor: 400000, reason: 'dev seed' } });
+    const raw = 'pgc_' + randomBytes(32).toString('base64url');
+    await prisma.apiToken.create({
+      data: { teamId: team.id, userId: user.id, name: 'dev', prefix: raw.slice(0, 12), hash: createHash('sha256').update(raw).digest('hex'), scopes: ['servers:read', 'servers:write', 'servers:delete', 'images:read', 'snapshots:read', 'snapshots:write', 'network:read', 'network:write', 'apps:read', 'billing:read', 'billing:write', 'iam:read', 'iam:write'] },
+    });
+    const admin = 'pgc_' + randomBytes(32).toString('base64url');
+    await prisma.apiToken.create({ data: { teamId: team.id, userId: user.id, name: 'staff-admin', prefix: admin.slice(0, 12), hash: createHash('sha256').update(admin).digest('hex'), scopes: ['admin'] } });
+    console.log(`\nDev login:   ${email} / devpassword123`);
+    console.log(`Dev token:   export PGCLOUD_TOKEN=${raw}`);
+    console.log(`Admin token: export PGCLOUD_ADMIN_TOKEN=${admin}\n`);
+  }
+  console.log('seed complete');
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());

@@ -1,0 +1,381 @@
+openapi: 3.1.0
+info:
+  title: pgcloud API
+  version: "1"
+  description: |
+    The pgcloud public API. The same API powers the console, CLI, Terraform provider,
+    SDKs and AI agents (via MCP in phase 2).
+
+    **Conventions**
+    - Base URL: `https://api.pgcloud.example/v1` (domain is an open decision)
+    - Auth: `Authorization: Bearer pgc_…` (API token) or a console session JWT
+    - Lists are cursor-paginated: `?limit=50&cursor=<id>` → `meta.next_cursor`
+    - Mutations accept `Idempotency-Key` (replayed for 24h; same key + different body → 409)
+    - Long operations return `202 Accepted` and a resource in a transitional status; poll or use webhooks
+    - Money is integer minor units (`amountMinor`) with an explicit `currency` (`USD` | `TRY`)
+    - Errors: `{ "error": { "code", "message", "details?" } }`
+servers:
+  - url: http://localhost:4000/v1
+    description: local development
+security:
+  - bearerAuth: []
+
+tags:
+  - name: auth
+  - name: account
+  - name: servers
+  - name: catalog
+  - name: network
+  - name: snapshots
+  - name: marketplace
+  - name: billing
+  - name: webhooks
+
+paths:
+  /auth/signup:
+    post:
+      tags: [auth]
+      security: []
+      summary: Create a user, team and default project
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Signup" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: Log in and receive a session token
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email, password], properties: { email: { type: string, format: email }, password: { type: string }, totp: { type: string } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /account:
+    get:
+      tags: [account]
+      summary: Current user, team, role and scopes
+      responses:
+        "200": { description: OK }
+  /projects:
+    get: { tags: [account], summary: List projects, responses: { "200": { description: OK } } }
+    post:
+      tags: [account]
+      summary: Create a project
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, slug], properties: { name: { type: string }, slug: { type: string, pattern: "^[a-z0-9-]{2,40}$" }, spendLimitMinor: { type: integer } } } } } }
+      responses: { "201": { description: Created } }
+  /tokens:
+    get: { tags: [account], summary: List API tokens, responses: { "200": { description: OK } } }
+    post:
+      tags: [account]
+      summary: Create an API token (human or AI agent)
+      description: |
+        Agent-safe tokens set `isAgent: true` and may carry `spendCapMinor` (monthly hard cap)
+        and `requireApprovalFor` (e.g. `["servers:delete","servers:resize-down"]`). A token can
+        never carry scopes its creator does not have.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateToken" } } } }
+      responses:
+        "201": { description: "Created — `token` is shown once", content: { application/json: { schema: { type: object, properties: { id: { type: string }, token: { type: string }, prefix: { type: string } } } } } }
+  /tokens/{id}:
+    delete: { tags: [account], summary: Revoke a token, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "204": { description: Revoked } } }
+  /ssh-keys:
+    get: { tags: [account], summary: List SSH keys, responses: { "200": { description: OK } } }
+    post:
+      tags: [account]
+      summary: Add an SSH public key
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, publicKey], properties: { name: { type: string }, publicKey: { type: string } } } } } }
+      responses: { "201": { description: Created } }
+  /ssh-keys/{id}:
+    delete: { tags: [account], summary: Delete an SSH key, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "204": { description: Deleted } } }
+
+  /regions:
+    get: { tags: [catalog], security: [], summary: List regions, responses: { "200": { description: OK } } }
+  /sizes:
+    get: { tags: [catalog], security: [], summary: List server sizes, responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Size" } } } } } } } } }
+  /images:
+    get:
+      tags: [catalog]
+      security: []
+      summary: List images
+      parameters: [{ name: kind, in: query, schema: { type: string, enum: [distribution, marketplace] } }]
+      responses: { "200": { description: OK } }
+  /pricing:
+    get:
+      tags: [catalog]
+      security: []
+      summary: Public price list
+      parameters: [{ name: currency, in: query, schema: { type: string, enum: [USD, TRY] } }]
+      responses: { "200": { description: OK } }
+
+  /servers:
+    get:
+      tags: [servers]
+      summary: List servers
+      parameters:
+        - { $ref: "#/components/parameters/project" }
+        - { $ref: "#/components/parameters/limit" }
+        - { $ref: "#/components/parameters/cursor" }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ServerStatus" } }
+        - { name: tag, in: query, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Server" } }, meta: { $ref: "#/components/schemas/PageMeta" } } } } } }
+    post:
+      tags: [servers]
+      summary: Create a server
+      description: |
+        Returns `202` immediately with `status: new`. A durable workflow places the server,
+        reserves a public IP, clones the image, waits for cloud-init, applies the firewall and
+        starts metering. Watch `status` become `active` (30–60 s) or subscribe to `server.active`.
+        The server is never billed unless it reaches `active`.
+      parameters: [{ $ref: "#/components/parameters/idempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateServer" } } } }
+      responses:
+        "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/Server" } } } }
+        "402": { description: Spend limit reached (`spend_limit_reached`) }
+        "403": { description: Quota exceeded (`quota_exceeded`), account not verified (`verification_required`) or suspended }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /servers/{id}:
+    get:
+      tags: [servers]
+      summary: Get a server
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Server" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [servers]
+      summary: Delete a server
+      description: Returns `202`; the server moves to `deleting` and is removed by a workflow. Metering stops immediately.
+      parameters: [{ $ref: "#/components/parameters/id" }, { $ref: "#/components/parameters/idempotencyKey" }]
+      responses:
+        "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/ServerAction" } } } }
+        "409": { description: Invalid state (`invalid_state`) }
+  /servers/{id}/actions:
+    get:
+      tags: [servers]
+      summary: List recent actions on a server
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses: { "200": { description: OK } }
+    post:
+      tags: [servers]
+      summary: Run a lifecycle action
+      parameters: [{ $ref: "#/components/parameters/id" }, { $ref: "#/components/parameters/idempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type: { type: string, enum: [start, stop, reboot, resize, rebuild, snapshot] }
+                size: { type: string, description: "resize: target size id (disk cannot shrink)" }
+                image: { type: string, description: "rebuild: image id (defaults to current)" }
+                name: { type: string, description: "snapshot: name" }
+                force: { type: boolean, description: "stop: power off without ACPI shutdown" }
+      responses:
+        "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/ServerAction" } } } }
+        "409": { description: Invalid state (`invalid_state`) }
+
+  /firewalls:
+    get: { tags: [network], summary: List firewalls, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK } } }
+    post:
+      tags: [network]
+      summary: Create a firewall
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, rules], properties: { name: { type: string }, project: { type: string }, rules: { type: array, items: { $ref: "#/components/schemas/FirewallRule" } } } } } } }
+      responses: { "201": { description: Created } }
+  /firewalls/{id}:
+    get: { tags: [network], summary: Get a firewall, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK } } }
+    delete: { tags: [network], summary: Delete a firewall, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "204": { description: Deleted } } }
+  /firewalls/{id}/rules:
+    put:
+      tags: [network]
+      summary: Replace all rules (re-applied to attached servers immediately)
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [rules], properties: { rules: { type: array, items: { $ref: "#/components/schemas/FirewallRule" } } } } } } }
+      responses: { "200": { description: OK } }
+  /firewalls/{id}/servers:
+    post:
+      tags: [network]
+      summary: Attach a server
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [serverId], properties: { serverId: { type: string } } } } } }
+      responses: { "204": { description: Attached } }
+  /firewalls/{id}/servers/{serverId}:
+    delete: { tags: [network], summary: Detach a server, parameters: [{ $ref: "#/components/parameters/id" }, { name: serverId, in: path, required: true, schema: { type: string } }], responses: { "204": { description: Detached } } }
+  /public-ips:
+    get: { tags: [network], summary: List public IPs in a project, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK } } }
+
+  /snapshots:
+    get: { tags: [snapshots], summary: List snapshots, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK } } }
+  /snapshots/{id}:
+    delete: { tags: [snapshots], summary: Delete a snapshot, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted } } }
+
+  /apps:
+    get: { tags: [marketplace], security: [], summary: List marketplace apps, parameters: [{ name: category, in: query, schema: { type: string } }], responses: { "200": { description: OK } } }
+  /apps/categories:
+    get: { tags: [marketplace], security: [], summary: App categories with counts, responses: { "200": { description: OK } } }
+  /apps/{slug}:
+    get:
+      tags: [marketplace]
+      security: []
+      summary: Get an app (its `variables` describe the one-click form)
+      parameters: [{ name: slug, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  /billing/balance:
+    get: { tags: [billing], summary: Credit balance, month-to-date spend and account status, responses: { "200": { description: OK } } }
+  /billing/usage:
+    get:
+      tags: [billing]
+      summary: Rated usage per resource
+      parameters: [{ $ref: "#/components/parameters/project" }, { name: from, in: query, schema: { type: string, format: date-time } }, { name: to, in: query, schema: { type: string, format: date-time } }]
+      responses: { "200": { description: OK } }
+  /billing/invoices:
+    get: { tags: [billing], summary: List invoices, responses: { "200": { description: OK } } }
+  /billing/invoices/{id}:
+    get: { tags: [billing], summary: Get an invoice with its usage lines, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK } } }
+
+  /webhooks:
+    get: { tags: [webhooks], summary: List webhooks, responses: { "200": { description: OK } } }
+    post:
+      tags: [webhooks]
+      summary: Create a webhook
+      description: Deliveries are signed with `X-Pgcloud-Signature: sha256=<hmac>` using the secret returned once at creation.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [url, events], properties: { url: { type: string, format: uri }, events: { type: array, items: { $ref: "#/components/schemas/EventName" } } } } } } }
+      responses: { "201": { description: Created } }
+  /webhooks/events:
+    get: { tags: [webhooks], summary: List subscribable event names, responses: { "200": { description: OK } } }
+  /webhooks/{id}:
+    delete: { tags: [webhooks], summary: Delete a webhook, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "204": { description: Deleted } } }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    id: { name: id, in: path, required: true, schema: { type: string } }
+    project: { name: project, in: query, description: Project id or slug (default `default`), schema: { type: string } }
+    limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+    cursor: { name: cursor, in: query, schema: { type: string } }
+    idempotencyKey: { name: Idempotency-Key, in: header, schema: { type: string, format: uuid } }
+  responses:
+    NotFound: { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Unauthorized: { description: Unauthorized, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Conflict: { description: Conflict, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Invalid: { description: Validation error, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, invalid_state, quota_exceeded, spend_limit_reached, verification_required, account_suspended, idempotency_key_reused, rate_limited, workflow_unavailable, internal_error]
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+    PageMeta:
+      type: object
+      properties: { next_cursor: { type: [string, "null"] }, count: { type: integer } }
+    Signup:
+      type: object
+      required: [email, password, name, teamName]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 10 }
+        name: { type: string }
+        teamName: { type: string }
+        country: { type: string, default: TR }
+        locale: { type: string, enum: [en, tr, ar] }
+    Session:
+      type: object
+      properties:
+        user: { type: object }
+        team: { type: object }
+        session: { type: string, description: JWT to use as Bearer token }
+    CreateToken:
+      type: object
+      required: [name, scopes]
+      properties:
+        name: { type: string }
+        scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
+        projectId: { type: string }
+        isAgent: { type: boolean }
+        spendCapMinor: { type: integer }
+        requireApprovalFor: { type: array, items: { type: string }, example: ["servers:delete", "servers:resize-down"] }
+        expiresInDays: { type: integer }
+    Scope:
+      type: string
+      enum: [servers:read, servers:write, servers:delete, images:read, snapshots:read, snapshots:write, network:read, network:write, apps:read, billing:read, billing:write, iam:read, iam:write]
+    Size:
+      type: object
+      properties:
+        id: { type: string, example: s-2vcpu-4gb }
+        vcpu: { type: integer }
+        memoryMb: { type: integer }
+        diskGb: { type: integer }
+        transferTb: { type: number }
+        family: { type: string, enum: [shared, dedicated, gpu] }
+    ServerStatus:
+      type: string
+      enum: [new, provisioning, active, off, rebooting, resizing, rebuilding, deleting, deleted, failed, suspended]
+    CreateServer:
+      type: object
+      required: [name, size, image]
+      properties:
+        name: { type: string, pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$" }
+        size: { type: string, example: s-2vcpu-4gb }
+        image: { type: string, description: Image id or marketplace app slug, example: ubuntu-24-04 }
+        region: { type: string, default: ist1 }
+        project: { type: string, default: default }
+        sshKeys: { type: array, items: { type: string } }
+        userData: { type: string, description: cloud-init user-data }
+        tags: { type: array, items: { type: string } }
+        backups: { type: boolean }
+        firewalls: { type: array, items: { type: string } }
+        appVariables: { type: object, additionalProperties: { type: string }, description: Marketplace app variables }
+        avoid: { type: array, items: { type: string }, description: Server ids to anti-affine from }
+    Server:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { $ref: "#/components/schemas/ServerStatus" }
+        statusMessage: { type: [string, "null"] }
+        region: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        size: { $ref: "#/components/schemas/Size" }
+        image: { type: object }
+        networks:
+          type: object
+          properties:
+            v4: { type: array, items: { type: object, properties: { ipAddress: { type: string }, type: { type: string }, floating: { type: boolean } } } }
+            private: { type: array, items: { type: object, properties: { ipAddress: { type: string } } } }
+        firewalls: { type: array, items: { type: string } }
+        tags: { type: array, items: { type: string } }
+        backupsEnabled: { type: boolean }
+        projectId: { type: string }
+        createdAt: { type: string, format: date-time }
+    ServerAction:
+      type: object
+      properties:
+        id: { type: string }
+        serverId: { type: string }
+        type: { type: string, enum: [create, start, stop, reboot, resize, rebuild, snapshot, delete] }
+        status: { type: string, enum: [queued, running, completed, failed] }
+        error: { type: [string, "null"] }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: [string, "null"], format: date-time }
+    FirewallRule:
+      type: object
+      required: [direction, protocol, cidrs]
+      properties:
+        direction: { type: string, enum: [inbound, outbound] }
+        protocol: { type: string, enum: [tcp, udp, icmp, any] }
+        ports: { type: string, example: "80-443" }
+        cidrs: { type: array, items: { type: string }, example: ["0.0.0.0/0"] }
+        description: { type: string }
+    EventName:
+      type: string
+      enum: [server.created, server.active, server.failed, server.deleted, server.resized, snapshot.completed, invoice.issued, invoice.paid, payment.failed, spend.alert, spend.limit_reached, account.suspended]

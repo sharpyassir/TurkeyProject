@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.next/
+.env
+*.local
+coverage/
+agents/host-agent/host-agent
+agents/host-agent/bin/
+docs/.arch-source.txt
+.DS_Store

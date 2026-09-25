@@ -1,0 +1,60 @@
+/**
+ * Wire protocol between the control plane and the Go host agent over NATS.
+ * Mirrored in agents/host-agent/internal/protocol/protocol.go — keep in sync.
+ */
+
+export type JobKind =
+  | 'vm.create'
+  | 'vm.wait_boot'
+  | 'vm.start'
+  | 'vm.stop'
+  | 'vm.reboot'
+  | 'vm.delete'
+  | 'vm.resize'
+  | 'vm.status'
+  | 'vm.snapshot'
+  | 'snapshot.delete'
+  | 'net.attach_ip'
+  | 'net.detach_ip'
+  | 'net.apply_firewall';
+
+export interface Job<P = Record<string, unknown>> {
+  id: string; // uuid, agents dedupe on it
+  kind: JobKind;
+  params: P;
+  issuedAt: string;
+}
+
+export interface JobResult<R = Record<string, unknown>> {
+  jobId: string;
+  ok: boolean;
+  result?: R;
+  error?: { code: string; message: string; retryable: boolean };
+}
+
+export interface Heartbeat {
+  hostId: string;
+  node: string;
+  at: string;
+  totalVcpu: number;
+  totalMemoryMb: number;
+  totalDiskGb: number;
+  usedVcpu: number;
+  usedMemoryMb: number;
+  usedDiskGb: number;
+  vms: Array<{ vmRef: string; power: 'running' | 'stopped' }>;
+  agentVersion: string;
+}
+
+/** usage.v1 — one per resource per minute. */
+export interface UsageEventV1 {
+  v: 1;
+  at: string; // minute-aligned ISO timestamp
+  resourceType: 'server' | 'snapshot' | 'public_ip' | 'bandwidth';
+  resourceId: string;
+  projectId: string;
+  hostId: string;
+  quantity: number;
+  unit: 'minute' | 'gb_minute' | 'byte';
+  meta?: Record<string, unknown>;
+}

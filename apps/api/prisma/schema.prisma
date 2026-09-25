@@ -1,0 +1,703 @@
+// pgcloud control plane data model.
+// Models are grouped by owning module (see docs/adr/0001-modular-monolith.md).
+// Money is always integer minor units (cents / kuruş). Time is always UTC.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── IAM ─────────────────────────
+
+enum TeamRole {
+  owner
+  admin
+  member
+  billing
+  readonly
+}
+
+enum Currency {
+  USD
+  TRY
+}
+
+enum AccountStatus {
+  active
+  pending_verification
+  suspended
+  closed
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  locale        String    @default("en") // en | tr | ar
+  totpSecret    String? // 2FA (mandatory for owners)
+  totpEnabled   Boolean   @default(false)
+  /// Staff members may hold the `admin` scope (back-office). Never settable via the API.
+  isStaff       Boolean   @default(false)
+  emailVerified DateTime?
+  phoneVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  memberships TeamMember[]
+  sshKeys     SshKey[]
+  apiTokens   ApiToken[]
+  auditLogs   AuditLog[]
+}
+
+model Team {
+  id       String        @id @default(cuid())
+  slug     String        @unique
+  name     String
+  currency Currency      @default(USD)
+  country  String        @default("TR") // ISO 3166-1; drives TRY + e-Fatura + KVKK residency
+  status   AccountStatus @default(pending_verification)
+  taxId    String? // Vergi No / VAT
+  // Trust & safety
+  kycLevel   Int      @default(0) // 0 none, 1 phone, 2 ID, 3 business
+  riskScore  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  members   TeamMember[]
+  projects  Project[]
+  apiTokens ApiToken[]
+  invoices  Invoice[]
+  credits   Credit[]
+  payments  Payment[]
+  abuseFlags AbuseFlag[]
+  webhooks  Webhook[]
+}
+
+model TeamMember {
+  teamId String
+  userId String
+  role   TeamRole @default(member)
+  team   Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+}
+
+model Project {
+  id     String @id @default(cuid())
+  teamId String
+  slug   String
+  name   String
+  // Quotas & spend controls
+  quotaServers    Int  @default(10)
+  quotaVcpu       Int  @default(32)
+  quotaMemoryMb   Int  @default(65536)
+  quotaPublicIps  Int  @default(10)
+  spendLimitMinor Int? // hard monthly cap; null = unlimited
+  spendAlertMinor Int? // email/SMS alert threshold
+  createdAt DateTime @default(now())
+
+  team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  servers   Server[]
+  publicIps PublicIp[]
+  firewalls Firewall[]
+  snapshots Snapshot[]
+  apiTokens ApiToken[]
+  usage     UsageRecord[]
+
+  @@unique([teamId, slug])
+}
+
+model SshKey {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  publicKey   String
+  fingerprint String   @unique
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// API tokens for humans *and* AI agents. Agent-safe tokens carry scopes, a spend cap
+/// and can require human approval for destructive actions (phase 2 enforces approval).
+model ApiToken {
+  id          String    @id @default(cuid())
+  teamId      String
+  userId      String
+  projectId   String? // null = all projects in team
+  name        String
+  prefix      String // first 8 chars, shown in UI
+  hash        String    @unique // sha256 of full token
+  scopes      String[] // e.g. ["servers:read","servers:write","billing:read"]
+  isAgent     Boolean   @default(false)
+  spendCapMinor       Int? // hard cap for this token per month
+  spentThisMonthMinor Int       @default(0)
+  requireApprovalFor  String[]  @default([]) // ["servers:delete","servers:resize-down"]
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  team    Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────── Regions & data plane inventory ─────────────────────────
+
+model Region {
+  id        String  @id // "ist1"
+  name      String // "Istanbul 1"
+  country   String // "TR"
+  available Boolean @default(true)
+  hosts     Host[]
+  servers   Server[]
+  publicIps PublicIp[]
+  ipBlocks  IpBlock[]
+  images    Image[]
+}
+
+enum HostStatus {
+  active
+  draining // no new placements
+  maintenance
+  down
+}
+
+/// A physical Proxmox node. Capacity is tracked in the control plane for scheduling;
+/// the host agent refreshes it every minute.
+model Host {
+  id         String     @id @default(cuid())
+  regionId   String
+  name       String     @unique // "pve1"
+  driver     String     @default("proxmox")
+  driverRef  String // opaque: {"node":"pve1"} for Proxmox
+  status     HostStatus @default(active)
+  totalVcpu  Int
+  totalMemoryMb Int
+  totalDiskGb   Int
+  usedVcpu   Int        @default(0)
+  usedMemoryMb  Int     @default(0)
+  usedDiskGb    Int     @default(0)
+  overcommitCpu Float   @default(4.0) // vCPU overcommit ratio
+  labels     Json       @default("{}")
+  lastHeartbeatAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  region  Region   @relation(fields: [regionId], references: [id])
+  servers Server[]
+}
+
+// ───────────────────────── Compute ─────────────────────────
+
+enum ServerStatus {
+  new
+  provisioning
+  active
+  off
+  rebooting
+  resizing
+  rebuilding
+  deleting
+  deleted
+  failed
+  suspended // trust & safety or unpaid
+}
+
+model Size {
+  id        String  @id // "s-2vcpu-4gb"
+  vcpu      Int
+  memoryMb  Int
+  diskGb    Int
+  transferTb Float
+  family    String  @default("shared") // shared | dedicated | gpu
+  gpuCount  Int     @default(0)
+  available Boolean @default(true)
+  sortOrder Int     @default(0)
+  servers   Server[]
+  prices    Price[]
+}
+
+enum ImageKind {
+  distribution
+  marketplace
+  snapshot
+  custom
+}
+
+model Image {
+  id           String    @id // "ubuntu-24-04", "app-wordpress-6"
+  regionId     String? // null = all regions
+  kind         ImageKind
+  name         String
+  distribution String? // "ubuntu"
+  version      String? // "24.04"
+  driverRef    String? // opaque: {"template":9001} (Proxmox template VMID)
+  minDiskGb    Int       @default(10)
+  minMemoryMb  Int       @default(512)
+  public       Boolean   @default(true)
+  deprecated   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  region  Region?  @relation(fields: [regionId], references: [id])
+  servers Server[]
+  app     MarketplaceApp?
+}
+
+model Server {
+  id        String       @id @default(cuid())
+  projectId String
+  regionId  String
+  hostId    String?
+  sizeId    String
+  imageId   String
+  name      String
+  status    ServerStatus @default(new)
+  statusMessage String?
+  driverRef String? // opaque: {"vmid":1234,"node":"pve1"}
+  vcpu      Int
+  memoryMb  Int
+  diskGb    Int
+  privateIp String?
+  userData  String? // cloud-init user-data
+  sshKeyIds String[]     @default([])
+  tags      String[]     @default([])
+  backupsEnabled Boolean @default(false)
+  meteredSince   DateTime? // billing starts here, never before VM is running
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  project   Project    @relation(fields: [projectId], references: [id])
+  region    Region     @relation(fields: [regionId], references: [id])
+  host      Host?      @relation(fields: [hostId], references: [id])
+  size      Size       @relation(fields: [sizeId], references: [id])
+  image     Image      @relation(fields: [imageId], references: [id])
+  publicIps PublicIp[]
+  snapshots Snapshot[]
+  firewalls FirewallServer[]
+  actions   ServerAction[]
+
+  @@index([projectId, status])
+  @@index([hostId])
+}
+
+enum ActionType {
+  create
+  start
+  stop
+  reboot
+  resize
+  rebuild
+  snapshot
+  delete
+}
+
+enum ActionStatus {
+  queued
+  running
+  completed
+  failed
+}
+
+/// Every lifecycle operation is recorded here and backed by a Temporal workflow.
+model ServerAction {
+  id          String       @id @default(cuid())
+  serverId    String
+  type        ActionType
+  status      ActionStatus @default(queued)
+  workflowId  String?      @unique
+  params      Json         @default("{}")
+  error       String?
+  requestedBy String? // userId or apiTokenId
+  startedAt   DateTime     @default(now())
+  finishedAt  DateTime?
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, startedAt])
+}
+
+// ───────────────────────── Storage (MVP: snapshots) ─────────────────────────
+
+enum SnapshotStatus {
+  pending
+  available
+  failed
+  deleted
+}
+
+model Snapshot {
+  id        String         @id @default(cuid())
+  projectId String
+  serverId  String?
+  name      String
+  status    SnapshotStatus @default(pending)
+  sizeGb    Float          @default(0)
+  driverRef String?
+  createdAt DateTime       @default(now())
+  deletedAt DateTime?
+
+  project Project @relation(fields: [projectId], references: [id])
+  server  Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+}
+
+// ───────────────────────── Networking (MVP: public IPs + firewalls) ─────────────────────────
+
+model IpBlock {
+  id        String     @id @default(cuid())
+  regionId  String
+  cidr      String     @unique // "185.0.0.0/24"
+  gateway   String
+  owned     Boolean    @default(false) // own RIPE block vs leased
+  region    Region     @relation(fields: [regionId], references: [id])
+  ips       PublicIp[]
+}
+
+enum IpStatus {
+  free
+  reserved
+  assigned
+}
+
+model PublicIp {
+  id        String   @id @default(cuid())
+  regionId  String
+  blockId   String
+  projectId String?
+  serverId  String?
+  address   String   @unique
+  status    IpStatus @default(free)
+  floating  Boolean  @default(false) // reserved independently of a server (phase 2 UX)
+  reverseDns String?
+  assignedAt DateTime?
+
+  region  Region   @relation(fields: [regionId], references: [id])
+  block   IpBlock  @relation(fields: [blockId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+  server  Server?  @relation(fields: [serverId], references: [id], onDelete: SetNull)
+
+  @@index([status, regionId])
+}
+
+enum FirewallDirection {
+  inbound
+  outbound
+}
+
+enum FirewallProtocol {
+  tcp
+  udp
+  icmp
+  any
+}
+
+model Firewall {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  createdAt DateTime @default(now())
+
+  project Project          @relation(fields: [projectId], references: [id])
+  rules   FirewallRule[]
+  servers FirewallServer[]
+}
+
+model FirewallRule {
+  id         String            @id @default(cuid())
+  firewallId String
+  direction  FirewallDirection
+  protocol   FirewallProtocol
+  ports      String? // "22", "80-443", null for icmp/any
+  sources    String[]          @default([]) // CIDRs for inbound
+  destinations String[]        @default([]) // CIDRs for outbound
+  description String?
+
+  firewall Firewall @relation(fields: [firewallId], references: [id], onDelete: Cascade)
+}
+
+model FirewallServer {
+  firewallId String
+  serverId   String
+  firewall   Firewall @relation(fields: [firewallId], references: [id], onDelete: Cascade)
+  server     Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@id([firewallId, serverId])
+}
+
+// ───────────────────────── Marketplace ─────────────────────────
+
+enum AppStatus {
+  draft
+  in_review
+  published
+  deprecated
+}
+
+model MarketplaceApp {
+  id          String    @id // "wordpress"
+  imageId     String    @unique
+  name        String
+  slug        String    @unique
+  category    String // cms | ecommerce | devtools | ai | automation | ...
+  summary     String
+  description String
+  version     String
+  iconUrl     String?
+  minSizeId   String
+  ports       Int[]     @default([])
+  variables   Json      @default("[]") // [{name,label,type,required,default}]
+  cloudInit   String // rendered with variables at deploy time
+  vendorName  String    @default("pgcloud")
+  vendorRevenueShare Int @default(0) // percent, e.g. 70 for paid vendor apps
+  priceMonthlyMinor  Int @default(0) // 0 = free (server cost only)
+  status      AppStatus @default(draft)
+  repoUrl     String?
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  image Image @relation(fields: [imageId], references: [id])
+}
+
+// ───────────────────────── Billing & metering ─────────────────────────
+
+enum ResourceType {
+  server
+  snapshot
+  public_ip
+  bandwidth
+  volume
+  app
+}
+
+/// Raw per-minute usage from host agents (TimescaleDB hypertable on `at`, created in
+/// migration). Never updated; rolled up into UsageRecord hourly.
+model UsageEvent {
+  id           BigInt       @default(autoincrement())
+  at           DateTime
+  resourceType ResourceType
+  resourceId   String
+  projectId    String
+  hostId       String?
+  quantity     Float // 1 for server-minute, GB for snapshots, bytes for bandwidth
+  unit         String // "minute" | "gb_minute" | "byte"
+  meta         Json         @default("{}")
+
+  @@id([id, at])
+  @@unique([resourceType, resourceId, at])
+  @@index([projectId, at])
+}
+
+/// One row per resource per hour, rated.
+model UsageRecord {
+  id           String       @id @default(cuid())
+  projectId    String
+  resourceType ResourceType
+  resourceId   String
+  hourStart    DateTime
+  quantity     Float
+  unit         String
+  priceId      String?
+  amountMinor  Int          @default(0)
+  currency     Currency
+  invoiceId    String?
+
+  project Project  @relation(fields: [projectId], references: [id])
+  price   Price?   @relation(fields: [priceId], references: [id])
+  invoice Invoice? @relation(fields: [invoiceId], references: [id])
+
+  @@unique([resourceType, resourceId, hourStart])
+  @@index([projectId, hourStart])
+  @@index([invoiceId])
+}
+
+/// Price book. hourly = monthly / BILLING_HOURS_PER_MONTH, capped at monthly.
+model Price {
+  id           String       @id @default(cuid())
+  resourceType ResourceType
+  sku          String // size id, "snapshot_gb", "public_ip", "bandwidth_gb"
+  sizeId       String?
+  currency     Currency
+  monthlyMinor Int
+  unit         String       @default("hour")
+  validFrom    DateTime     @default(now())
+  validTo      DateTime?
+
+  size    Size?         @relation(fields: [sizeId], references: [id])
+  records UsageRecord[]
+
+  @@index([resourceType, sku, currency, validFrom])
+}
+
+enum InvoiceStatus {
+  draft
+  open
+  paid
+  void
+  uncollectible
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  teamId      String
+  number      String        @unique // "INV-2026-000123"
+  currency    Currency
+  periodStart DateTime
+  periodEnd   DateTime
+  subtotalMinor Int
+  taxMinor    Int           @default(0) // KDV 20% for TR
+  creditMinor Int           @default(0)
+  totalMinor  Int
+  status      InvoiceStatus @default(draft)
+  eInvoiceId  String? // e-Fatura / e-Arşiv provider reference
+  eInvoiceType String? // "e-fatura" | "e-arsiv"
+  dueAt       DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
+
+  team    Team          @relation(fields: [teamId], references: [id])
+  records UsageRecord[]
+  payments Payment[]
+}
+
+enum CreditKind {
+  promo
+  prepaid
+  refund
+  goodwill
+}
+
+model Credit {
+  id          String     @id @default(cuid())
+  teamId      String
+  kind        CreditKind
+  currency    Currency
+  amountMinor Int
+  remainingMinor Int
+  reason      String?
+  expiresAt   DateTime?
+  createdAt   DateTime   @default(now())
+  team Team @relation(fields: [teamId], references: [id])
+}
+
+enum PaymentProvider {
+  stripe
+  iyzico
+  paytr
+  bank_transfer
+  manual
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+}
+
+model Payment {
+  id          String          @id @default(cuid())
+  teamId      String
+  invoiceId   String?
+  provider    PaymentProvider
+  providerRef String?
+  currency    Currency
+  amountMinor Int
+  status      PaymentStatus   @default(pending)
+  failureReason String?
+  createdAt   DateTime        @default(now())
+
+  team    Team     @relation(fields: [teamId], references: [id])
+  invoice Invoice? @relation(fields: [invoiceId], references: [id])
+}
+
+// ───────────────────────── Trust & safety ─────────────────────────
+
+enum AbuseKind {
+  mining
+  spam
+  scanning
+  ddos_source
+  phishing
+  payment_fraud
+  report
+}
+
+model AbuseFlag {
+  id        String    @id @default(cuid())
+  teamId    String
+  serverId  String?
+  kind      AbuseKind
+  score     Int       @default(0)
+  evidence  Json      @default("{}")
+  source    String // "ai-ops" | "abuse-report" | "payment"
+  resolvedAt DateTime?
+  resolution String? // "false_positive" | "warned" | "suspended"
+  createdAt DateTime  @default(now())
+  team Team @relation(fields: [teamId], references: [id])
+
+  @@index([teamId, resolvedAt])
+}
+
+// ───────────────────────── Events, audit, webhooks ─────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  at        DateTime @default(now())
+  teamId    String?
+  userId    String?
+  tokenId   String?
+  action    String // "servers.create"
+  resource  String? // "server:cxyz"
+  ip        String?
+  userAgent String?
+  request   Json?
+  status    Int
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([teamId, at])
+}
+
+model Webhook {
+  id        String   @id @default(cuid())
+  teamId    String
+  url       String
+  secret    String
+  events    String[] // ["server.active","invoice.issued","spend.limit_reached"]
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  team       Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id         String    @id @default(cuid())
+  webhookId  String
+  event      String
+  payload    Json
+  attempts   Int       @default(0)
+  lastStatus Int?
+  deliveredAt DateTime?
+  nextAttemptAt DateTime?
+  createdAt  DateTime  @default(now())
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([deliveredAt, nextAttemptAt])
+}
+
+/// Idempotency-Key storage for POST endpoints (24h TTL enforced by cleanup job).
+model IdempotencyKey {
+  key        String   @id
+  teamId     String
+  requestHash String
+  statusCode Int
+  response   Json
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
