@@ -1,0 +1,154 @@
+# Production control plane. One management host (phase 0) or one VM per role (phase 1) runs this.
+# Secrets and settings come from /etc/pgcloud/pgcloud.env, rendered by Ansible. Nothing here is
+# customer facing except through Caddy, which terminates TLS for the three hostnames.
+#
+#   docker compose --env-file /etc/pgcloud/pgcloud.env -f docker-compose.yml up -d
+name: pgcloud
+
+x-api: &api
+  image: ${REGISTRY:-ghcr.io/sharpyassir}/pgcloud-api:${IMAGE_TAG:-latest}
+  restart: unless-stopped
+  env_file: [/etc/pgcloud/pgcloud.env]
+  environment:
+    DATABASE_URL: postgresql://pgcloud:${POSTGRES_PASSWORD}@postgres:5432/pgcloud
+    REDIS_URL: redis://redis:6379
+    NATS_URL: nats://nats:4222
+    TEMPORAL_ADDRESS: temporal:7233
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_started }
+    nats: { condition: service_started }
+    temporal: { condition: service_started }
+  networks: [internal]
+  logging: { driver: json-file, options: { max-size: "20m", max-file: "5" } }
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [internal]
+    depends_on: [api, console, www]
+
+  api:
+    <<: *api
+    command: ["node", "dist/main.js"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    <<: *api
+    command: ["node", "dist/worker.js"]
+    healthcheck: { disable: true }
+
+  # One shot: runs pending migrations, then exits. `deploy.sh` runs it before restarting api and worker.
+  migrate:
+    <<: *api
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+    restart: "no"
+    profiles: [ops]
+
+  console:
+    image: ${REGISTRY:-ghcr.io/sharpyassir}/pgcloud-console:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    networks: [internal]
+    logging: { driver: json-file, options: { max-size: "20m", max-file: "5" } }
+
+  www:
+    image: ${REGISTRY:-ghcr.io/sharpyassir}/pgcloud-www:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    networks: [internal]
+    logging: { driver: json-file, options: { max-size: "20m", max-file: "5" } }
+
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pgcloud
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: pgcloud
+    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=512MB", "-c", "wal_level=replica", "-c", "archive_mode=off"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pgcloud"]
+      interval: 10s
+      retries: 10
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes: [redis-data:/data]
+    networks: [internal]
+
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    # JetStream on; host agents on the Proxmox nodes connect over the management network on :4222
+    command: ["-js", "-sd", "/data", "-m", "8222", "--auth", "${NATS_TOKEN}"]
+    ports: ["${MGMT_IP}:4222:4222"]
+    volumes: [nats-data:/data]
+    networks: [internal]
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: pgcloud
+      POSTGRES_PWD: ${POSTGRES_PASSWORD}
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+    networks: [internal]
+
+  # Internal only: reach it over an SSH tunnel (ssh -L 8080:127.0.0.1:8080 mgmt), never exposed by Caddy.
+  temporal-ui:
+    image: temporalio/ui:2.31.2
+    restart: unless-stopped
+    depends_on: [temporal]
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    ports: ["127.0.0.1:8080:8080"]
+    networks: [internal]
+
+  # Nightly logical backup of Postgres to /var/backups/pgcloud (and to S3 compatible storage when configured).
+  backup:
+    image: timescale/timescaledb:2.17.2-pg16
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_S3_URL: ${BACKUP_S3_URL:-}
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_KEY:-}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET:-}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - /var/backups/pgcloud:/backups
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [internal]
+
+networks:
+  internal:
+
+volumes:
+  pgdata:
+  redis-data:
+  nats-data:
+  caddy-data:
+  caddy-config:

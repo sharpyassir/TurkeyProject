@@ -1,0 +1,29 @@
+# Copy to group_vars/all.yml. Secrets go in group_vars/vault.yml (ansible-vault) with the vault_ prefix.
+domain: pgcloud.example
+acme_email: ops@pgcloud.example
+registry: ghcr.io/sharpyassir
+image_tag: latest
+host_agent_version: v0.1.0          # GitHub release tag that carries host-agent_linux_amd64.tar.gz
+hypervisor_driver: proxmox          # fake for a demo box without Proxmox
+proxmox_url: https://pve1.mgmt.internal:8006
+proxmox_token_id: pgcloud@pve!control-plane
+proxmox_ceph_pool: vm-disks
+proxmox_vxlan_zone: customers
+mail_provider: postmark
+mail_from: "pgcloud <no-reply@pgcloud.example>"
+require_totp_for_owners: true
+fx_usd_try: 41
+backup_keep_days: 14
+backup_s3_url: ""
+ssh_allow_from: []                  # CIDRs allowed to reach 22; empty means anywhere
+
+# --- vault.yml keys (values with ansible-vault) ---
+# vault_postgres_password: ...
+# vault_nats_token: ...
+# vault_jwt_secret: ...
+# vault_proxmox_token_secret: ...
+# vault_mail_api_key: ...
+# vault_backup_s3_key: ""
+# vault_backup_s3_secret: ""
+# vault_ghcr_user: ""               # only when images are private
+# vault_ghcr_token: ""

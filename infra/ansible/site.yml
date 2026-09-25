@@ -1,0 +1,9 @@
+- name: Control plane host
+  hosts: management
+  become: true
+  roles: [management]
+
+- name: Proxmox nodes
+  hosts: pve_nodes
+  become: true
+  roles: [pve_node]

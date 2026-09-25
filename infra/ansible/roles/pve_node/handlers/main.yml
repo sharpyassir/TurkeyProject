@@ -1,0 +1,2 @@
+- name: restart host-agent
+  systemd: { name: host-agent, state: restarted, daemon_reload: true }

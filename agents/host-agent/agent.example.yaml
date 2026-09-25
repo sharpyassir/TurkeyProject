@@ -1,4 +1,4 @@
-# /etc/pgcloud/agent.yaml — one per Proxmox node. Deployed by Ansible (infra/ansible, to come).
+# /etc/pgcloud/agent.yaml — one per Proxmox node. Deployed by Ansible (infra/ansible, role pve_node).
 host_id: "clx…"                       # Host.id from POST /admin/v1/hosts
 nats_url: "nats://10.0.0.10:4222"     # management network only
 nats_creds: "/etc/pgcloud/agent.creds"

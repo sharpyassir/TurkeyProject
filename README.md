@@ -109,6 +109,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Host agent (Go) for Proxmox VE | ✅ builds; needs a real node to test |
 | Console: login, servers, one-click apps, billing; EN/TR/AR with RTL | ✅ minimal |
 | Account security: TOTP two factor (required for owners), email verification, password reset, rate limits | ✅ |
+| Hosting: Dockerfiles, production compose with Caddy TLS and backups, Ansible for the management host and Proxmox nodes, deploy workflow ([docs/hosting.md](docs/hosting.md)) | ✅ |
 | GitHub App, Terraform, SDK generation | ⏳ |
 
 ### Local dev without Docker
