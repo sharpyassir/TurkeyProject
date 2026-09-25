@@ -14,6 +14,8 @@ info:
     - Long operations return `202 Accepted` and a resource in a transitional status; poll or use webhooks
     - Money is integer minor units (`amountMinor`) with an explicit `currency` (`USD` | `TRY`)
     - Errors: `{ "error": { "code", "message", "details?" } }`
+    - Rate limits: 600 requests per minute per token or session, 120 per minute per IP when anonymous,
+      10 sign in attempts per minute per IP. Over the limit: `429 rate_limited` with `Retry-After`
 servers:
   - url: http://localhost:4000/v1
     description: local development
@@ -47,10 +49,72 @@ paths:
       tags: [auth]
       security: []
       summary: Log in and receive a session token
+      description: |
+        When the user has two factor sign in, the first call answers 401 `totp_required`; repeat it with `totp`
+        set to the six digit authenticator code or an unused recovery code. Team owners must enable two factor
+        when `REQUIRE_TOTP_FOR_OWNERS` is on; until then console sessions get 403 `totp_setup_required` on every
+        route except the account and two factor endpoints. API tokens are exempt.
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email, password], properties: { email: { type: string, format: email }, password: { type: string }, totp: { type: string } } } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/verify:
+    post:
+      tags: [auth]
+      security: []
+      summary: Confirm an email address with the token from the verification email
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [token], properties: { token: { type: string } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { verified: { type: boolean } } } } } }
+        "400": { description: Token invalid or expired (`token_invalid`) }
+  /auth/verify/request:
+    post:
+      tags: [auth]
+      summary: Send the verification email again for the signed in user
+      responses: { "204": { description: Sent (or already verified) } }
+  /auth/password/forgot:
+    post:
+      tags: [auth]
+      security: []
+      summary: Send a password reset link
+      description: Always returns 204 so email addresses cannot be probed. Limited to 5 requests per 10 minutes per IP.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } } }
+      responses: { "204": { description: Accepted } }
+  /auth/password/reset:
+    post:
+      tags: [auth]
+      security: []
+      summary: Set a new password with the token from the reset email
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [token, password], properties: { token: { type: string }, password: { type: string, minLength: 10 } } } } } }
+      responses:
+        "200": { description: OK }
+        "400": { description: Token invalid or expired (`token_invalid`) }
+  /auth/totp/setup:
+    post:
+      tags: [auth]
+      summary: Start two factor enrollment
+      description: Returns a new secret and an `otpauth://` URL to show as a QR code. Nothing is enforced until `/auth/totp/enable` confirms a code.
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { type: object, properties: { secret: { type: string }, otpauthUrl: { type: string } } } } } }
+        "409": { description: Already enabled (`totp_enabled`) }
+  /auth/totp/enable:
+    post:
+      tags: [auth]
+      summary: Confirm the authenticator and turn two factor on
+      description: Returns ten recovery codes exactly once. Each recovery code signs the user in a single time.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TotpCode" } } } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { type: object, properties: { enabled: { type: boolean }, recoveryCodes: { type: array, items: { type: string } } } } } } }
+        "401": { description: Code not valid (`totp_invalid`) }
+  /auth/totp/disable:
+    post:
+      tags: [auth]
+      summary: Turn two factor off (needs a current code or a recovery code)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TotpCode" } } } }
+      responses:
+        "201": { description: OK }
+        "401": { description: Code not valid (`totp_invalid`) }
 
   /account:
     get:
@@ -320,6 +384,11 @@ components:
     PageMeta:
       type: object
       properties: { next_cursor: { type: [string, "null"] }, count: { type: integer } }
+    TotpCode:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, description: Six digit authenticator code, or a recovery code }
     Signup:
       type: object
       required: [email, password, name, teamName]

@@ -20,6 +20,12 @@ const schema = z.object({
   /** Fallback USD→TRY rate when no FxRate row exists yet. */
   FX_USD_TRY: z.coerce.number().positive().default(41),
   /** JSON endpoint returning { rates: { TRY: number } } for USD. */
+  CONSOLE_URL: z.string().url().default('http://localhost:3000'),
+  MAIL_PROVIDER: z.enum(['log', 'postmark', 'resend']).default('log'),
+  MAIL_FROM: z.string().default('pgcloud <no-reply@pgcloud.example>'),
+  MAIL_API_KEY: z.string().optional(),
+  /** When true, team owners must enable two factor sign in before using the console. */
+  REQUIRE_TOTP_FOR_OWNERS: z.coerce.boolean().default(false),
   FX_PROVIDER_URL: z.string().url().default('https://open.er-api.com/v6/latest/USD'),
 });
 

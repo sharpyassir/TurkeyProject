@@ -17,6 +17,9 @@ interface Ctx {
 const ShellCtx = createContext<Ctx>({ locale: 'en', setLocale: () => {}, authed: false, signOut: () => {} });
 export const useShell = () => useContext(ShellCtx);
 
+/** Pages reachable without a session (links sent by email land here). */
+const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password', '/verify'];
+
 export function Shell({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('en');
   const [authed, setAuthed] = useState(false);
@@ -39,7 +42,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!ready) return;
     const has = !!getToken();
-    if (!has && pathname !== '/login') router.replace('/login');
+    const isPublic = PUBLIC_PATHS.includes(pathname);
+    if (!has && !isPublic) router.replace('/login');
     if (has && pathname === '/login') router.replace('/servers');
   }, [ready, pathname, router]);
 

@@ -96,6 +96,7 @@ async function main() {
         email,
         name: 'Dev User',
         isStaff: true, // so the seeded admin token works locally
+        emailVerified: new Date(),
         passwordHash: await argon2.hash('devpassword123'),
         memberships: { create: { role: 'owner', team: { create: { name: 'Dev Team', slug: 'dev', country: 'TR', currency: 'TRY', status: 'active', kycLevel: 1, projects: { create: { name: 'Default', slug: 'default' } } } } } },
       },

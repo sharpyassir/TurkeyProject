@@ -20,7 +20,9 @@ export class TrustService {
     if (team.status === 'closed') throw new ApiError(403, 'account_closed', 'This account is closed.');
     if (team.abuseFlags.some((f) => f.score >= 80)) throw new ApiError(403, 'account_under_review', 'This account is under review. Contact support.');
 
-    // New accounts must have verified a phone/ID or hold prepaid credit before they can spin up servers.
+    // Owners must confirm their email; new accounts also need a verified phone/ID or prepaid credit.
+    const owner = await this.prisma.teamMember.findFirst({ where: { teamId, role: 'owner' }, include: { user: { select: { emailVerified: true } } } });
+    if (owner && !owner.user.emailVerified) throw new ApiError(403, 'email_unverified', 'Confirm your email address first. Check your inbox for the link, or request a new one.');
     if (team.status === 'pending_verification') {
       const prepaid = team.credits.reduce((s, c) => s + (c.kind === 'prepaid' ? c.remainingMinor : 0), 0);
       if (team.kycLevel < 1 && prepaid <= 0) {

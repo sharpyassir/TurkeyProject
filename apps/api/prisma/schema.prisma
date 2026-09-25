@@ -41,6 +41,8 @@ model User {
   locale        String    @default("en") // en | tr | ar
   totpSecret    String? // 2FA (mandatory for owners)
   totpEnabled   Boolean   @default(false)
+  /// sha256 of unused one time recovery codes
+  totpRecoveryHashes String[] @default([])
   /// Staff members may hold the `admin` scope (back-office). Never settable via the API.
   isStaff       Boolean   @default(false)
   emailVerified DateTime?
@@ -52,6 +54,21 @@ model User {
   sshKeys     SshKey[]
   apiTokens   ApiToken[]
   auditLogs   AuditLog[]
+  emailTokens EmailToken[]
+}
+
+/// One time links for email verification and password reset (hash stored, raw token mailed).
+model EmailToken {
+  id        String    @id @default(cuid())
+  userId    String
+  kind      String // verify | reset
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
 }
 
 model Team {

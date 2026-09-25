@@ -1,19 +1,23 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ApiError } from '../../common/errors/api-error';
 import { TokenService } from './token.service';
 import { CreateProjectDto, CreateSshKeyDto, CreateTokenDto, LoginDto, SignupDto } from './iam.dto';
+import { AccountSecurityService } from './account-security.service';
 import { EventsService } from '../events/events.service';
 import type { Actor } from '../../common/auth/actor';
 
 @Injectable()
 export class IamService {
+  private readonly log = new Logger(IamService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
     private readonly events: EventsService,
+    private readonly security: AccountSecurityService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -47,6 +51,7 @@ export class IamService {
     });
     const team = user.memberships[0].team;
     await this.events.emit('team.created', { teamId: team.id, userId: user.id }, { teamId: team.id });
+    this.security.sendVerification(user.id).catch((e) => this.log.warn(`verification mail failed: ${e.message}`));
     return { user: publicUser(user), team, session: await this.tokens.issueSession(user.id, team.id) };
   }
 
@@ -56,8 +61,10 @@ export class IamService {
       include: { memberships: { include: { team: true }, orderBy: { teamId: 'asc' } } },
     });
     if (!user || !(await argon2.verify(user.passwordHash, dto.password))) throw ApiError.unauthorized('Wrong email or password');
-    if (user.totpEnabled && !dto.totp) throw new ApiError(401, 'totp_required', 'Two-factor code required');
-    // TODO(2fa): verify TOTP code with otplib once secrets are stored via Vault.
+    if (user.totpEnabled) {
+      if (!dto.totp) throw new ApiError(401, 'totp_required', 'Enter the code from your authenticator app');
+      if (!this.security.checkSecondFactor(user, dto.totp)) throw new ApiError(401, 'totp_invalid', 'That code is not valid');
+    }
     const membership = user.memberships[0];
     if (!membership) throw ApiError.forbidden('User belongs to no team');
     return {
@@ -166,8 +173,8 @@ export class IamService {
   }
 }
 
-function publicUser(u: { id: string; email: string; name: string; locale: string; totpEnabled: boolean; createdAt: Date }) {
-  return { id: u.id, email: u.email, name: u.name, locale: u.locale, totpEnabled: u.totpEnabled, createdAt: u.createdAt };
+function publicUser(u: { id: string; email: string; name: string; locale: string; totpEnabled: boolean; emailVerified: Date | null; createdAt: Date }) {
+  return { id: u.id, email: u.email, name: u.name, locale: u.locale, totpEnabled: u.totpEnabled, emailVerified: !!u.emailVerified, createdAt: u.createdAt };
 }
 
 /** SHA256 fingerprint in OpenSSH format. */

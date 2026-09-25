@@ -107,7 +107,8 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Back-office admin API | ✅ (admin UI: to do) |
 | Host agent (Go) for Proxmox VE | ✅ builds; needs a real node to test |
 | Console: login, servers, one-click apps, billing; EN/TR/AR with RTL | ✅ minimal |
-| 2FA (TOTP), rate limiting, GitHub App, Terraform, SDK generation | ⏳ |
+| Account security: TOTP two factor (required for owners), email verification, password reset, rate limits | ✅ |
+| GitHub App, Terraform, SDK generation | ⏳ |
 
 ### Local dev without Docker
 

@@ -228,7 +228,7 @@ func call(method, path string, body any, out any) error {
 		}
 		if json.Unmarshal(raw, &env) == nil && env.Error.Code != "" {
 			env.Error.Status = res.StatusCode
-			if res.StatusCode == 401 {
+			if res.StatusCode == 401 && !strings.HasPrefix(path, "/v1/auth/") {
 				return errors.New("not logged in — run `pgcloud login`")
 			}
 			return &env.Error
@@ -397,7 +397,17 @@ func cmdLogin(args []string) error {
 				} `json:"team"`
 			}
 			cfg.Token = ""
-			if err := call(http.MethodPost, "/v1/auth/login", map[string]string{"email": email, "password": pw}, &res); err != nil {
+			body := map[string]string{"email": email, "password": pw}
+			for {
+				err := call(http.MethodPost, "/v1/auth/login", body, &res)
+				if err == nil {
+					break
+				}
+				// Two factor: ask for the authenticator code and try once more.
+				if ae, ok := err.(*apiError); ok && ae.Code == "totp_required" {
+					body["totp"] = prompt("Authenticator code: ", false)
+					continue
+				}
 				return err
 			}
 			cfg.Token, cfg.Team = res.Session, res.Team.Slug

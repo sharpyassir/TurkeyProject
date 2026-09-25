@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { api, ApiError, setToken } from '@/lib/api';
@@ -10,6 +11,7 @@ export default function LoginPage() {
   const { locale } = useShell();
   const router = useRouter();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [needCode, setNeedCode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -21,13 +23,14 @@ export default function LoginPage() {
     try {
       const body =
         mode === 'login'
-          ? { email: f.get('email'), password: f.get('password') }
+          ? { email: f.get('email'), password: f.get('password'), ...(f.get('totp') ? { totp: f.get('totp') } : {}) }
           : { email: f.get('email'), password: f.get('password'), name: f.get('name'), teamName: f.get('teamName'), locale };
       const res = await api<{ session: string }>(`/v1/auth/${mode}`, { method: 'POST', body: JSON.stringify(body) });
       setToken(res.session);
-      router.replace('/servers');
+      router.replace(mode === 'signup' ? '/security?welcome=1' : '/servers');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+      if (err instanceof ApiError && err.code === 'totp_required') setNeedCode(true);
+      else setError(err instanceof ApiError ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -45,11 +48,20 @@ export default function LoginPage() {
         )}
         <input className="input" name="email" type="email" placeholder={t(locale, 'email')} required autoComplete="email" />
         <input className="input" name="password" type="password" placeholder={t(locale, 'password')} required minLength={10} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
+        {needCode && (
+          <div className="space-y-1">
+            <input className="input" name="totp" inputMode="numeric" placeholder="Authenticator code" autoFocus autoComplete="one-time-code" />
+            <p className="text-xs text-neutral-500">Enter the six digit code from your app, or one of your recovery codes.</p>
+          </div>
+        )}
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button className="btn-primary w-full justify-center" disabled={busy}>{t(locale, mode === 'login' ? 'login' : 'signup')}</button>
-        <button type="button" className="w-full text-center text-sm text-neutral-500" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>
-          {t(locale, mode === 'login' ? 'signup' : 'login')} →
-        </button>
+        <div className="flex items-center justify-between text-sm text-neutral-500">
+          <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setNeedCode(false); }}>
+            {t(locale, mode === 'login' ? 'signup' : 'login')} →
+          </button>
+          {mode === 'login' && <Link href="/forgot-password" className="hover:underline">Forgot password?</Link>}
+        </div>
       </form>
     </div>
   );

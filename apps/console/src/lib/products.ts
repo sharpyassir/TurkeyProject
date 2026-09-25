@@ -61,7 +61,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'firewalls', name: 'Firewalls', group: 'Security', href: '/firewalls', blurb: 'Host-enforced firewall rules, attached to any server.' },
   { slug: 'ssh-keys', name: 'SSH Keys', group: 'Security', href: '/ssh-keys', blurb: 'Public keys injected into every server you create.' },
   { slug: 'audit', name: 'Audit Log', group: 'Security', href: '/audit', blurb: 'Every API call by every user, token and agent.' },
-  { slug: 'two-factor', name: 'Two-factor Auth', group: 'Security', phase: 'mvp', blurb: 'TOTP, mandatory for team owners.' },
+  { slug: 'two-factor', name: 'Two Factor Sign In', group: 'Security', href: '/security', blurb: 'Authenticator app codes and recovery codes, required for team owners.' },
 ];
 
 export function phaseLabel(p: Phase) {

@@ -5,6 +5,8 @@ import { ApiError } from '../errors/api-error';
 import { TokenService } from '../../modules/iam/token.service';
 import { PUBLIC_KEY, SCOPES_KEY } from './decorators';
 import type { Actor } from './actor';
+import { loadConfig } from '../../config/config';
+import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Resolves `Authorization: Bearer …` into an Actor and enforces `@RequireScopes`.
@@ -12,7 +14,7 @@ import type { Actor } from './actor';
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector, private readonly tokens: TokenService) {}
+  constructor(private readonly reflector: Reflector, private readonly tokens: TokenService, private readonly prisma: PrismaService) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, [ctx.getHandler(), ctx.getClass()]);
@@ -26,6 +28,12 @@ export class AuthGuard implements CanActivate {
     const actor = await this.tokens.resolveBearer(credential);
     if (!actor) throw ApiError.unauthorized();
     req.actor = actor;
+
+    // Owners must have two factor sign in when the policy is on. API tokens are exempt (they are scoped and revocable).
+    if (loadConfig().REQUIRE_TOTP_FOR_OWNERS && !actor.tokenId && actor.role === 'owner' && !/^\/v1\/(auth\/totp|account)/.test(req.path)) {
+      const u = await this.prisma.user.findUnique({ where: { id: actor.userId }, select: { totpEnabled: true } });
+      if (!u?.totpEnabled) throw new ApiError(403, 'totp_setup_required', 'Team owners must enable two factor sign in. Go to Security to set it up.');
+    }
 
     const required = this.reflector.getAllAndOverride<string[]>(SCOPES_KEY, [ctx.getHandler(), ctx.getClass()]) ?? [];
     const missing = required.filter((s) => !actor.scopes.has(s));

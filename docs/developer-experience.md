@@ -63,3 +63,19 @@ token that never touches our database.
 2. GitHub App: connect a repo from the console, no webhook pasting; PR preview servers.
 3. SDK generation from the OpenAPI spec; Terraform provider.
 4. Status page and a public changelog.
+
+## Account security
+
+- **Email confirmation**: signup sends a link (24 hours). Servers cannot be created until the team owner
+  confirms. `POST /v1/auth/verify/request` sends it again.
+- **Password reset**: `POST /v1/auth/password/forgot` always answers 204; the link lasts one hour and every
+  other outstanding link dies once one is used.
+- **Two factor sign in**: standard TOTP (RFC 6238, six digits, 30 seconds) implemented on `node:crypto`, so any
+  authenticator app works. Enrollment is setup, then confirm a code, then save ten one time recovery codes.
+  With `REQUIRE_TOTP_FOR_OWNERS=true` a team owner's console session is limited to the account and two factor
+  endpoints until it is on. API tokens are exempt because they are scoped, capped and revocable. The CLI asks for
+  the code during `pgcloud login`.
+- **Rate limits** live in `RateLimitGuard` (fixed windows in Redis, keyed by token after auth, by IP before).
+  They degrade open if Redis is down so a cache outage never takes the API with it.
+- **Mail** goes through `MailService`: `MAIL_PROVIDER=log` prints to the API log in development;
+  `postmark` and `resend` are wired for production with `MAIL_API_KEY` and `MAIL_FROM`.
