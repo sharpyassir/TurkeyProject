@@ -46,7 +46,10 @@ export class RatingService {
       const quantity = g._sum.quantity ?? 0;
 
       // Per-GB resources are priced per GB-month; scale monthly price by average GB in the hour.
-      const monthlyMinor = price ? (g.unit === 'gb_minute' ? Math.round(price.monthlyMinor * (quantity / Math.max(minutes, 1))) : price.monthlyMinor) : 0;
+      // Percent prices (backups) are a share of the server's own plan price.
+      let monthlyMinor = 0;
+      if (price && price.unit === 'percent') monthlyMinor = Math.round(((await this.planPriceFor(g.resourceId, currency, hourEnd)) * price.monthlyMinor) / 100);
+      else if (price) monthlyMinor = g.unit === 'gb_minute' ? Math.round(price.monthlyMinor * (quantity / Math.max(minutes, 1))) : price.monthlyMinor;
 
       const charged = await this.prisma.usageRecord.aggregate({
         where: { resourceType: g.resourceType, resourceId: g.resourceId, hourStart: { gte: startOfMonth(hourStart), lt: hourStart } },
@@ -78,9 +81,18 @@ export class RatingService {
         return 'snapshot_gb';
       case 'bandwidth':
         return 'bandwidth_gb';
+      case 'backup':
+        return 'backups_pct';
       default:
         return null;
     }
+  }
+
+  /** Monthly plan price of the server a percent-priced resource (backups) belongs to. */
+  private async planPriceFor(serverId: string, currency: Currency, hourEnd: Date) {
+    const s = await this.prisma.server.findUnique({ where: { id: serverId }, select: { sizeId: true } });
+    if (!s) return 0;
+    return (await this.priceFor('server', s.sizeId, currency, hourEnd))?.monthlyMinor ?? 0;
   }
 
   /** Newest price that was valid at any point before the hour ended, so a price book change mid-hour still rates that hour. */

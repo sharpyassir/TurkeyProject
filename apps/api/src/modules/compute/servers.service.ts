@@ -107,8 +107,10 @@ export class ServersService {
 
     // Spend controls (team currency)
     const team = await this.prisma.team.findUniqueOrThrow({ where: { id: actor.teamId } });
+    const planMonthly = await this.spend.monthlyPriceMinor('server', size.id, team.currency);
     const monthly =
-      (await this.spend.monthlyPriceMinor('server', size.id, team.currency)) +
+      planMonthly +
+      (dto.backups ? Math.round((planMonthly * (await this.spend.monthlyPriceMinor('backup', 'backups_pct', team.currency))) / 100) : 0) +
       (await this.spend.monthlyPriceMinor('public_ip', 'public_ip', team.currency)) +
       (image.app?.priceMonthlyMinor ?? 0);
     await this.spend.assertCanSpend(actor, project.id, monthly);

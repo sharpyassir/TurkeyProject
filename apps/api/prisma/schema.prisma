@@ -473,6 +473,7 @@ enum ResourceType {
   bandwidth
   volume
   app
+  backup
 }
 
 /// Raw per-minute usage from host agents (TimescaleDB hypertable on `at`, created in

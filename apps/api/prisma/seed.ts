@@ -9,10 +9,15 @@ const prisma = new PrismaClient();
 /** Launch price book is valid from the start of the launch year so back-dated usage rates. */
 const PRICE_VALID_FROM = new Date(Date.UTC(2026, 0, 1));
 
-/** Prices in minor units. TRY roughly = USD × 40 for the placeholder book. */
+/**
+ * Prices in minor units. USD ladder mirrors DigitalOcean's Basic Droplets (docs/competitors.md);
+ * TRY ≈ USD × 40 is a placeholder until the Netlen benchmark is filled in.
+ */
 const SIZES = [
+  { id: 's-1vcpu-512mb', vcpu: 1, memoryMb: 512, diskGb: 10, transferTb: 0.5, usd: 400, try: 16000 },
   { id: 's-1vcpu-1gb', vcpu: 1, memoryMb: 1024, diskGb: 25, transferTb: 1, usd: 600, try: 24000 },
   { id: 's-1vcpu-2gb', vcpu: 1, memoryMb: 2048, diskGb: 50, transferTb: 2, usd: 1200, try: 48000 },
+  { id: 's-2vcpu-2gb', vcpu: 2, memoryMb: 2048, diskGb: 60, transferTb: 3, usd: 1800, try: 72000 },
   { id: 's-2vcpu-4gb', vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4, usd: 2400, try: 96000 },
   { id: 's-4vcpu-8gb', vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 5, usd: 4800, try: 192000 },
   { id: 's-8vcpu-16gb', vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 6, usd: 9600, try: 384000 },
@@ -39,10 +44,13 @@ async function main() {
     ['public_ip', 'public_ip', 300, 12000],
     ['snapshot_gb', 'snapshot', 6, 240],
     ['bandwidth_gb', 'bandwidth', 1, 40],
+    // Backups: 20% of the server's monthly price (DigitalOcean weekly-backup model). Stored as
+    // percent in monthlyMinor with unit "percent"; RatingService applies it per server-hour.
+    ['backups_pct', 'backup', 20, 20],
   ] as const) {
     for (const [currency, monthlyMinor] of [['USD', usd], ['TRY', tr]] as const) {
       const exists = await prisma.price.findFirst({ where: { resourceType: type, sku, currency, validTo: null } });
-      if (!exists) await prisma.price.create({ data: { resourceType: type, sku, currency, monthlyMinor, validFrom: PRICE_VALID_FROM } });
+      if (!exists) await prisma.price.create({ data: { resourceType: type, sku, currency, monthlyMinor, unit: sku === 'backups_pct' ? 'percent' : 'hour', validFrom: PRICE_VALID_FROM } });
     }
   }
 
