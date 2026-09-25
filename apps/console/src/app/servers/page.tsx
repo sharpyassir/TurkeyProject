@@ -52,7 +52,7 @@ export default function ServersPage() {
             <tbody>
               {servers.map((s) => (
                 <tr key={s.id} className="border-t border-neutral-100 dark:border-neutral-800">
-                  <td className="px-4 py-2 font-medium">{s.name}</td>
+                  <td className="px-4 py-2 font-medium"><Link href={`/servers/${s.id}`} className="hover:underline">{s.name}</Link></td>
                   <td className="px-4 py-2"><StatusBadge status={s.status} /></td>
                   <td className="px-4 py-2 font-mono">{s.networks.v4[0]?.ipAddress ?? '—'}</td>
                   <td className="px-4 py-2">{s.size.id}</td>

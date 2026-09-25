@@ -67,15 +67,18 @@ export class FakeDriver implements HypervisorDriver {
     return { snapshotRef: JSON.stringify({ fake: true, vmRef, snapshotId }), sizeGb: vm.spec.diskGb * 0.4 };
   }
   async deleteSnapshot() {}
+  // These three are called from the API process, which does not share memory with the
+  // worker that created the VM. Unknown refs are accepted so the dev console stays usable.
   async attachPublicIp(_h: string, vmRef: string, ip: { address: string }) {
-    this.mustGet(vmRef).ips.push(ip.address);
+    this.vms.get(vmRef)?.ips.push(ip.address);
   }
   async detachPublicIp(_h: string, vmRef: string, address: string) {
-    const vm = this.mustGet(vmRef);
-    vm.ips = vm.ips.filter((a) => a !== address);
+    const vm = this.vms.get(vmRef);
+    if (vm) vm.ips = vm.ips.filter((a) => a !== address);
   }
   async applyFirewall(_h: string, vmRef: string, rules: FirewallRuleSpec[]) {
-    this.mustGet(vmRef).rules = rules;
+    const vm = this.vms.get(vmRef);
+    if (vm) vm.rules = rules;
   }
 
   private mustGet(vmRef: string): FakeVm {

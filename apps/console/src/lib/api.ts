@@ -48,9 +48,13 @@ export interface Image { id: string; kind: 'distribution' | 'marketplace'; name:
 export interface Server {
   id: string; name: string; status: string; statusMessage: string | null;
   region: { id: string; name: string }; size: Size; image: Image;
-  networks: { v4: { ipAddress: string }[]; private: { ipAddress: string }[] };
+  networks: { v4: { ipAddress: string; floating?: boolean; reverseDns?: string | null }[]; private: { ipAddress: string }[] };
+  firewalls: string[]; backupsEnabled: boolean; projectId: string;
   tags: string[]; createdAt: string;
 }
+export interface ServerAction { id: string; type: string; status: string; params: Record<string, unknown> | null; error: string | null; startedAt: string; finishedAt: string | null }
+export interface Snapshot { id: string; name: string; status: string; sizeGb: number; serverId: string | null; createdAt: string }
+export interface Firewall { id: string; name: string; rules: { id: string; direction: string; protocol: string; ports: string | null; sources: string[]; destinations: string[] }[]; servers: { serverId: string }[] }
 export interface App { id: string; slug: string; name: string; category: string; summary: string; version: string; minSizeId: string; variables: AppVariable[]; priceMonthlyMinor: number }
 export interface AppVariable { name: string; label: string; type: string; required?: boolean; default?: string; generate?: string }
 export interface Price { resourceType: string; sku: string; monthlyMinor: number; hourlyMinor: number }

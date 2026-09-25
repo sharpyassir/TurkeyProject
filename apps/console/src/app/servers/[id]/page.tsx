@@ -1,0 +1,271 @@
+'use client';
+
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { api, ApiError, Firewall, Image, money, Price, Server, ServerAction, Size, Snapshot } from '@/lib/api';
+import { Locale, t } from '@/lib/i18n';
+import { useShell } from '@/components/shell';
+import { StatusBadge } from '@/components/status-badge';
+
+type Tab = 'overview' | 'power' | 'networking' | 'snapshots' | 'activity';
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'overview', label: 'Overview' }, { id: 'power', label: 'Power and resize' }, { id: 'networking', label: 'Networking' },
+  { id: 'snapshots', label: 'Snapshots' }, { id: 'activity', label: 'Activity' },
+];
+const SETTLED = ['active', 'off', 'failed'];
+
+export default function ServerDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const { locale } = useShell();
+  const [server, setServer] = useState<Server | null>(null);
+  const [actions, setActions] = useState<ServerAction[]>([]);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [firewalls, setFirewalls] = useState<Firewall[]>([]);
+  const [sizes, setSizes] = useState<Size[]>([]);
+  const [images, setImages] = useState<Image[]>([]);
+  const [prices, setPrices] = useState<Price[]>([]);
+  const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
+  const [spent, setSpent] = useState<number | null>(null);
+  const [tab, setTab] = useState<Tab>('overview');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [s, a] = await Promise.all([api<Server>(`/v1/servers/${id}`), api<{ data: ServerAction[] }>(`/v1/servers/${id}/actions`)]);
+      setServer(s); setActions(a.data);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) router.replace('/servers');
+      else setError(err instanceof ApiError ? err.message : String(err));
+    }
+  }, [id, router]);
+
+  const loadSide = useCallback(async () => {
+    const bal = await api<{ currency: 'USD' | 'TRY' }>('/v1/billing/balance').catch(() => ({ currency: 'USD' as const }));
+    setCurrency(bal.currency);
+    const [sn, fw, sz, im, pr, us] = await Promise.all([
+      api<{ data: Snapshot[] }>('/v1/snapshots').catch(() => ({ data: [] })),
+      api<{ data: Firewall[] }>('/v1/firewalls').catch(() => ({ data: [] })),
+      api<{ data: Size[] }>('/v1/sizes'),
+      api<{ data: Image[] }>('/v1/images'),
+      api<{ data: Price[] }>(`/v1/pricing?currency=${bal.currency}`),
+      api<{ data: { resourceId: string; amountMinor: number }[] }>('/v1/billing/usage').catch(() => ({ data: [] })),
+    ]);
+    setSnapshots(sn.data.filter((x) => x.serverId === id)); setFirewalls(fw.data); setSizes(sz.data); setImages(im.data); setPrices(pr.data);
+    setSpent(us.data.filter((r) => r.resourceId === id).reduce((n, r) => n + (r.amountMinor ?? 0), 0));
+  }, [id]);
+
+  useEffect(() => { load(); loadSide(); }, [load, loadSide]);
+  // Poll while the server or its last action is still moving.
+  useEffect(() => {
+    const moving = server && (!SETTLED.includes(server.status) || actions[0]?.status === 'running' || actions[0]?.status === 'queued');
+    if (!moving) return;
+    const h = setInterval(() => { load(); if (actions[0]?.type === 'snapshot') loadSide(); }, 2000);
+    return () => clearInterval(h);
+  }, [server, actions, load, loadSide]);
+
+  async function run(fn: () => Promise<unknown>, ok?: string) {
+    setBusy(true); setError(null); setNotice(null);
+    try { await fn(); if (ok) setNotice(ok); await load(); }
+    catch (err) { setError(err instanceof ApiError ? err.message : String(err)); }
+    finally { setBusy(false); }
+  }
+  const act = (body: Record<string, unknown>, ok?: string) => run(() => api(`/v1/servers/${id}/actions`, { method: 'POST', idempotent: true, body: JSON.stringify(body) }), ok);
+
+  const priceOf = (sku: string) => prices.find((p) => p.sku === sku);
+  const ip = server?.networks.v4[0]?.ipAddress;
+  const monthly = useMemo(() => server ? (priceOf(server.size.id)?.monthlyMinor ?? 0) + (priceOf('public_ip')?.monthlyMinor ?? 0) : 0, [server, prices]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!server) return <p className="text-sm text-neutral-500">{error ?? 'Loading…'}</p>;
+  const settled = SETTLED.includes(server.status);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <Link href="/servers" className="text-sm text-neutral-500 hover:underline">← {t(locale, 'servers')}</Link>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold">{server.name}</h1>
+          <StatusBadge status={server.status} />
+          {ip && <code className="rounded bg-neutral-100 px-2 py-0.5 font-mono text-sm dark:bg-neutral-800">{ip}</code>}
+          <span className="text-sm text-neutral-500">{server.size.vcpu} vCPU · {server.size.memoryMb / 1024} GB · {server.size.diskGb} GB SSD · {server.region.name}</span>
+          <div className="ms-auto flex gap-1">
+            {server.status === 'active' && <button className="btn-ghost" disabled={busy} onClick={() => act({ type: 'reboot' })}>{t(locale, 'reboot')}</button>}
+            {server.status === 'active' && <button className="btn-ghost" disabled={busy} onClick={() => act({ type: 'stop' })}>{t(locale, 'stop')}</button>}
+            {server.status === 'off' && <button className="btn-primary" disabled={busy} onClick={() => act({ type: 'start' })}>{t(locale, 'start')}</button>}
+          </div>
+        </div>
+        {server.statusMessage && <p className="mt-1 text-sm text-amber-700">{server.statusMessage}</p>}
+      </div>
+
+      {error && <p className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700 dark:bg-red-950/30">{error}</p>}
+      {notice && <p className="rounded border border-green-200 bg-green-50 p-2 text-sm text-green-800 dark:bg-green-950/30">{notice}</p>}
+
+      <nav className="flex gap-1 overflow-x-auto border-b border-neutral-200 text-sm dark:border-neutral-800">
+        {TABS.map((x) => (
+          <button key={x.id} onClick={() => setTab(x.id)} className={`whitespace-nowrap px-3 py-2 ${tab === x.id ? 'border-b-2 border-blue-600 font-medium' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'}`}>{x.label}</button>
+        ))}
+      </nav>
+
+      {tab === 'overview' && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className="card space-y-2 text-sm">
+            <h2 className="font-medium">Details</h2>
+            <Row k="ID"><code className="font-mono text-xs">{server.id}</code></Row>
+            <Row k={t(locale, 'image')}>{server.image.name}</Row>
+            <Row k={t(locale, 'size')}>{server.size.id}</Row>
+            <Row k={t(locale, 'region')}>{server.region.name}</Row>
+            <Row k="Private IP">{server.networks.private[0]?.ipAddress ?? '—'}</Row>
+            <Row k="Backups">{server.backupsEnabled ? 'On' : 'Off'}</Row>
+            <Row k={t(locale, 'created')}>{new Date(server.createdAt).toLocaleString(locale)}</Row>
+            {server.tags.length > 0 && <Row k="Tags">{server.tags.join(', ')}</Row>}
+          </section>
+          <section className="card space-y-2 text-sm">
+            <h2 className="font-medium">Cost</h2>
+            <Row k="Price">{money(monthly, currency, locale)}{t(locale, 'perMonth')} <span className="text-neutral-500">({money(priceOf(server.size.id)?.hourlyMinor ?? 0, currency, locale)}{t(locale, 'perHour')} plus the public IP)</span></Row>
+            <Row k={t(locale, 'mtd')}>{spent === null ? '…' : money(spent, currency, locale)}</Row>
+            <p className="text-xs text-neutral-500">Billed by the hour while the server exists, capped at the monthly price. Stopping a server does not stop billing; delete it or take a snapshot first.</p>
+          </section>
+          <section className="card space-y-2 text-sm md:col-span-2">
+            <h2 className="font-medium">Connect</h2>
+            <p className="text-neutral-500">Your SSH keys were added when the server was created.</p>
+            <pre className="overflow-x-auto rounded bg-neutral-900 p-3 font-mono text-xs text-neutral-100">{ip ? `ssh root@${ip}` : 'Waiting for the public IP…'}</pre>
+            <p className="text-neutral-500">From the CLI:</p>
+            <pre className="overflow-x-auto rounded bg-neutral-900 p-3 font-mono text-xs text-neutral-100">{`pgcloud servers get ${server.id}\npgcloud ssh ${server.name}`}</pre>
+          </section>
+        </div>
+      )}
+
+      {tab === 'power' && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className="card space-y-3 text-sm">
+            <h2 className="font-medium">Power</h2>
+            <p className="text-neutral-500">Stop sends a clean shutdown signal. Force stop cuts power, like pulling the plug.</p>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-ghost" disabled={busy || server.status !== 'off'} onClick={() => act({ type: 'start' })}>{t(locale, 'start')}</button>
+              <button className="btn-ghost" disabled={busy || server.status !== 'active'} onClick={() => act({ type: 'reboot' })}>{t(locale, 'reboot')}</button>
+              <button className="btn-ghost" disabled={busy || server.status !== 'active'} onClick={() => act({ type: 'stop' })}>{t(locale, 'stop')}</button>
+              <button className="btn-danger" disabled={busy || server.status !== 'active'} onClick={() => confirm('Force stop can corrupt files that are being written. Continue?') && act({ type: 'stop', force: true })}>Force stop</button>
+            </div>
+          </section>
+          <ResizeCard server={server} sizes={sizes} prices={prices} currency={currency} locale={locale} busy={busy || !settled} onResize={(size) => act({ type: 'resize', size }, 'Resize started. The server restarts on the new size.')} />
+          <section className="card space-y-3 text-sm">
+            <h2 className="font-medium">Rebuild</h2>
+            <p className="text-neutral-500">Reinstalls the operating system on the same disk and IP. Everything on the disk is erased.</p>
+            <form className="flex gap-2" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const image = new FormData(e.currentTarget).get('image'); if (confirm(`Erase this server and reinstall ${image}?`)) act({ type: 'rebuild', image }, 'Rebuild started.'); }}>
+              <select name="image" className="input" defaultValue={server.image.id}>{images.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</select>
+              <button className="btn-danger whitespace-nowrap" disabled={busy || !settled}>Rebuild</button>
+            </form>
+          </section>
+          <section className="card space-y-3 text-sm">
+            <h2 className="font-medium text-red-700">Delete server</h2>
+            <p className="text-neutral-500">Removes the server, its disk and its public IP. Billing stops at the end of the hour. Snapshots are kept.</p>
+            <button className="btn-danger" disabled={busy || !settled} onClick={() => confirm(t(locale, 'confirmDelete')) && run(() => api(`/v1/servers/${id}`, { method: 'DELETE', idempotent: true }).then(() => router.replace('/servers')))}>{t(locale, 'delete')}</button>
+          </section>
+        </div>
+      )}
+
+      {tab === 'networking' && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className="card space-y-2 text-sm">
+            <h2 className="font-medium">Addresses</h2>
+            <table className="w-full"><tbody>
+              {server.networks.v4.map((a) => (
+                <tr key={a.ipAddress}><td className="py-1 font-mono">{a.ipAddress}</td><td className="py-1 text-neutral-500">{a.floating ? 'Reserved IP' : 'Public IPv4'}</td><td className="py-1 text-neutral-500">{a.reverseDns ?? ''}</td></tr>
+              ))}
+              {server.networks.private.map((a) => (
+                <tr key={a.ipAddress}><td className="py-1 font-mono">{a.ipAddress}</td><td className="py-1 text-neutral-500">Private network</td><td /></tr>
+              ))}
+            </tbody></table>
+            <p className="text-xs text-neutral-500">Reserved IPs and reverse DNS are managed under <Link href="/public-ips" className="text-blue-600 hover:underline">Public IPs</Link>.</p>
+          </section>
+          <section className="card space-y-3 text-sm">
+            <h2 className="font-medium">{t(locale, 'firewalls')}</h2>
+            {firewalls.length === 0 && <p className="text-neutral-500">No firewalls yet. <Link href="/firewalls" className="text-blue-600 hover:underline">Create one</Link> to allow only the ports you need.</p>}
+            {firewalls.map((f) => {
+              const attached = server.firewalls.includes(f.id);
+              return (
+                <div key={f.id} className="flex items-center gap-3 border-t border-neutral-100 pt-2 first:border-0 first:pt-0 dark:border-neutral-800">
+                  <div className="flex-1"><Link href="/firewalls" className="font-medium hover:underline">{f.name}</Link><span className="ms-2 text-neutral-500">{f.rules.length} {t(locale, 'rules')}</span></div>
+                  {attached
+                    ? <button className="btn-ghost" disabled={busy} onClick={() => run(() => api(`/v1/firewalls/${f.id}/servers/${id}`, { method: 'DELETE' }), `Detached ${f.name}.`)}>Detach</button>
+                    : <button className="btn-ghost" disabled={busy} onClick={() => run(() => api(`/v1/firewalls/${f.id}/servers`, { method: 'POST', body: JSON.stringify({ serverId: id }) }), `Attached ${f.name}.`)}>Attach</button>}
+                </div>
+              );
+            })}
+          </section>
+        </div>
+      )}
+
+      {tab === 'snapshots' && (
+        <section className="card space-y-3 text-sm">
+          <div className="flex items-center gap-3">
+            <h2 className="font-medium">{t(locale, 'snapshots')}</h2>
+            <form className="ms-auto flex gap-2" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const name = new FormData(e.currentTarget).get('name') || undefined; act({ type: 'snapshot', ...(name ? { name } : {}) }, 'Snapshot started.').then(loadSide); e.currentTarget.reset(); }}>
+              <input name="name" className="input max-w-[14rem]" placeholder="Snapshot name (optional)" />
+              <button className="btn-primary whitespace-nowrap" disabled={busy || !settled}>Take snapshot</button>
+            </form>
+          </div>
+          <p className="text-neutral-500">A snapshot copies the whole disk. Charged per GB per month at {money(priceOf('snapshot_gb')?.monthlyMinor ?? 0, currency, locale)}. Snapshots taken while the server runs may miss data still in memory.</p>
+          {snapshots.length === 0 ? <p className="text-neutral-500">No snapshots of this server yet.</p> : (
+            <table className="w-full"><tbody>
+              {snapshots.map((s) => (
+                <tr key={s.id} className="border-t border-neutral-100 dark:border-neutral-800">
+                  <td className="py-2 font-medium">{s.name}</td><td className="py-2"><StatusBadge status={s.status} /></td><td className="py-2">{s.sizeGb} GB</td>
+                  <td className="py-2 text-neutral-500">{new Date(s.createdAt).toLocaleString(locale)}</td>
+                  <td className="py-2 text-end"><button className="btn-danger" disabled={busy} onClick={() => confirm('Delete this snapshot?') && run(() => api(`/v1/snapshots/${s.id}`, { method: 'DELETE' }).then(loadSide))}>{t(locale, 'delete')}</button></td>
+                </tr>
+              ))}
+            </tbody></table>
+          )}
+        </section>
+      )}
+
+      {tab === 'activity' && (
+        <section className="card p-0 text-sm">
+          <table className="w-full">
+            <thead className="text-xs uppercase text-neutral-500"><tr><th className="px-4 py-2 text-start">Action</th><th className="px-4 py-2 text-start">{t(locale, 'status')}</th><th className="px-4 py-2 text-start">Started</th><th className="px-4 py-2 text-start">Took</th><th className="px-4 py-2 text-start">Notes</th></tr></thead>
+            <tbody>
+              {actions.length === 0 && <tr><td className="px-4 py-3 text-neutral-500" colSpan={5}>Nothing yet.</td></tr>}
+              {actions.map((a) => (
+                <tr key={a.id} className="border-t border-neutral-100 dark:border-neutral-800">
+                  <td className="px-4 py-2 font-medium">{a.type}{a.params && <span className="ms-2 font-normal text-neutral-500">{Object.entries(a.params).filter(([k, v]) => k !== 'op' && v !== null && v !== undefined && v !== '' && v !== false).map(([k, v]) => `${k}=${v}`).join(' ')}</span>}</td>
+                  <td className="px-4 py-2"><StatusBadge status={a.status} /></td>
+                  <td className="px-4 py-2 text-neutral-500">{new Date(a.startedAt).toLocaleString(locale)}</td>
+                  <td className="px-4 py-2 text-neutral-500">{a.finishedAt ? `${Math.max(1, Math.round((new Date(a.finishedAt).getTime() - new Date(a.startedAt).getTime()) / 1000))}s` : '…'}</td>
+                  <td className="px-4 py-2 text-red-700">{a.error ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="border-t border-neutral-100 px-4 py-2 text-xs text-neutral-500 dark:border-neutral-800">Who did what, including agent tokens, is in the <Link href="/audit" className="text-blue-600 hover:underline">audit log</Link>.</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function Row({ k, children }: { k: string; children: React.ReactNode }) {
+  return <div className="flex gap-3"><span className="w-28 shrink-0 text-neutral-500">{k}</span><span>{children}</span></div>;
+}
+
+function ResizeCard({ server, sizes, prices, currency, locale, busy, onResize }: { server: Server; sizes: Size[]; prices: Price[]; currency: string; locale: Locale; busy: boolean; onResize: (size: string) => void }) {
+  const [size, setSize] = useState(server.size.id);
+  const target = sizes.find((s) => s.id === size);
+  const price = (id: string) => prices.find((p) => p.sku === id)?.monthlyMinor ?? 0;
+  const delta = price(size) - price(server.size.id);
+  const shrinks = !!target && target.diskGb < server.size.diskGb;
+  return (
+    <section className="card space-y-3 text-sm">
+      <h2 className="font-medium">Resize</h2>
+      <p className="text-neutral-500">The server restarts on the new size. The disk can grow but never shrink.</p>
+      <select className="input" value={size} onChange={(e) => setSize(e.target.value)}>
+        {sizes.map((s) => <option key={s.id} value={s.id} disabled={s.diskGb < server.size.diskGb}>{s.id} · {s.vcpu} vCPU · {s.memoryMb / 1024} GB · {s.diskGb} GB · {money(price(s.id), currency, locale)}{t(locale, 'perMonth')}</option>)}
+      </select>
+      {size !== server.size.id && !shrinks && <p>{delta >= 0 ? '+' : ''}{money(delta, currency, locale)}{t(locale, 'perMonth')} compared with today.</p>}
+      <button className="btn-primary" disabled={busy || size === server.size.id || shrinks} onClick={() => confirm(`Resize ${server.name} to ${size}? It will restart.`) && onResize(size)}>Resize</button>
+    </section>
+  );
+}
