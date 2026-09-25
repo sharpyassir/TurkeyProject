@@ -1,4 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post } from '@nestjs/common';
+import { IsOptional, IsString, Length, Matches } from 'class-validator';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentActor, Public, RequireScopes } from '../../common/auth/decorators';
 import type { Actor } from '../../common/auth/actor';
@@ -21,11 +23,26 @@ export class AuthController {
   }
 }
 
+class InterestDto {
+  @IsString() @Matches(/^[a-z0-9-]{2,40}$/) product: string;
+  @IsOptional() @IsString() @Length(0, 500) note?: string;
+}
+
 @ApiTags('account')
 @ApiBearerAuth()
 @Controller('v1')
 export class AccountController {
-  constructor(private readonly iam: IamService) {}
+  constructor(private readonly iam: IamService, private readonly prisma: PrismaService) {}
+
+  /** "Notify me when this launches" for roadmap products shown in the console. */
+  @Post('interest') @HttpCode(204)
+  async interest(@CurrentActor() actor: Actor, @Body() dto: InterestDto) {
+    await this.prisma.productInterest.upsert({
+      where: { teamId_product: { teamId: actor.teamId, product: dto.product } },
+      create: { teamId: actor.teamId, userId: actor.userId, product: dto.product, note: dto.note },
+      update: { note: dto.note },
+    });
+  }
 
   @Get('account')
   me(@CurrentActor() actor: Actor) {

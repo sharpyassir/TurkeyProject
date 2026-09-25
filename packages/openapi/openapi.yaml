@@ -78,6 +78,12 @@ paths:
         "201": { description: "Created — `token` is shown once", content: { application/json: { schema: { type: object, properties: { id: { type: string }, token: { type: string }, prefix: { type: string } } } } } }
   /tokens/{id}:
     delete: { tags: [account], summary: Revoke a token, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "204": { description: Revoked } } }
+  /interest:
+    post:
+      tags: [account]
+      summary: Register interest in a roadmap product ("notify me when this launches")
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [product], properties: { product: { type: string, example: inference }, note: { type: string } } } } } }
+      responses: { "204": { description: Recorded } }
   /ssh-keys:
     get: { tags: [account], summary: List SSH keys, responses: { "200": { description: OK } } }
     post:

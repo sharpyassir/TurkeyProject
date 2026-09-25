@@ -691,6 +691,19 @@ model WebhookDelivery {
   @@index([deliveredAt, nextAttemptAt])
 }
 
+/// "Notify me" clicks on roadmap products in the console — feeds prioritisation.
+model ProductInterest {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  product   String // slug from the console product catalog
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([teamId, product])
+  @@index([product])
+}
+
 /// Idempotency-Key storage for POST endpoints (24h TTL enforced by cleanup job).
 model IdempotencyKey {
   key        String   @id
