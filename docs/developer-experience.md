@@ -12,7 +12,7 @@ state each path is in.
 | **CLI** (`pgcloud`) | Single Go binary; `curl … \| sh`; `pgcloud servers create … --wait`, `pgcloud ssh`, `pgcloud deploy` | ✅ (`cli/`) |
 | **Git Deploy** | `pgcloud deploy https://github.com/you/app` → server clones + builds (Dockerfile / compose) → GitHub push webhook redeploys | ✅ (`apps/api/src/modules/deploy`) |
 | **REST API** | `POST /v1/servers` etc., idempotency keys, cursor pagination, `/docs` | ✅ |
-| **AI agents** | Agent-safe token + MCP server (`pgcloud-mcp`) | tokens ✅ · MCP phase 2 |
+| **AI agents** | Agent token + MCP server (`packages/mcp-server`, `npx -y pgcloud-mcp`) | ✅ |
 | Terraform provider | Go, generated from the OpenAPI spec | phase 2 |
 | SDKs (Go / Python / JS) | Generated from `packages/openapi/openapi.yaml` | phase 2 |
 | GitHub App ("Deploy to pgcloud" button, PR previews) | Replaces manual webhook setup; one-click connect | phase 2 |
@@ -62,5 +62,4 @@ token that never touches our database.
 1. Docs site with copy-paste quickstarts in TR/EN/AR (the go-to-market growth engine).
 2. GitHub App: connect a repo from the console, no webhook pasting; PR preview servers.
 3. SDK generation from the OpenAPI spec; Terraform provider.
-4. `pgcloud-mcp` so Claude Code / Cursor deploy with a capped token.
-5. Status page and a public changelog.
+4. Status page and a public changelog.

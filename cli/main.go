@@ -819,7 +819,7 @@ func cmdTokens(args []string) error {
 		}
 		fmt.Fprintf(stdout, "✓ token %s created — copy it now, it is shown once:\n%s\n", args[1], t["token"])
 		if agent {
-			fmt.Fprintf(stdout, "\nAdd to Claude Code:  claude mcp add pgcloud -e PGCLOUD_TOKEN=%s -- pgcloud-mcp\n", t["token"])
+			fmt.Fprintf(stdout, "\nAdd to Claude Code:  claude mcp add pgcloud -e PGCLOUD_TOKEN=%s -- npx -y pgcloud-mcp\n", t["token"])
 		}
 		return nil
 	}

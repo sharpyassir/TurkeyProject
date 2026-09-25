@@ -24,7 +24,7 @@ export const PRODUCTS: Product[] = [
 
   // Managed Agents: our headline
   { slug: 'agents', name: 'Agent Access', group: 'Managed Agents', href: '/agents', blurb: 'Agent-safe API tokens: scopes, monthly spend caps, human approval for destructive actions.' },
-  { slug: 'mcp', name: 'MCP Server', group: 'Managed Agents', phase: 2, blurb: 'Use pgcloud as tools from Claude, Cursor or any MCP client.' },
+  { slug: 'mcp', name: 'MCP Server', group: 'Managed Agents', href: '/agents#mcp', blurb: 'Use pgcloud as tools from Claude Code, Cursor or any MCP client.' },
   { slug: 'approvals', name: 'Approval Queue', group: 'Managed Agents', phase: 2, blurb: 'Review and approve actions your agents request before they run.' },
   { slug: 'agent-workspaces', name: 'Agent Workspaces', group: 'Managed Agents', phase: 2, blurb: 'Sandboxed servers pre-wired for coding agents, with logs and cost per agent.' },
 

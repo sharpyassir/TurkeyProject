@@ -19,7 +19,8 @@ agents/
   host-agent/   Go service on every Proxmox node: takes jobs from NATS, calls the
                 Proxmox API, reports health + usage every minute
 packages/
-  openapi/      OpenAPI v1 spec — source of truth for SDKs, CLI and docs
+  openapi/      OpenAPI v1 spec, source of truth for SDKs, CLI and docs
+  mcp-server/   pgcloud-mcp: MCP server for AI agents (npx -y pgcloud-mcp)
 infra/
   dev/          docker-compose for local development (Postgres+Timescale, Redis,
                 NATS, Temporal)
@@ -95,6 +96,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Compute: servers, sizes, images, lifecycle actions as Temporal workflows, quotas | ✅ |
 | **Git Deploy**: repo → server → build → GitHub push redeploys (`POST /v1/deploys`) | ✅ |
 | **CLI** `pgcloud`: login, servers create/ssh/actions, deploy, tokens, `--json` | ✅ |
+| **MCP server** `pgcloud-mcp`: 12 tools for Claude Code, Cursor and other agents, behind a capped agent token | ✅ |
 | Scheduler: least-loaded placement, anti-affinity, capacity from heartbeats | ✅ |
 | Network: public IP pool, host-enforced firewalls | ✅ (VPCs, LBs, DNS: phase 2) |
 | Storage: snapshots | ✅ (volumes, backups: phase 2) |
@@ -105,7 +107,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Back-office admin API | ✅ (admin UI: to do) |
 | Host agent (Go) for Proxmox VE | ✅ builds; needs a real node to test |
 | Console: login, servers, one-click apps, billing; EN/TR/AR with RTL | ✅ minimal |
-| 2FA (TOTP), rate limiting, MCP server, GitHub App, Terraform, SDK generation | ⏳ |
+| 2FA (TOTP), rate limiting, GitHub App, Terraform, SDK generation | ⏳ |
 
 ### Local dev without Docker
 
