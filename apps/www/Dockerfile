@@ -9,6 +9,7 @@ COPY packages/openapi/package.json packages/openapi/
 COPY packages/mcp-server/package.json packages/mcp-server/
 RUN pnpm install --frozen-lockfile --filter @pgcloud/www...
 COPY apps/www apps/www
+COPY packages/openapi/openapi.yaml packages/openapi/openapi.yaml
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @pgcloud/www build

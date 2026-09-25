@@ -381,7 +381,7 @@ paths:
     post:
       tags: [webhooks]
       summary: Create a webhook
-      description: Deliveries are signed with `X-Pgcloud-Signature: sha256=<hmac>` using the secret returned once at creation.
+      description: "Deliveries are signed with `X-Pgcloud-Signature: sha256=<hmac>` using the secret returned once at creation."
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [url, events], properties: { url: { type: string, format: uri }, events: { type: array, items: { $ref: "#/components/schemas/EventName" } } } } } } }
       responses: { "201": { description: Created } }
   /webhooks/events:

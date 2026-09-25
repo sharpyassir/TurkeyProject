@@ -316,7 +316,7 @@ export function Cta() {
         <p className="mx-auto mt-4 max-w-xl text-slate-300">$100 in free credit for new teams. No card needed until you spend it. Cancel any hour.</p>
         <div className="mt-8 flex justify-center gap-3">
           <a href={`${CONSOLE}/login`} className="btn-primary">Create account</a>
-          <a href="/docs" className="btn-light">Read the API docs</a>
+          <a href="/docs/api" className="btn-light">Read the API docs</a>
         </div>
       </div>
     </section>

@@ -1,0 +1,54 @@
+---
+title: API guide
+description: Conventions that hold across every endpoint. Read this once, then use the reference.
+section: Guides
+order: 10
+---
+
+The API powers the console, the CLI, the MCP server and every SDK. There is nothing the console can do that the API cannot. The full reference is generated from the OpenAPI spec at [/docs/api-reference](/docs/api-reference).
+
+## Base URL and auth
+
+```
+https://api.pgcloud.example/v1
+Authorization: Bearer pgc_...
+```
+
+Tokens are created under **Managed Agents, Agent Access** or with `pgcloud tokens create`. Each token has scopes such as `servers:write` or `billing:read`; a call outside its scopes fails with `403 forbidden`.
+
+## Requests and responses
+
+- JSON in, JSON out. Lists come as `{ "data": [...], "meta": { "next_cursor": "..." } }`.
+- Long operations return `202 Accepted` with the resource in a transitional status such as `provisioning`. Poll it, or subscribe to webhooks.
+- Money is integer minor units with an explicit currency: `{ "amountMinor": 600, "currency": "USD" }` is six dollars.
+
+## Idempotency
+
+Send an `Idempotency-Key` header on any create or action call. Repeating the same key within 24 hours returns the first response instead of doing the work again. The same key with a different body is rejected with `409 idempotency_key_reused`. The CLI and MCP server always send one.
+
+## Errors
+
+Every error has the same shape:
+
+```json
+{ "error": { "code": "spend_limit_reached", "message": "...", "details": { "capMinor": 1500 } } }
+```
+
+| Code | Meaning |
+|---|---|
+| `invalid_request` | a field is missing or wrong; `message` says which |
+| `unauthorized` | no token, or it was revoked |
+| `forbidden` | the token lacks the scope |
+| `approval_required` | parked for a person to approve; `details.approvalId` |
+| `spend_limit_reached` | the token's monthly cap would be exceeded |
+| `email_unverified` | confirm the owner's email first |
+| `invalid_state` | the server is busy; retry when it is active or off |
+| `rate_limited` | slow down; `Retry-After` says how long |
+
+## Rate limits
+
+600 requests per minute per token or session, 120 per minute per address when anonymous, 10 sign in attempts per minute per address. Over the limit you get `429` with a `Retry-After` header.
+
+## Webhooks
+
+Register a URL under **Projects, Webhooks** with the events you want, such as `server.active`, `invoice.issued` or `approval.requested`. Every delivery is signed with the webhook secret in `X-Pgcloud-Signature`, retried with backoff for a day, and listed with its response in the console.
