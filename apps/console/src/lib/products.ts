@@ -41,6 +41,7 @@ export const PRODUCTS: Product[] = [
 
   // Core Cloud
   { slug: 'servers', name: 'Servers', group: 'Core Cloud', href: '/servers', blurb: 'KVM virtual machines in Istanbul, billed hourly, capped monthly.' },
+  { slug: 'deploys', name: 'Git Deploy', group: 'Core Cloud', href: '/deploys', blurb: 'Link a GitHub repo; we build and run it, and redeploy on every push.' },
   { slug: 'kubernetes', name: 'Kubernetes', group: 'Core Cloud', phase: 3, blurb: 'Managed Kubernetes clusters on pgcloud servers.' },
   { slug: 'public-ips', name: 'Public IPs', group: 'Core Cloud', href: '/public-ips', blurb: 'IPv4 addresses from our Istanbul blocks; floating IPs in phase 2.' },
   { slug: 'vpc', name: 'VPC', group: 'Core Cloud', phase: 2, blurb: 'Isolated private networks per project (VXLAN / EVPN).' },

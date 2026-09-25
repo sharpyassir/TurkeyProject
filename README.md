@@ -14,6 +14,7 @@ apps/
   api/          Control plane — NestJS + Prisma modular monolith (TypeScript)
   console/      Web console — Next.js (TR / AR / EN, RTL-ready)
   www/          Marketing site — Next.js (pgcloud.example), pricing pulled live from the API
+cli/            `pgcloud` CLI — single Go binary (login, servers, ssh, deploy, tokens); `cli/install.sh`
 agents/
   host-agent/   Go service on every Proxmox node: takes jobs from NATS, calls the
                 Proxmox API, reports health + usage every minute
@@ -92,6 +93,8 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 |---|---|
 | IAM: signup/login, teams, projects, RBAC scopes, API tokens, **agent-safe tokens** (spend cap, approval rules), SSH keys | ✅ |
 | Compute: servers, sizes, images, lifecycle actions as Temporal workflows, quotas | ✅ |
+| **Git Deploy**: repo → server → build → GitHub push redeploys (`POST /v1/deploys`) | ✅ |
+| **CLI** `pgcloud`: login, servers create/ssh/actions, deploy, tokens, `--json` | ✅ |
 | Scheduler: least-loaded placement, anti-affinity, capacity from heartbeats | ✅ |
 | Network: public IP pool, host-enforced firewalls | ✅ (VPCs, LBs, DNS: phase 2) |
 | Storage: snapshots | ✅ (volumes, backups: phase 2) |
@@ -102,7 +105,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Back-office admin API | ✅ (admin UI: to do) |
 | Host agent (Go) for Proxmox VE | ✅ builds; needs a real node to test |
 | Console: login, servers, one-click apps, billing; EN/TR/AR with RTL | ✅ minimal |
-| 2FA (TOTP), rate limiting, MCP server, CLI, Terraform, SDK generation | ⏳ |
+| 2FA (TOTP), rate limiting, MCP server, GitHub App, Terraform, SDK generation | ⏳ |
 
 ### Local dev without Docker
 

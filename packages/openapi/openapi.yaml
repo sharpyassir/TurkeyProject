@@ -25,6 +25,7 @@ tags:
   - name: account
   - name: servers
   - name: catalog
+  - name: deploys
   - name: network
   - name: snapshots
   - name: marketplace
@@ -185,6 +186,26 @@ paths:
         "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/ServerAction" } } } }
         "409": { description: Invalid state (`invalid_state`) }
 
+  /deploys:
+    get: { tags: [deploys], summary: List Git deployments, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK } } }
+    post:
+      tags: [deploys]
+      summary: Deploy a Git repository onto a new server
+      description: Creates a server whose cloud-init installs Docker, clones the repo, builds (Dockerfile or docker-compose) and serves it on :80. Returns the GitHub webhook URL and secret (shown once) that redeploys on push.
+      parameters: [{ $ref: "#/components/parameters/idempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [repoUrl], properties: { repoUrl: { type: string, format: uri }, branch: { type: string, default: main }, name: { type: string }, port: { type: integer, default: 3000 }, size: { type: string }, project: { type: string }, sshKeys: { type: array, items: { type: string } }, env: { type: object, additionalProperties: { type: string } }, gitToken: { type: string, description: For private repos; stored only in the server's cloud-init } } } } } }
+      responses: { "202": { description: Accepted — includes `webhook.url` and `webhook.secret` } }
+  /deploys/{id}:
+    get: { tags: [deploys], summary: Get a deployment (refreshes status from the server), parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK } } }
+  /deploys/{id}/redeploy:
+    post: { tags: [deploys], summary: Redeploy now, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted } } }
+  /deploys/{id}/hook:
+    post:
+      tags: [deploys]
+      security: []
+      summary: GitHub push webhook (verified with X-Hub-Signature-256)
+      parameters: [{ $ref: "#/components/parameters/id" }, { name: X-Hub-Signature-256, in: header, required: true, schema: { type: string } }, { name: X-GitHub-Event, in: header, schema: { type: string } }]
+      responses: { "200": { description: OK }, "401": { $ref: "#/components/responses/Unauthorized" } }
   /firewalls:
     get: { tags: [network], summary: List firewalls, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK } } }
     post:

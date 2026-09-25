@@ -18,6 +18,7 @@ import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { TrustModule } from './modules/trust/trust.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { DeployModule } from './modules/deploy/deploy.module';
 import { JobsModule } from './jobs/jobs.module';
 import { HealthController } from './health.controller';
 
@@ -27,7 +28,7 @@ import { HealthController } from './health.controller';
     // infrastructure
     PrismaModule, NatsModule, RedisModule, TemporalModule, DriversModule,
     // domain
-    IamModule, EventsModule, ComputeModule, SchedulerModule, NetworkModule, StorageModule, MarketplaceModule, BillingModule, TrustModule, AdminModule,
+    IamModule, EventsModule, ComputeModule, SchedulerModule, NetworkModule, StorageModule, MarketplaceModule, BillingModule, TrustModule, AdminModule, DeployModule,
     // background
     JobsModule,
   ],

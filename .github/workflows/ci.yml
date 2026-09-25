@@ -43,6 +43,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: host-agent-linux-amd64, path: agents/host-agent/host-agent }
 
+  cli:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: cli } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - run: test -z "$(gofmt -l .)" && go vet ./... && go build -o pgcloud .
+
   openapi:
     runs-on: ubuntu-latest
     steps:

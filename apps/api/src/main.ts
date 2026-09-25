@@ -7,7 +7,9 @@ import { loadConfig } from './config/config';
 
 async function bootstrap() {
   const cfg = loadConfig();
-  const app = await NestFactory.create(AppModule, { logger: cfg.NODE_ENV === 'production' ? ['log', 'warn', 'error'] : ['debug', 'log', 'warn', 'error'] });
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true, // GitHub webhook signatures are computed over the raw payload
+ logger: cfg.NODE_ENV === 'production' ? ['log', 'warn', 'error'] : ['debug', 'log', 'warn', 'error'] });
 
   app.enableCors({ origin: true, credentials: true });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidUnknownValues: false }));

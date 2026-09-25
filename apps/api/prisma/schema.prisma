@@ -109,6 +109,7 @@ model Project {
   snapshots Snapshot[]
   apiTokens ApiToken[]
   usage     UsageRecord[]
+  deployments Deployment[]
 
   @@unique([teamId, slug])
 }
@@ -282,6 +283,7 @@ model Server {
   snapshots Snapshot[]
   firewalls FirewallServer[]
   actions   ServerAction[]
+  deployment Deployment?
 
   @@index([projectId, status])
   @@index([hostId])
@@ -689,6 +691,42 @@ model WebhookDelivery {
   webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
 
   @@index([deliveredAt, nextAttemptAt])
+}
+
+// ───────────────────────── Git Deploy ─────────────────────────
+
+enum DeployStatus {
+  creating
+  deploying
+  live
+  failed
+}
+
+/// A Git repository deployed onto a server: clone → build (Dockerfile / compose) → run,
+/// and redeploy on every push via a GitHub webhook. The "git push → live" loop.
+model Deployment {
+  id            String       @id @default(cuid())
+  projectId     String
+  serverId      String       @unique
+  name          String
+  repoUrl       String // https://github.com/org/repo
+  branch        String       @default("main")
+  /// Container port the app listens on; exposed on :80 of the server.
+  port          Int          @default(3000)
+  /// Secret GitHub signs push webhooks with (shown once).
+  webhookSecret String
+  /// Secret the control plane uses to call the redeploy hook on the VM.
+  vmSecret      String
+  envVars       Json         @default("{}")
+  status        DeployStatus @default(creating)
+  lastCommit    String?
+  lastDeployAt  DateTime?
+  createdAt     DateTime     @default(now())
+
+  server  Server  @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
 }
 
 /// "Notify me" clicks on roadmap products in the console — feeds prioritisation.
