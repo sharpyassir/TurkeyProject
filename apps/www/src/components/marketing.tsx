@@ -211,7 +211,7 @@ export function Pricing() {
   useEffect(() => {
     fetch(`${API}/v1/pricing?currency=${currency}`)
       .then((r) => r.json())
-      .then((d: PriceList) => setList({ ...d, data: d.data.filter((p) => p.size) }))
+      .then((d: PriceList) => setList({ ...d, data: d.data.filter((p) => p.size).sort((a, b) => a.monthlyMinor - b.monthlyMinor) }))
       .catch(() => setList({ currency: 'USD', baseCurrency: 'USD', fxRate: 1, data: FALLBACK }));
   }, [currency]);
   const cur = list.currency;
