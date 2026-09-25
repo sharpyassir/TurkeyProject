@@ -254,7 +254,11 @@ export class ServersService {
       await this.prisma.serverAction.update({ where: { id: actionId }, data: { workflowId, status: 'running' } });
     } catch (err) {
       this.log.error(`failed to start ${workflowId}: ${(err as Error).message}`);
-      await this.prisma.serverAction.update({ where: { id: actionId }, data: { status: 'failed', error: 'workflow_start_failed', finishedAt: new Date() } });
+      const action = await this.prisma.serverAction.update({ where: { id: actionId }, data: { status: 'failed', error: 'workflow_start_failed', finishedAt: new Date() } });
+      // A create that never started must not linger as `new`; other actions leave the server where it was.
+      if (action.type === 'create') {
+        await this.prisma.server.update({ where: { id: action.serverId }, data: { status: 'failed', statusMessage: 'Provisioning could not be started. Please try again.' } });
+      }
       throw new ApiError(503, 'workflow_unavailable', 'Provisioning is temporarily unavailable; please retry');
     }
   }

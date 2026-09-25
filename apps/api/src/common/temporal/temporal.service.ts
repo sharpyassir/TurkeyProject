@@ -33,14 +33,19 @@ export class TemporalService implements OnModuleInit {
     workflowId: string,
     opts: Partial<WorkflowStartOptions> = {},
   ) {
-    const client = await this.connect();
-    const handle = await client.workflow.start(workflow, {
-      taskQueue: this.taskQueue,
-      workflowId,
-      args,
-      ...opts,
-    });
-    return handle.workflowId;
+    const startOnce = async () => {
+      const client = await this.connect();
+      const handle = await client.workflow.start(workflow, { taskQueue: this.taskQueue, workflowId, args, ...opts });
+      return handle.workflowId;
+    };
+    try {
+      return await startOnce();
+    } catch (err) {
+      // A client bound to a Temporal server that has since restarted fails here; reconnect once.
+      this.log.warn(`workflow start failed (${(err as Error).message}); reconnecting to Temporal and retrying`);
+      this.client = undefined;
+      return startOnce();
+    }
   }
 
   async signal(workflowId: string, signal: string, ...args: unknown[]) {
