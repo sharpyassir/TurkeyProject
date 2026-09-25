@@ -10,14 +10,17 @@ export class TemporalService implements OnModuleInit {
   readonly taskQueue = loadConfig().TEMPORAL_TASK_QUEUE;
 
   async onModuleInit() {
+    await this.connect().catch((err) => this.log.warn(`Temporal unavailable (${(err as Error).message}); will retry on first use`));
+  }
+
+  /** Connects (or reconnects) on demand so an API that booted before Temporal still recovers. */
+  private async connect(): Promise<Client> {
+    if (this.client) return this.client;
     const { TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE } = loadConfig();
-    try {
-      const connection = await Connection.connect({ address: TEMPORAL_ADDRESS, connectTimeout: 3000 });
-      this.client = new Client({ connection, namespace: TEMPORAL_NAMESPACE });
-      this.log.log(`connected to Temporal at ${TEMPORAL_ADDRESS}`);
-    } catch (err) {
-      this.log.warn(`Temporal unavailable (${(err as Error).message}); workflows cannot start`);
-    }
+    const connection = await Connection.connect({ address: TEMPORAL_ADDRESS, connectTimeout: 3000 });
+    this.client = new Client({ connection, namespace: TEMPORAL_NAMESPACE });
+    this.log.log(`connected to Temporal at ${TEMPORAL_ADDRESS}`);
+    return this.client;
   }
 
   /**
@@ -30,8 +33,8 @@ export class TemporalService implements OnModuleInit {
     workflowId: string,
     opts: Partial<WorkflowStartOptions> = {},
   ) {
-    if (!this.client) throw new Error('Temporal not connected');
-    const handle = await this.client.workflow.start(workflow, {
+    const client = await this.connect();
+    const handle = await client.workflow.start(workflow, {
       taskQueue: this.taskQueue,
       workflowId,
       args,
@@ -41,7 +44,7 @@ export class TemporalService implements OnModuleInit {
   }
 
   async signal(workflowId: string, signal: string, ...args: unknown[]) {
-    if (!this.client) throw new Error('Temporal not connected');
-    await this.client.workflow.getHandle(workflowId).signal(signal, ...args);
+    const client = await this.connect();
+    await client.workflow.getHandle(workflowId).signal(signal, ...args);
   }
 }
