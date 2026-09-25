@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/status-badge';
 export default function ServersPage() {
   const { locale } = useShell();
   const [servers, setServers] = useState<Server[] | null>(null);
+  const [pending, setPending] = useState(0);
 
   const load = useCallback(async () => {
     const res = await api<{ data: Server[] }>('/v1/servers');
@@ -17,6 +18,8 @@ export default function ServersPage() {
   }, []);
 
   // Poll while anything is transitioning so the user watches provisioning live.
+  useEffect(() => { api<{ pending: number }>('/v1/approvals?status=pending').then((r) => setPending(r.pending)).catch(() => undefined); }, []);
+
   useEffect(() => {
     load();
     const id = setInterval(() => {
@@ -38,6 +41,7 @@ export default function ServersPage() {
         <h1 className="text-xl font-semibold">{t(locale, 'servers')}</h1>
         <Link href="/servers/new" className="btn-primary ms-auto">{t(locale, 'create')}</Link>
       </div>
+      {pending > 0 && <Link href="/approvals" className="mb-4 block rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-200">{pending} agent {pending === 1 ? 'request is' : 'requests are'} waiting for your approval →</Link>}
       {servers && servers.length === 0 && <p className="card text-neutral-500">{t(locale, 'noServers')}</p>}
       {servers && servers.length > 0 && (
         <div className="card overflow-x-auto p-0">

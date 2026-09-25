@@ -41,7 +41,9 @@ An MCP server that turns the pgcloud API into tools for Claude Code, Cursor, Win
 
 ## Safety model
 
-The MCP server has no policy of its own. The API enforces the token's scopes, monthly spending cap and approval rules, and returns clear errors (`spend_limit_reached`, `forbidden`) that the server passes back to the agent as text with a hint on what to do. Give an agent a token with a cap and it cannot spend past it, whatever it is asked.
+The MCP server has no policy of its own. The API enforces the token's scopes, monthly spending cap and approval rules, and returns clear errors (`spend_limit_reached`, `forbidden`, `approval_required`) that the server passes back to the agent as text with a hint on what to do. Give an agent a token with a cap and it cannot spend past it, whatever it is asked.
+
+When a token has approval rules (for example `servers:delete`), the matching call is parked instead of run. The agent gets an `approval_required` error with the approval id, the team owners get an email and a webhook event, and the request shows up under Managed Agents, Approval Queue in the console. The agent can call `get_approval` (with `wait: true` to poll for up to ten minutes) to learn the decision; an approved request has already run by then.
 
 ## Development
 

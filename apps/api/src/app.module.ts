@@ -21,6 +21,7 @@ import { BillingModule } from './modules/billing/billing.module';
 import { TrustModule } from './modules/trust/trust.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { DeployModule } from './modules/deploy/deploy.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { JobsModule } from './jobs/jobs.module';
 import { HealthController } from './health.controller';
 
@@ -30,7 +31,8 @@ import { HealthController } from './health.controller';
     // infrastructure
     PrismaModule, NatsModule, RedisModule, TemporalModule, DriversModule, MailModule,
     // domain
-    IamModule, EventsModule, ComputeModule, SchedulerModule, NetworkModule, StorageModule, MarketplaceModule, BillingModule, TrustModule, AdminModule, DeployModule,
+    IamModule,
+    ApprovalsModule, EventsModule, ComputeModule, SchedulerModule, NetworkModule, StorageModule, MarketplaceModule, BillingModule, TrustModule, AdminModule, DeployModule,
     // background
     JobsModule,
   ],

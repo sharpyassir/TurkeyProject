@@ -8,6 +8,7 @@ import { InvoicesService } from '../modules/billing/invoices.service';
 import { SpendService } from '../modules/billing/spend.service';
 import { FxService } from '../modules/billing/fx.service';
 import { EventsService } from '../modules/events/events.service';
+import { ApprovalsService } from '../modules/approvals/approvals.service';
 
 /**
  * Periodic jobs. Each takes a Redis lock so only one API replica runs it.
@@ -26,6 +27,7 @@ export class JobsService {
     private readonly spend: SpendService,
     private readonly events: EventsService,
     private readonly fx: FxService,
+    private readonly approvals: ApprovalsService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -49,6 +51,11 @@ export class JobsService {
   @Cron('7 * * * *') // hourly: refresh the USD→TRY rate
   fxRefresh() {
     return this.locked('fx-refresh', 60_000, () => this.fx.refresh());
+  }
+
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  expireApprovals() {
+    return this.locked('expire-approvals', 60_000, () => this.approvals.expire());
   }
 
   @Cron(CronExpression.EVERY_10_SECONDS)

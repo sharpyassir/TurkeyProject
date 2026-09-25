@@ -79,3 +79,15 @@ token that never touches our database.
   They degrade open if Redis is down so a cache outage never takes the API with it.
 - **Mail** goes through `MailService`: `MAIL_PROVIDER=log` prints to the API log in development;
   `postmark` and `resend` are wired for production with `MAIL_API_KEY` and `MAIL_FROM`.
+
+## Approval queue for agents
+
+Agent tokens can carry `requireApprovalFor`, a list of actions such as `servers:delete`, `servers:resize-down`
+or `servers:create`. When the agent asks for one of those, the API records an Approval, emails the team owners
+and admins, emits `approval.requested` to webhooks, and answers `403 approval_required` with the approval id and
+a console link. Retrying the same request reuses the pending approval, so an agent that loops does not flood anyone.
+
+A person decides in the console (Managed Agents, Approval Queue), with `pgcloud approvals approve ID`, or through
+`POST /v1/approvals/{id}/approve`. Approving runs the original request as the approver but with the token's
+project scope and spending cap still applied; the audit log records both. Denying stores a reason the agent can
+read. Pending requests expire after 24 hours. Agents poll `GET /v1/approvals/{id}` or the MCP `get_approval` tool.

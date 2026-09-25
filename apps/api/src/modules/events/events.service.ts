@@ -10,6 +10,7 @@ export const CUSTOMER_EVENTS = [
   'server.created', 'server.active', 'server.failed', 'server.deleted', 'server.resized',
   'snapshot.completed', 'invoice.issued', 'invoice.paid', 'payment.failed',
   'spend.alert', 'spend.limit_reached', 'account.suspended',
+  'approval.requested', 'approval.decided',
 ] as const;
 
 export type EventName = (typeof CUSTOMER_EVENTS)[number] | (string & {});

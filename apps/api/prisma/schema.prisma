@@ -55,6 +55,7 @@ model User {
   apiTokens   ApiToken[]
   auditLogs   AuditLog[]
   emailTokens EmailToken[]
+  decidedApprovals Approval[]
 }
 
 /// One time links for email verification and password reset (hash stored, raw token mailed).
@@ -88,6 +89,7 @@ model Team {
   members   TeamMember[]
   projects  Project[]
   apiTokens ApiToken[]
+  approvals Approval[]
   invoices  Invoice[]
   credits   Credit[]
   payments  Payment[]
@@ -164,6 +166,44 @@ model ApiToken {
   team    Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  approvals Approval[]
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  denied
+  expired
+  failed
+}
+
+/// A request from an agent token that a person must approve before it runs.
+model Approval {
+  id            String         @id @default(cuid())
+  teamId        String
+  projectId     String
+  tokenId       String?
+  requestedById String
+  kind          String // "servers:delete" | "servers:resize-down" | "servers:create" ...
+  resourceType  String
+  resourceId    String?
+  resourceName  String?
+  summary       String
+  payload       Json           @default("{}")
+  status        ApprovalStatus @default(pending)
+  result        Json?
+  reason        String?
+  decidedById   String?
+  decidedAt     DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime       @default(now())
+
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  token     ApiToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+  decidedBy User?     @relation(fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([teamId, status, createdAt])
+  @@index([tokenId, status])
 }
 
 // ───────────────────────── Regions & data plane inventory ─────────────────────────

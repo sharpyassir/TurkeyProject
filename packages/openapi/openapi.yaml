@@ -25,6 +25,7 @@ security:
 tags:
   - name: auth
   - name: account
+  - name: approvals
   - name: servers
   - name: catalog
   - name: deploys
@@ -282,6 +283,40 @@ paths:
       summary: GitHub push webhook (verified with X-Hub-Signature-256)
       parameters: [{ $ref: "#/components/parameters/id" }, { name: X-Hub-Signature-256, in: header, required: true, schema: { type: string } }, { name: X-GitHub-Event, in: header, schema: { type: string } }]
       responses: { "200": { description: OK }, "401": { $ref: "#/components/responses/Unauthorized" } }
+  /approvals:
+    get:
+      tags: [approvals]
+      summary: List approval requests (agents see only their own)
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, denied, expired, failed] } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Approval" } }, pending: { type: integer } } } } } }
+  /approvals/{id}:
+    get:
+      tags: [approvals]
+      summary: Get one approval request
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Approval" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /approvals/{id}/approve:
+    post:
+      tags: [approvals]
+      summary: Approve and run the parked request
+      description: Team owners and admins only, never an agent token. The request runs with the agent token's project scope and spending cap still applied; the audit log records both the person and the token.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "201": { description: Ran, content: { application/json: { schema: { $ref: "#/components/schemas/Approval" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Already decided or expired (`invalid_state`) }
+  /approvals/{id}/deny:
+    post:
+      tags: [approvals]
+      summary: Deny the parked request
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string, maxLength: 500 } } } } } }
+      responses:
+        "201": { description: Denied, content: { application/json: { schema: { $ref: "#/components/schemas/Approval" } } } }
   /firewalls:
     get: { tags: [network], summary: List firewalls, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK } } }
     post:
@@ -378,12 +413,31 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, invalid_state, quota_exceeded, spend_limit_reached, verification_required, account_suspended, idempotency_key_reused, rate_limited, workflow_unavailable, internal_error]
+              enum: [invalid_request, unauthorized, forbidden, approval_required, not_found, conflict, invalid_state, quota_exceeded, spend_limit_reached, verification_required, account_suspended, idempotency_key_reused, rate_limited, workflow_unavailable, internal_error]
             message: { type: string }
             details: { type: object, additionalProperties: true }
     PageMeta:
       type: object
       properties: { next_cursor: { type: [string, "null"] }, count: { type: integer } }
+    Approval:
+      type: object
+      description: A request from an agent token that a person must approve before it runs.
+      properties:
+        id: { type: string }
+        kind: { type: string, example: "servers:delete" }
+        summary: { type: string, example: "Delete server web-1 (s-2vcpu-4gb)" }
+        status: { type: string, enum: [pending, approved, denied, expired, failed] }
+        resourceType: { type: string }
+        resourceId: { type: string, nullable: true }
+        resourceName: { type: string, nullable: true }
+        payload: { type: object, description: The original request body }
+        result: { type: object, nullable: true, description: What the action returned once approved }
+        reason: { type: string, nullable: true }
+        token: { type: object, nullable: true, properties: { name: { type: string }, prefix: { type: string } } }
+        decidedBy: { type: object, nullable: true, properties: { name: { type: string }, email: { type: string } } }
+        decidedAt: { type: string, format: date-time, nullable: true }
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
     TotpCode:
       type: object
       required: [code]

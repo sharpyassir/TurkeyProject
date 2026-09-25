@@ -93,6 +93,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Area | State |
 |---|---|
 | IAM: signup/login, teams, projects, RBAC scopes, API tokens, **agent-safe tokens** (spend cap, approval rules), SSH keys | ✅ |
+| Approval queue: parked agent requests, owner email and webhook, approve or deny in console, CLI or API | ✅ |
 | Compute: servers, sizes, images, lifecycle actions as Temporal workflows, quotas | ✅ |
 | **Git Deploy**: repo → server → build → GitHub push redeploys (`POST /v1/deploys`) | ✅ |
 | **CLI** `pgcloud`: login, servers create/ssh/actions, deploy, tokens, `--json` | ✅ |

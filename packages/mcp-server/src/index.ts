@@ -83,6 +83,7 @@ async function run(fn: () => Promise<unknown>) {
         forbidden: /scope/.test(err.message)
           ? 'This token was not given that scope. Ask the account owner for a token with the scope, or skip this step.'
           : 'This token requires a human to approve this action in the console. Tell the user what you wanted to do and why.',
+        approval_required: 'The request was parked for a person to approve in the console. Tell the user what you asked for and the approval id; call get_approval to see the decision, or continue with other work.',
         quota_exceeded: 'The project quota or region capacity is exhausted. Ask the account owner to raise the quota or try a smaller size.',
         verification_required: 'The account owner must verify their phone number or add credit before servers can be created.',
         invalid_state: 'The server is busy with another operation. Check its status and retry when it is active or off.',
@@ -232,6 +233,20 @@ server.registerTool('get_billing', {
     scopes: me.scopes,
     tokenCap: mine ? { cap: money(mine.spendCapMinor, b.currency), spent: money(mine.spentThisMonthMinor, b.currency), requiresApprovalFor: mine.requireApprovalFor } : 'not visible with this token',
   };
+}));
+
+server.registerTool('get_approval', {
+  title: 'Check an approval',
+  description: 'Check whether a person has approved a parked request (from an approval_required error). With wait=true, polls for up to 10 minutes. Status is pending, approved, denied, expired or failed; an approved request has already run.',
+  inputSchema: { id: z.string(), wait: z.boolean().default(false) },
+}, async ({ id, wait }) => run(async () => {
+  const until = Date.now() + 10 * 60_000;
+  let a = await api<any>('GET', `/v1/approvals/${id}`);
+  while (wait && a.status === 'pending' && Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 5000));
+    a = await api<any>('GET', `/v1/approvals/${id}`);
+  }
+  return { id: a.id, status: a.status, summary: a.summary, reason: a.reason, decidedBy: a.decidedBy?.name ?? null, result: a.result ?? null, expiresAt: a.expiresAt };
 }));
 
 server.registerTool('list_firewalls', {

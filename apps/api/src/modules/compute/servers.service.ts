@@ -11,6 +11,8 @@ import { EventsService } from '../events/events.service';
 import { TrustService } from '../trust/trust.service';
 import { SpendService } from '../billing/spend.service';
 import { MarketplaceService } from '../marketplace/marketplace.service';
+import { ApprovalsService } from '../approvals/approvals.service';
+import type { Approval } from '@prisma/client';
 import { CreateServerDto, ListServersQuery, ServerActionDto } from './compute.dto';
 
 /** Transitions allowed from each state. Everything else is `invalid_state`. */
@@ -49,7 +51,15 @@ export class ServersService {
     private readonly trust: TrustService,
     private readonly spend: SpendService,
     private readonly marketplace: MarketplaceService,
-  ) {}
+    private readonly approvals: ApprovalsService,
+  ) {
+    // What runs when a person approves a parked request.
+    this.approvals.registerExecutor('servers:create', (actor, a) => this.create(actor, a.payload as unknown as CreateServerDto));
+    this.approvals.registerExecutor('servers:delete', (actor, a) => this.delete(actor, a.resourceId!));
+    for (const k of ['servers:stop', 'servers:reboot', 'servers:resize', 'servers:resize-down', 'servers:rebuild', 'servers:snapshot', 'servers:start']) {
+      this.approvals.registerExecutor(k, (actor, a) => this.action(actor, a.resourceId!, a.payload as unknown as ServerActionDto));
+    }
+  }
 
   async list(actor: Actor, q: ListServersQuery) {
     const project = await this.iam.resolveProject(actor, q.project);
@@ -80,6 +90,9 @@ export class ServersService {
     const cfg = loadConfig();
     const project = await this.iam.resolveProject(actor, dto.project);
     await this.trust.assertCanProvision(actor.teamId);
+    if (this.approvals.needs(actor, 'servers:create')) {
+      await this.approvals.request(actor, { kind: 'servers:create', resourceType: 'server', resourceName: dto.name, projectId: project.id, summary: `Create server ${dto.name} (${dto.size}, ${dto.image})`, payload: { ...dto, project: project.id } });
+    }
 
     const [region, size, image] = await Promise.all([
       this.prisma.region.findUnique({ where: { id: dto.region ?? cfg.DEFAULT_REGION } }),
@@ -156,9 +169,8 @@ export class ServersService {
   async action(actor: Actor, id: string, dto: ServerActionDto) {
     const server = await this.mustOwn(actor, id);
     this.assertTransition(server.status, dto.type);
-    if (actor.isAgent && actor.requireApprovalFor.has(`servers:${dto.type}`)) {
-      // Phase 2: park the action in `queued` and notify a human. MVP: refuse loudly.
-      throw ApiError.forbidden(`This agent token requires human approval for "${dto.type}"`);
+    if (this.approvals.needs(actor, `servers:${dto.type}`)) {
+      await this.approvals.request(actor, { kind: `servers:${dto.type}`, resourceType: 'server', resourceId: server.id, resourceName: server.name, projectId: server.projectId, summary: `${cap(dto.type)} server ${server.name}${dto.size ? ` to ${dto.size}` : ''}${dto.image ? ` with ${dto.image}` : ''}`, payload: { ...dto } });
     }
 
     const params: Record<string, unknown> = {};
@@ -179,8 +191,8 @@ export class ServersService {
         const size = await this.prisma.size.findUnique({ where: { id: dto.size } });
         if (!size?.available) throw ApiError.invalid(`Unknown size "${dto.size}"`);
         if (size.diskGb < server.diskGb) throw ApiError.invalid('Disk cannot shrink; choose a size with equal or larger disk');
-        if (actor.isAgent && size.memoryMb < server.memoryMb && actor.requireApprovalFor.has('servers:resize-down')) {
-          throw ApiError.forbidden('This agent token requires human approval to resize down');
+        if (size.memoryMb < server.memoryMb && this.approvals.needs(actor, 'servers:resize-down')) {
+          await this.approvals.request(actor, { kind: 'servers:resize-down', resourceType: 'server', resourceId: server.id, resourceName: server.name, projectId: server.projectId, summary: `Resize server ${server.name} down to ${size.id}`, payload: { ...dto } });
         }
         const team = await this.prisma.team.findUniqueOrThrow({ where: { id: actor.teamId } });
         const delta = (await this.spend.monthlyPriceMinor('server', size.id, team.currency)) - (await this.spend.monthlyPriceMinor('server', server.sizeId, team.currency));
@@ -216,7 +228,9 @@ export class ServersService {
   async delete(actor: Actor, id: string) {
     const server = await this.mustOwn(actor, id);
     this.assertTransition(server.status, 'delete');
-    if (actor.isAgent && actor.requireApprovalFor.has('servers:delete')) throw ApiError.forbidden('This agent token requires human approval to delete servers');
+    if (this.approvals.needs(actor, 'servers:delete')) {
+      await this.approvals.request(actor, { kind: 'servers:delete', resourceType: 'server', resourceId: server.id, resourceName: server.name, projectId: server.projectId, summary: `Delete server ${server.name} (${server.sizeId})`, payload: {} });
+    }
 
     const action = await this.prisma.$transaction(async (tx) => {
       const a = await tx.serverAction.create({ data: { serverId: server.id, type: 'delete', requestedBy: actor.tokenId ?? actor.userId } });
@@ -286,4 +300,8 @@ export function present(s: ServerRow) {
     projectId: s.projectId,
     createdAt: s.createdAt,
   };
+}
+
+function cap(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

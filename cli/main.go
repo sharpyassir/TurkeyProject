@@ -85,6 +85,8 @@ func main() {
 		err = cmdPricing(rest)
 	case "ssh-keys", "keys":
 		err = cmdSSHKeys(rest)
+	case "approvals":
+		err = cmdApprovals(rest)
 	case "tokens":
 		err = cmdTokens(rest)
 	case "firewalls":
@@ -113,6 +115,7 @@ func usage() {
 USAGE  pgcloud [--json] [--project SLUG] <command> [args]
 
 ACCOUNT   login · logout · whoami · billing · tokens create NAME [--agent --cap 500] · ssh-keys ls|add NAME FILE
+AGENTS    approvals [ls | approve ID | deny ID --reason TEXT]   (requests parked by agent tokens)
 SERVERS   servers ls | create NAME [--size s-2vcpu-4gb] [--image ubuntu-24-04|wordpress] [--key ID] [--wait]
                   | get ID | start|stop|reboot|delete ID | resize ID --size S | snapshot ID
           ssh NAME|ID [-- command]
@@ -803,6 +806,27 @@ func expand(p string) string {
 		return filepath.Join(h, p[2:])
 	}
 	return p
+}
+
+func cmdApprovals(args []string) error {
+	if len(args) == 0 || args[0] == "ls" {
+		return cmdList("/v1/approvals?status=pending", nil, []string{"summary", "kind", "status", "expiresAt", "id"})
+	}
+	if (args[0] == "approve" || args[0] == "deny") && len(args) >= 2 {
+		body := map[string]any{}
+		if args[0] == "deny" {
+			if reason, _ := flag(args[2:], "--reason"); reason != "" {
+				body["reason"] = reason
+			}
+		}
+		var a map[string]any
+		if err := call(http.MethodPost, "/v1/approvals/"+args[1]+"/"+args[0], body, &a); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ %s: %s\n", a["status"], a["summary"])
+		return nil
+	}
+	return errors.New("usage: pgcloud approvals [ls | approve ID | deny ID --reason TEXT]")
 }
 
 func cmdTokens(args []string) error {
