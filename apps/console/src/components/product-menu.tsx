@@ -24,8 +24,8 @@ export function ProductMenu({ label }: { label: string }) {
         {label} <span aria-hidden>▾</span>
       </button>
       {open && (
-        <div role="menu" className="absolute start-0 z-20 mt-2 w-[min(92vw,56rem)] rounded-lg border border-neutral-200 bg-white p-4 shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div role="menu" className="absolute start-0 z-20 mt-2 w-[min(92vw,64rem)] rounded-lg border border-neutral-200 bg-white p-4 shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {GROUPS.map((g) => (
               <div key={g}>
                 <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{g}</div>
