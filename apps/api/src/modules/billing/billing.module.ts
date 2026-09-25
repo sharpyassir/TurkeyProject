@@ -5,11 +5,12 @@ import { InvoicesService } from './invoices.service';
 import { MeteringService } from './metering.service';
 import { RatingService } from './rating.service';
 import { SpendService } from './spend.service';
+import { FxService } from './fx.service';
 
 @Module({
   imports: [EventsModule],
   controllers: [BillingController, PricingController],
-  providers: [SpendService, MeteringService, RatingService, InvoicesService],
-  exports: [SpendService, MeteringService, RatingService, InvoicesService],
+  providers: [FxService, SpendService, MeteringService, RatingService, InvoicesService],
+  exports: [FxService, SpendService, MeteringService, RatingService, InvoicesService],
 })
 export class BillingModule {}

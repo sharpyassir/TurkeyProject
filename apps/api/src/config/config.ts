@@ -17,6 +17,10 @@ const schema = z.object({
   BILLING_HOURS_PER_MONTH: z.coerce.number().default(672),
   DEFAULT_CURRENCY: z.enum(['USD', 'TRY']).default('USD'),
   DEFAULT_REGION: z.string().default('ist1'),
+  /** Fallback USD→TRY rate when no FxRate row exists yet. */
+  FX_USD_TRY: z.coerce.number().positive().default(41),
+  /** JSON endpoint returning { rates: { TRY: number } } for USD. */
+  FX_PROVIDER_URL: z.string().url().default('https://open.er-api.com/v6/latest/USD'),
 });
 
 export type AppConfig = z.infer<typeof schema>;

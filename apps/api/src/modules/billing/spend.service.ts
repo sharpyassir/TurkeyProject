@@ -3,6 +3,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { ApiError } from '../../common/errors/api-error';
 import { EventsService } from '../events/events.service';
 import { loadConfig } from '../../config/config';
+import { FxService } from './fx.service';
 import { startOfMonth } from './pricing';
 import type { Actor } from '../../common/auth/actor';
 
@@ -14,15 +15,16 @@ import type { Actor } from '../../common/auth/actor';
  */
 @Injectable()
 export class SpendService {
-  constructor(private readonly prisma: PrismaService, private readonly events: EventsService) {}
+  constructor(private readonly prisma: PrismaService, private readonly events: EventsService, private readonly fx: FxService) {}
 
-  /** Projected monthly cost of a resource in the team currency. */
+  /** Projected monthly cost of a resource in the team currency (USD book, converted at today's rate). */
   async monthlyPriceMinor(resourceType: 'server' | 'public_ip' | 'snapshot' | 'backup', sku: string, currency: 'USD' | 'TRY') {
     const price = await this.prisma.price.findFirst({
-      where: { resourceType, sku, currency, validTo: null },
+      where: { resourceType, sku, currency: 'USD', validTo: null },
       orderBy: { validFrom: 'desc' },
     });
-    return price?.monthlyMinor ?? 0;
+    if (!price) return 0;
+    return price.unit === 'percent' ? price.monthlyMinor : this.fx.convert(price.monthlyMinor, currency);
   }
 
   async assertCanSpend(actor: Actor, projectId: string, addedMonthlyMinor: number) {

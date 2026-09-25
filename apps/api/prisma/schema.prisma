@@ -519,7 +519,20 @@ model UsageRecord {
   @@index([invoiceId])
 }
 
-/// Price book. hourly = monthly / BILLING_HOURS_PER_MONTH, capped at monthly.
+/// USD → quote exchange rates, newest wins. Every price is in USD; lira is derived.
+model FxRate {
+  id     String   @id @default(cuid())
+  base   Currency @default(USD)
+  quote  Currency
+  rate   Decimal  @db.Decimal(18, 6)
+  source String // provider URL, "admin", "seed"
+  at     DateTime @default(now())
+
+  @@index([base, quote, at])
+}
+
+/// Price book in USD. hourly = monthly / BILLING_HOURS_PER_MONTH, capped at monthly.
+/// Other currencies are converted by FxService at the moment of pricing or rating.
 model Price {
   id           String       @id @default(cuid())
   resourceType ResourceType

@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Currency, ResourceType } from '@prisma/client';
+import { ResourceType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { loadConfig } from '../../config/config';
 import { rateHour, startOfHour, startOfMonth } from './pricing';
+import { FxService } from './fx.service';
 
 /**
  * Hourly roll-up: UsageEvent (per minute) → UsageRecord (per resource per hour, rated).
@@ -12,7 +13,7 @@ import { rateHour, startOfHour, startOfMonth } from './pricing';
 export class RatingService {
   private readonly log = new Logger(RatingService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly fx: FxService) {}
 
   /** Rates the hour that ended most recently (called a few minutes past every hour). */
   async rollupPreviousHour(now = new Date()) {
@@ -40,7 +41,8 @@ export class RatingService {
     for (const g of groups) {
       const currency = currencyOf.get(g.projectId) ?? 'USD';
       const sku = await this.skuFor(g.resourceType, g.resourceId);
-      const price = sku ? await this.priceFor(g.resourceType, sku, currency, hourEnd) : null;
+      const price = sku ? await this.priceFor(g.resourceType, sku, hourEnd) : null;
+      const fx = await this.fx.rate(currency, hourEnd); // USD book → team currency at the hour's rate
 
       const minutes = g.unit === 'minute' ? g._count._all : g._count._all; // one event per minute either way
       const quantity = g._sum.quantity ?? 0;
@@ -48,8 +50,8 @@ export class RatingService {
       // Per-GB resources are priced per GB-month; scale monthly price by average GB in the hour.
       // Percent prices (backups) are a share of the server's own plan price.
       let monthlyMinor = 0;
-      if (price && price.unit === 'percent') monthlyMinor = Math.round(((await this.planPriceFor(g.resourceId, currency, hourEnd)) * price.monthlyMinor) / 100);
-      else if (price) monthlyMinor = g.unit === 'gb_minute' ? Math.round(price.monthlyMinor * (quantity / Math.max(minutes, 1))) : price.monthlyMinor;
+      if (price && price.unit === 'percent') monthlyMinor = Math.round(((await this.planPriceFor(g.resourceId, hourEnd)) * fx * price.monthlyMinor) / 100);
+      else if (price) monthlyMinor = Math.round((g.unit === 'gb_minute' ? price.monthlyMinor * (quantity / Math.max(minutes, 1)) : price.monthlyMinor) * fx);
 
       const charged = await this.prisma.usageRecord.aggregate({
         where: { resourceType: g.resourceType, resourceId: g.resourceId, hourStart: { gte: startOfMonth(hourStart), lt: hourStart } },
@@ -88,17 +90,17 @@ export class RatingService {
     }
   }
 
-  /** Monthly plan price of the server a percent-priced resource (backups) belongs to. */
-  private async planPriceFor(serverId: string, currency: Currency, hourEnd: Date) {
+  /** Monthly USD plan price of the server a percent-priced resource (backups) belongs to. */
+  private async planPriceFor(serverId: string, hourEnd: Date) {
     const s = await this.prisma.server.findUnique({ where: { id: serverId }, select: { sizeId: true } });
     if (!s) return 0;
-    return (await this.priceFor('server', s.sizeId, currency, hourEnd))?.monthlyMinor ?? 0;
+    return (await this.priceFor('server', s.sizeId, hourEnd))?.monthlyMinor ?? 0;
   }
 
-  /** Newest price that was valid at any point before the hour ended, so a price book change mid-hour still rates that hour. */
-  private priceFor(resourceType: ResourceType, sku: string, currency: Currency, hourEnd: Date) {
+  /** Newest USD price that was valid at any point before the hour ended, so a price book change mid-hour still rates that hour. */
+  private priceFor(resourceType: ResourceType, sku: string, hourEnd: Date) {
     return this.prisma.price.findFirst({
-      where: { resourceType, sku, currency, validFrom: { lt: hourEnd }, OR: [{ validTo: null }, { validTo: { gte: hourEnd } }] },
+      where: { resourceType, sku, currency: 'USD', validFrom: { lt: hourEnd }, OR: [{ validTo: null }, { validTo: { gte: hourEnd } }] },
       orderBy: { validFrom: 'desc' },
     });
   }

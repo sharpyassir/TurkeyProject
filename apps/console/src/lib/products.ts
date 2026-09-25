@@ -22,7 +22,7 @@ export const PRODUCTS: Product[] = [
   // Projects
   { slug: 'projects', name: 'Projects', group: 'Projects', href: '/projects', blurb: 'Group resources, set quotas and a monthly spend limit per project.' },
 
-  // Managed Agents — our headline
+  // Managed Agents: our headline
   { slug: 'agents', name: 'Agent Access', group: 'Managed Agents', href: '/agents', blurb: 'Agent-safe API tokens: scopes, monthly spend caps, human approval for destructive actions.' },
   { slug: 'mcp', name: 'MCP Server', group: 'Managed Agents', phase: 2, blurb: 'Use pgcloud as tools from Claude, Cursor or any MCP client.' },
   { slug: 'approvals', name: 'Approval Queue', group: 'Managed Agents', phase: 2, blurb: 'Review and approve actions your agents request before they run.' },
@@ -32,7 +32,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'inference', name: 'Inference Gateway', group: 'Inference Engine', phase: 3, blurb: 'One OpenAI-compatible endpoint, billed per token in TRY or USD.' },
   { slug: 'dedicated-inference', name: 'Dedicated Inference', group: 'Inference Engine', phase: 3, blurb: 'Your own model endpoint on a GPU server.' },
   { slug: 'gpu-servers', name: 'GPU Servers', group: 'Inference Engine', phase: 3, blurb: 'Hourly GPU nodes for inference and fine-tuning.' },
-  { slug: 'ai-starter', name: 'AI Starter (Ollama + Open WebUI)', group: 'Inference Engine', href: '/servers/new?app=ai-starter', blurb: 'Run open models on CPU today with a chat UI — one click.' },
+  { slug: 'ai-starter', name: 'AI Starter (Ollama + Open WebUI)', group: 'Inference Engine', href: '/servers/new?app=ai-starter', blurb: 'Run open models on CPU today with a chat UI in one click.' },
 
   // Data & Learning
   { slug: 'databases', name: 'Managed Databases', group: 'Data & Learning', phase: 3, blurb: 'PostgreSQL (with pgvector), MySQL and Redis with automated backups.' },
@@ -40,16 +40,16 @@ export const PRODUCTS: Product[] = [
   { slug: 'knowledge-base', name: 'Knowledge Base', group: 'Data & Learning', phase: 3, blurb: 'RAG over your documents, served through the inference gateway.' },
 
   // Core Cloud
-  { slug: 'servers', name: 'Servers', group: 'Core Cloud', href: '/servers', blurb: 'KVM virtual machines in Istanbul, billed hourly, capped monthly.' },
+  { slug: 'servers', name: 'Servers', group: 'Core Cloud', href: '/servers', blurb: 'KVM virtual machines in Türkiye, billed hourly and capped monthly.' },
   { slug: 'deploys', name: 'Git Deploy', group: 'Core Cloud', href: '/deploys', blurb: 'Link a GitHub repo; we build and run it, and redeploy on every push.' },
   { slug: 'kubernetes', name: 'Kubernetes', group: 'Core Cloud', phase: 3, blurb: 'Managed Kubernetes clusters on pgcloud servers.' },
-  { slug: 'public-ips', name: 'Public IPs', group: 'Core Cloud', href: '/public-ips', blurb: 'IPv4 addresses from our Istanbul blocks; floating IPs in phase 2.' },
+  { slug: 'public-ips', name: 'Public IPs', group: 'Core Cloud', href: '/public-ips', blurb: 'IPv4 addresses from our own blocks. Floating IPs come in phase 2.' },
   { slug: 'vpc', name: 'VPC', group: 'Core Cloud', phase: 2, blurb: 'Isolated private networks per project (VXLAN / EVPN).' },
   { slug: 'load-balancers', name: 'Load Balancers', group: 'Core Cloud', phase: 2, blurb: 'Managed HAProxy with automatic TLS.' },
   { slug: 'dns', name: 'DNS', group: 'Core Cloud', phase: 2, blurb: 'API-managed zones and reverse DNS, free with your account.' },
   { slug: 'snapshots', name: 'Snapshots', group: 'Core Cloud', href: '/snapshots', blurb: 'Point-in-time copies of a server.' },
   { slug: 'volumes', name: 'Block Volumes', group: 'Core Cloud', phase: 2, blurb: 'Ceph-backed volumes you attach and detach from servers.' },
-  { slug: 'object-storage', name: 'Object Storage', group: 'Core Cloud', phase: 3, blurb: 'S3-compatible buckets in Istanbul.' },
+  { slug: 'object-storage', name: 'Object Storage', group: 'Core Cloud', phase: 3, blurb: 'S3 compatible buckets in Türkiye.' },
   { slug: 'monitoring', name: 'Monitoring & Alerts', group: 'Core Cloud', phase: 2, blurb: 'Metrics from every server, alert rules to email, SMS or webhook.' },
   { slug: 'webhooks', name: 'Webhooks', group: 'Core Cloud', href: '/webhooks', blurb: 'Signed event deliveries: server.active, invoice.issued, spend.limit_reached…' },
 

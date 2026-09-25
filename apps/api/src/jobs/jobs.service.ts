@@ -6,6 +6,7 @@ import { MeteringService } from '../modules/billing/metering.service';
 import { RatingService } from '../modules/billing/rating.service';
 import { InvoicesService } from '../modules/billing/invoices.service';
 import { SpendService } from '../modules/billing/spend.service';
+import { FxService } from '../modules/billing/fx.service';
 import { EventsService } from '../modules/events/events.service';
 
 /**
@@ -24,6 +25,7 @@ export class JobsService {
     private readonly invoices: InvoicesService,
     private readonly spend: SpendService,
     private readonly events: EventsService,
+    private readonly fx: FxService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -42,6 +44,11 @@ export class JobsService {
       await this.invoices.issueForPreviousMonth();
       await this.spend.resetTokenCounters();
     });
+  }
+
+  @Cron('7 * * * *') // hourly: refresh the USD→TRY rate
+  fxRefresh() {
+    return this.locked('fx-refresh', 60_000, () => this.fx.refresh());
   }
 
   @Cron(CronExpression.EVERY_10_SECONDS)

@@ -99,7 +99,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Network: public IP pool, host-enforced firewalls | ✅ (VPCs, LBs, DNS: phase 2) |
 | Storage: snapshots | ✅ (volumes, backups: phase 2) |
 | Marketplace: 15 launch apps as image + cloud-init + variables | ✅ (vendor portal: phase 3) |
-| Billing: per-minute metering, hourly rating with monthly cap, TRY/USD invoices, credits, spend limits | ✅ (payment gateways, e-Fatura provider: integration points only) |
+| Billing: per-minute metering, hourly rating with monthly cap, USD price book converted to TRY at a stored exchange rate (hourly refresh, admin override), invoices, credits, spend limits | ✅ (payment gateways, e-Fatura provider: integration points only) |
 | Trust & safety: verification gate, abuse flags, suspension | ✅ (AI detection: phase 2) |
 | Events: audit log, signed webhooks | ✅ |
 | Back-office admin API | ✅ (admin UI: to do) |

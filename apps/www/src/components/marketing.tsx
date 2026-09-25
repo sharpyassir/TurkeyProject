@@ -55,20 +55,20 @@ export function Hero() {
       <div className="container-x relative grid items-center gap-12 py-20 sm:py-28 lg:grid-cols-2">
         <div>
           <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-slate-200">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Region ist1 · Istanbul · launching 2027
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> First region in Türkiye, launching 2027
           </span>
           <h1 className="mt-6 text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
-            The developer cloud for Türkiye — built for humans <span className="bg-gradient-to-r from-sky-300 to-blue-400 bg-clip-text text-transparent">and AI agents</span>.
+            The developer cloud for Türkiye. Built for people <span className="bg-gradient-to-r from-sky-300 to-blue-400 bg-clip-text text-transparent">and AI agents</span>.
           </h1>
           <p className="mt-6 max-w-xl text-lg text-slate-300">
-            Servers in Istanbul in 60 seconds. Hourly billing in ₺ or $, e-Fatura, data that stays in Türkiye — and API tokens your agents can use with a spend cap and a human in the loop.
+            Get a server in 60 seconds. Pay by the hour in dollars or lira with a proper e-Fatura. Your data stays in Türkiye. And your AI agents get API tokens with a spending cap and a human in the loop.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a href={`${CONSOLE}/login`} className="btn-primary">Start with ₺4,000 credit</a>
-            <a href="#agents" className="btn-light">See how agents deploy →</a>
+            <a href={`${CONSOLE}/login`} className="btn-primary">Start with $100 in credit</a>
+            <a href="#agents" className="btn-light">See how agents deploy</a>
           </div>
           <dl className="mt-10 grid grid-cols-3 gap-6 border-t border-white/10 pt-6 text-sm">
-            {[['60 s', 'to a running server'], ['₺160 / mo', 'entry server, hourly'], ['0', 'data outside Türkiye']].map(([v, l]) => (
+            {[['60 s', 'to a running server'], ['$4 / mo', 'entry server, billed hourly'], ['100%', 'of your data stays in Türkiye']].map(([v, l]) => (
               <div key={l}><dt className="text-2xl font-bold">{v}</dt><dd className="text-slate-400">{l}</dd></div>
             ))}
           </dl>
@@ -87,12 +87,12 @@ function Terminal() {
     <div className="code relative">
       <div className="mb-3 flex gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-red-400/80" /><i className="h-2.5 w-2.5 rounded-full bg-amber-300/80" /><i className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" /></div>
       <div><span className="c">$</span> <span className="k">pgcloud</span> servers create <span className="p">--name</span> web-1 <span className="p">--size</span> s-2vcpu-4gb <span className="p">--image</span> wordpress</div>
-      <div className="c mt-1">→ 202 Accepted · id srv_9f1c · region ist1</div>
+      <div className="c mt-1">202 Accepted. id srv_9f1c, region tr1</div>
       <div className="mt-3"><span className="c">$</span> <span className="k">pgcloud</span> servers get srv_9f1c <span className="p">--watch</span></div>
       <div className="mt-1">status: <span className={status === 'active' ? 's' : 'p'}>{status}</span>{step >= 1 && <span className="c">  ip: 185.0.113.42</span>}</div>
-      {step >= 3 && <div className="s mt-1">✓ WordPress ready at https://185.0.113.42 — billed ₺1.43 / hour</div>}
-      <div className="c mt-4"># or let your agent do it — with a cap</div>
-      <div><span className="c">$</span> claude mcp add pgcloud <span className="p">--token</span> pgc_… <span className="c"># spend cap ₺500/mo, delete needs approval</span></div>
+      {step >= 3 && <div className="s mt-1">WordPress is ready at https://185.0.113.42 and billing at $0.036 per hour</div>}
+      <div className="c mt-4"># or let your agent do it, with a cap</div>
+      <div><span className="c">$</span> claude mcp add pgcloud <span className="p">--token</span> pgc_… <span className="c"># $15 per month cap, delete needs approval</span></div>
     </div>
   );
 }
@@ -101,10 +101,10 @@ function Terminal() {
 
 export function TrustStrip() {
   const items = [
-    ['🇹🇷', 'Istanbul region', 'Low latency for TR, MENA and the Caucasus'],
-    ['₺', 'TRY or USD billing', 'e-Fatura / e-Arşiv, iyzico, cards'],
-    ['🔒', 'KVKK residency', 'Data of Turkish customers never leaves Türkiye'],
-    ['⏱', 'Hourly, capped monthly', 'Pay for 3 hours, not 30 days'],
+    ['🇹🇷', 'Region in Türkiye', 'Low latency across Türkiye, the Middle East and the Caucasus'],
+    ['$', 'Priced in dollars, paid in lira or dollars', 'e-Fatura and e-Arşiv, iyzico, cards'],
+    ['🔒', 'Data stays in Türkiye', 'KVKK compliant by design'],
+    ['⏱', 'Hourly billing, monthly cap', 'Pay for 3 hours, not 30 days'],
   ];
   return (
     <section className="border-b border-slate-200 bg-slate-50">
@@ -120,12 +120,12 @@ export function TrustStrip() {
 /* ───────────────────────── Products ───────────────────────── */
 
 const GROUPS = [
-  { name: 'Core Cloud', desc: 'Servers, public IPs, snapshots, firewalls. VPC, volumes and load balancers next.', items: ['Servers', 'Snapshots', 'Public IPs', 'Firewalls'], live: true },
-  { name: 'Managed Agents', desc: 'Give Claude, Cursor or n8n a token with a monthly spend cap and approval rules — not the keys to your account.', items: ['Agent-safe tokens', 'MCP server', 'Approval queue'], live: true, highlight: true },
-  { name: 'Marketplace', desc: '15 one-click apps at launch, from WordPress to Odoo to an AI starter. Progrid apps as premium listings.', items: ['WordPress', 'n8n', 'Odoo', 'Coolify', 'Ollama + Open WebUI'], live: true },
-  { name: 'Inference Engine', desc: 'One OpenAI-compatible endpoint, billed per token in ₺. Partner models first, our GPUs next.', items: ['Inference gateway', 'GPU servers'], live: false },
-  { name: 'Data & Learning', desc: 'Managed PostgreSQL with pgvector, MySQL, Redis.', items: ['Managed databases', 'Caching'], live: false },
-  { name: 'Security', desc: 'Host-enforced firewalls, SSH keys, 2FA for owners, a full audit log of every API call.', items: ['Firewalls', 'Audit log', '2FA'], live: true },
+  { name: 'Core Cloud', desc: 'Servers, public IPs, snapshots and firewalls today. VPC, volumes and load balancers are next.', items: ['Servers', 'Snapshots', 'Public IPs', 'Firewalls'], live: true },
+  { name: 'Managed Agents', desc: 'Give Claude, Cursor or n8n a token with a monthly spending cap and approval rules instead of the keys to your account.', items: ['Agent tokens', 'MCP server', 'Approval queue'], live: true, highlight: true },
+  { name: 'Marketplace', desc: '15 one click apps at launch, from WordPress to Odoo to an AI starter. Progrid apps as premium listings.', items: ['WordPress', 'n8n', 'Odoo', 'Coolify', 'Ollama + Open WebUI'], live: true },
+  { name: 'Inference Engine', desc: 'One OpenAI compatible endpoint, billed per token. Partner models first, our own GPUs next.', items: ['Inference gateway', 'GPU servers'], live: false },
+  { name: 'Data & Learning', desc: 'Managed PostgreSQL with pgvector, MySQL and Redis.', items: ['Managed databases', 'Caching'], live: false },
+  { name: 'Security', desc: 'Firewalls enforced on the host, SSH keys, two factor sign in for owners, and a full audit log of every API call.', items: ['Firewalls', 'Audit log', 'Two factor auth'], live: true },
 ];
 
 export function Products() {
@@ -161,12 +161,12 @@ export function Agents() {
         <div>
           <span className="eyebrow text-sky-300">For AI agents</span>
           <h2 className="h2 text-white">Let your agent deploy. Keep your hand on the budget.</h2>
-          <p className="lead text-slate-300">Global clouds give agents the same all-or-nothing tokens humans use. pgcloud tokens carry a monthly spend cap and a list of actions that must wait for a human — enforced by the API, not by a prompt.</p>
+          <p className="lead text-slate-300">Global clouds give agents the same all or nothing tokens people use. pgcloud tokens carry a monthly spending cap and a list of actions that must wait for a human. The API enforces it, not a prompt.</p>
           <ul className="mt-8 space-y-4 text-slate-200">
             {[
-              ['Spend cap per token', 'A ₺500/month cap means the agent cannot create a ₺960 server. Ever.'],
-              ['Approval for destructive actions', 'Delete, resize-down, rebuild park in a queue until you tap approve.'],
-              ['Scoped like a human, capped like a budget', 'servers:write without billing:read; project-scoped; expiring.'],
+              ['Spending cap per token', 'A $15 per month cap means the agent cannot create a $24 server. Ever.'],
+              ['Approval for destructive actions', 'Delete, resize down and rebuild wait in a queue until you tap approve.'],
+              ['Scoped like a person, capped like a budget', 'servers:write without billing:read. Scoped to one project. Expires when you say.'],
               ['Native MCP server', 'Add pgcloud to Claude Code or Cursor in one line. Every API endpoint becomes a tool.'],
             ].map(([t, d]) => (
               <li key={t} className="flex gap-3"><span className="mt-1 h-5 w-5 flex-none rounded-full bg-sky-500/20 text-center text-xs leading-5 text-sky-300">✓</span><div><div className="font-semibold">{t}</div><div className="text-sm text-slate-400">{d}</div></div></li>
@@ -180,12 +180,12 @@ export function Agents() {
   "name": "claude-code",
   "isAgent": true,
   "scopes": ["servers:read", "servers:write"],
-  "spendCapMinor": 50000,          `}<span className="c">// ₺500 / month</span>{`
+  "spendCapMinor": 1500,          `}<span className="c">// $15 per month</span>{`
   "requireApprovalFor": ["servers:delete", "servers:resize-down"]
 }`}</pre>
-          <div className="c mt-4"># what the agent sees when it overspends</div>
+          <div className="c mt-4"># what the agent sees when it goes over the cap</div>
           <div><span className="k">402</span> <span className="p">spend_limit_reached</span></div>
-          <div className="c">{`{ "capMinor": 50000, "spentMinor": 36000, "addedMonthlyMinor": 108000 }`}</div>
+          <div className="c">{`{ "capMinor": 1500, "spentMinor": 900, "addedMonthlyMinor": 2700 }`}</div>
         </div>
       </div>
     </section>
@@ -195,55 +195,65 @@ export function Agents() {
 /* ───────────────────────── Pricing ───────────────────────── */
 
 interface Price { sku: string; monthlyMinor: number; hourlyMinor: number; size?: { vcpu: number; memoryMb: number; diskGb: number; transferTb: number } | null }
+interface PriceList { currency: 'USD' | 'TRY'; baseCurrency: 'USD'; fxRate: number; data: Price[] }
 const FALLBACK: Price[] = [
-  { sku: 's-1vcpu-512mb', monthlyMinor: 16000, hourlyMinor: 24, size: { vcpu: 1, memoryMb: 512, diskGb: 10, transferTb: 0.5 } },
-  { sku: 's-1vcpu-1gb', monthlyMinor: 24000, hourlyMinor: 36, size: { vcpu: 1, memoryMb: 1024, diskGb: 25, transferTb: 1 } },
-  { sku: 's-1vcpu-2gb', monthlyMinor: 48000, hourlyMinor: 71, size: { vcpu: 1, memoryMb: 2048, diskGb: 50, transferTb: 2 } },
-  { sku: 's-2vcpu-4gb', monthlyMinor: 96000, hourlyMinor: 143, size: { vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4 } },
-  { sku: 's-4vcpu-8gb', monthlyMinor: 192000, hourlyMinor: 286, size: { vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 5 } },
-  { sku: 's-8vcpu-16gb', monthlyMinor: 384000, hourlyMinor: 571, size: { vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 6 } },
+  { sku: 's-1vcpu-512mb', monthlyMinor: 400, hourlyMinor: 1, size: { vcpu: 1, memoryMb: 512, diskGb: 10, transferTb: 0.5 } },
+  { sku: 's-1vcpu-1gb', monthlyMinor: 600, hourlyMinor: 1, size: { vcpu: 1, memoryMb: 1024, diskGb: 25, transferTb: 1 } },
+  { sku: 's-1vcpu-2gb', monthlyMinor: 1200, hourlyMinor: 2, size: { vcpu: 1, memoryMb: 2048, diskGb: 50, transferTb: 2 } },
+  { sku: 's-2vcpu-4gb', monthlyMinor: 2400, hourlyMinor: 4, size: { vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4 } },
+  { sku: 's-4vcpu-8gb', monthlyMinor: 4800, hourlyMinor: 7, size: { vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 5 } },
+  { sku: 's-8vcpu-16gb', monthlyMinor: 9600, hourlyMinor: 14, size: { vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 6 } },
 ];
 
 export function Pricing() {
-  const [currency, setCurrency] = useState<'TRY' | 'USD'>('TRY');
-  const [prices, setPrices] = useState<Price[]>(FALLBACK);
+  const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
+  const [list, setList] = useState<PriceList>({ currency: 'USD', baseCurrency: 'USD', fxRate: 1, data: FALLBACK });
   useEffect(() => {
-    fetch(`${API}/v1/pricing?currency=${currency}`).then((r) => r.json()).then((d) => setPrices(d.data.filter((p: Price) => p.size))).catch(() => setPrices(FALLBACK));
+    fetch(`${API}/v1/pricing?currency=${currency}`)
+      .then((r) => r.json())
+      .then((d: PriceList) => setList({ ...d, data: d.data.filter((p) => p.size) }))
+      .catch(() => setList({ currency: 'USD', baseCurrency: 'USD', fxRate: 1, data: FALLBACK }));
   }, [currency]);
-  const fmt = (m: number) => new Intl.NumberFormat(currency === 'TRY' ? 'tr-TR' : 'en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(m / 100);
+  const cur = list.currency;
+  const fmt = (m: number, digits = 2) => new Intl.NumberFormat(cur === 'TRY' ? 'tr-TR' : 'en-US', { style: 'currency', currency: cur, maximumFractionDigits: digits }).format(m / 100);
   return (
     <section id="pricing" className="py-20">
       <div className="container-x">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <span className="eyebrow">Pricing</span>
-            <h2 className="h2">Simple, predictable, in your currency.</h2>
-            <p className="lead">Billed by the hour, never more than the monthly price. Bandwidth included. No surprise line items — the price list is an API call: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm">GET /v1/pricing</code>.</p>
+            <h2 className="h2">Simple and predictable. Priced in dollars, paid in your currency.</h2>
+            <p className="lead">Billed by the hour and never more than the monthly price. Bandwidth included. No surprise line items. The whole price list is one API call: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm">GET /v1/pricing</code>.</p>
           </div>
           <div className="flex rounded-lg border border-slate-300 p-1 text-sm">
-            {(['TRY', 'USD'] as const).map((c) => <button key={c} onClick={() => setCurrency(c)} className={`rounded-md px-4 py-1.5 ${currency === c ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>{c}</button>)}
+            {(['USD', 'TRY'] as const).map((c) => <button key={c} onClick={() => setCurrency(c)} className={`rounded-md px-4 py-1.5 ${currency === c ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>{c}</button>)}
           </div>
         </div>
         <div className="mt-10 overflow-hidden rounded-2xl border border-slate-200">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
-              <tr><th className="px-5 py-3 text-start">vCPU</th><th className="px-5 py-3 text-start">Memory</th><th className="px-5 py-3 text-start">NVMe / Ceph</th><th className="px-5 py-3 text-start">Transfer</th><th className="px-5 py-3 text-end">Monthly</th><th className="px-5 py-3 text-end">Hourly</th></tr>
+              <tr><th className="px-5 py-3 text-start">vCPU</th><th className="px-5 py-3 text-start">Memory</th><th className="px-5 py-3 text-start">Storage</th><th className="px-5 py-3 text-start">Transfer</th><th className="px-5 py-3 text-end">Monthly</th><th className="px-5 py-3 text-end">Hourly</th></tr>
             </thead>
             <tbody>
-              {prices.map((p) => (
+              {list.data.map((p) => (
                 <tr key={p.sku} className="border-t border-slate-100 hover:bg-slate-50">
                   <td className="px-5 py-3 font-medium">{p.size!.vcpu}</td>
                   <td className="px-5 py-3">{p.size!.memoryMb >= 1024 ? `${p.size!.memoryMb / 1024} GB` : `${p.size!.memoryMb} MB`}</td>
                   <td className="px-5 py-3">{p.size!.diskGb} GB</td>
                   <td className="px-5 py-3">{p.size!.transferTb} TB</td>
                   <td className="px-5 py-3 text-end font-semibold">{fmt(p.monthlyMinor)}</td>
-                  <td className="px-5 py-3 text-end text-slate-500">{fmt(p.hourlyMinor)}</td>
+                  <td className="px-5 py-3 text-end text-slate-500">{fmt(p.hourlyMinor, 3)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-xs text-slate-500">Prices exclude KDV (20 %) for Turkish customers. Public IP included with every server. Snapshots {currency === 'TRY' ? '₺2.40' : '$0.06'} / GB-month. Backups 20 % of the plan.</p>
+        <p className="mt-3 text-xs text-slate-500">
+          {cur === 'TRY'
+            ? `Lira prices are our dollar prices converted at today's rate of ${list.fxRate.toFixed(2)} TRY per USD. Your invoice uses the rate on the day it is issued. `
+            : 'Turkish customers can pay in lira at the exchange rate of the invoice date. '}
+          KDV (20%) is added for Turkish customers. A public IP is included with every server. Snapshots cost {cur === 'TRY' ? fmt(Math.round(6 * list.fxRate)) : '$0.06'} per GB per month. Backups cost 20% of the plan.
+        </p>
       </div>
     </section>
   );
@@ -259,7 +269,7 @@ export function Marketplace() {
       <div className="container-x">
         <span className="eyebrow">Marketplace</span>
         <h2 className="h2">One click from idea to running app.</h2>
-        <p className="lead">Every app is a hardened image plus a cloud-init script — built from Git, CVE-scanned, test-deployed before it ships. Bring your own with the vendor program and keep 70 %.</p>
+        <p className="lead">Every app is a hardened image plus a setup script. Built from Git, scanned for CVEs and test deployed before it ships. Bring your own through the vendor program and keep 70% of the revenue.</p>
         <div className="mt-8 flex flex-wrap gap-2">
           {APPS.map((a) => <span key={a} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium shadow-sm">{a}</span>)}
         </div>
@@ -272,19 +282,19 @@ export function Marketplace() {
 
 export function Compare() {
   const rows: [string, string, string, string][] = [
-    ['Region', 'Istanbul', 'Frankfurt / Amsterdam', 'Istanbul'],
-    ['Billing', 'Hourly, ₺ or $', 'Monthly or hourly, $', 'Monthly, ₺'],
-    ['e-Fatura / e-Arşiv', 'Built in', '—', 'Yes'],
-    ['KVKK data residency', 'Yes', 'No', 'Yes'],
-    ['Public API + Terraform', 'Yes', 'Yes', 'Rarely'],
-    ['Agent tokens with spend caps', 'Yes', 'No', 'No'],
-    ['Console in TR / AR', 'Yes', 'No', 'TR only'],
+    ['Region', 'Türkiye', 'Germany or the Netherlands', 'Türkiye'],
+    ['Billing', 'Hourly, in dollars or lira', 'Monthly or hourly, in dollars', 'Monthly, in lira'],
+    ['e-Fatura and e-Arşiv', 'Built in', 'No', 'Yes'],
+    ['Data stays in Türkiye (KVKK)', 'Yes', 'No', 'Yes'],
+    ['Public API and Terraform', 'Yes', 'Yes', 'Rarely'],
+    ['Agent tokens with spending caps', 'Yes', 'No', 'No'],
+    ['Console in Turkish and Arabic', 'Yes', 'No', 'Turkish only'],
   ];
   return (
     <section className="py-20">
       <div className="container-x">
         <span className="eyebrow">Why pgcloud</span>
-        <h2 className="h2">Global-cloud developer experience. Local-cloud invoices.</h2>
+        <h2 className="h2">The developer experience of a global cloud. The invoices of a local one.</h2>
         <div className="mt-10 overflow-hidden rounded-2xl border border-slate-200">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3 text-start"> </th><th className="px-5 py-3 text-start text-blue-700">pgcloud</th><th className="px-5 py-3 text-start">Global clouds</th><th className="px-5 py-3 text-start">Local hosts</th></tr></thead>
@@ -302,8 +312,8 @@ export function Cta() {
   return (
     <section className="hero-bg py-20 text-white">
       <div className="container-x text-center">
-        <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Start building on Istanbul today.</h2>
-        <p className="mx-auto mt-4 max-w-xl text-slate-300">₺4,000 free credit for new teams. No card needed until you spend it. Cancel any hour.</p>
+        <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Start building today.</h2>
+        <p className="mx-auto mt-4 max-w-xl text-slate-300">$100 in free credit for new teams. No card needed until you spend it. Cancel any hour.</p>
         <div className="mt-8 flex justify-center gap-3">
           <a href={`${CONSOLE}/login`} className="btn-primary">Create account</a>
           <a href="/docs" className="btn-light">Read the API docs</a>
@@ -323,10 +333,10 @@ export function Footer() {
   return (
     <footer className="border-t border-slate-200 bg-white py-14 text-sm">
       <div className="container-x grid gap-10 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="lg:col-span-1"><div className="flex items-center gap-2 font-bold"><Logo /> pgcloud</div><p className="mt-3 text-slate-500">The developer cloud for Türkiye. Region ist1 · Istanbul.</p><p className="mt-3 text-slate-500">TR · EN · AR</p></div>
+        <div className="lg:col-span-1"><div className="flex items-center gap-2 font-bold"><Logo /> pgcloud</div><p className="mt-3 text-slate-500">The developer cloud for Türkiye.</p><p className="mt-3 text-slate-500">TR · EN · AR</p></div>
         {cols.map(([h, ls]) => <div key={h}><div className="font-semibold">{h}</div><ul className="mt-3 space-y-2 text-slate-600">{ls.map((l) => <li key={l}><a href="#" className="hover:text-slate-900">{l}</a></li>)}</ul></div>)}
       </div>
-      <div className="container-x mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-6 text-xs text-slate-500"><span>© {new Date().getFullYear()} pgcloud. Working name — brand to be announced.</span><span>Built on open source: Proxmox VE · Ceph · Temporal · NATS</span></div>
+      <div className="container-x mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-6 text-xs text-slate-500"><span>© {new Date().getFullYear()} pgcloud. Working name, brand to be announced.</span><span>Built on open source: Proxmox VE, Ceph, Temporal, NATS</span></div>
     </footer>
   );
 }

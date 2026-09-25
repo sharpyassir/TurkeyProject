@@ -8,6 +8,7 @@ import { TrustService } from '../trust/trust.service';
 import { EventsService } from '../events/events.service';
 import { RatingService } from '../billing/rating.service';
 import { InvoicesService } from '../billing/invoices.service';
+import { FxService } from '../billing/fx.service';
 
 class RegisterHostDto {
   @IsString() name: string;
@@ -48,6 +49,7 @@ export class AdminController {
     private readonly events: EventsService,
     private readonly rating: RatingService,
     private readonly invoices: InvoicesService,
+    private readonly fx: FxService,
   ) {}
 
   // ---- capacity ----
@@ -130,6 +132,27 @@ export class AdminController {
   @Post('billing/issue-invoices')
   async issue() {
     return { issued: await this.invoices.issueForPreviousMonth() };
+  }
+
+  // ---- exchange rate ----
+
+  @Get('fx')
+  async fx_() {
+    return { base: 'USD', quote: 'TRY', rate: await this.fx.rate('TRY'), history: await this.prisma.fxRate.findMany({ orderBy: { at: 'desc' }, take: 20 }) };
+  }
+
+  /** Set the USD→TRY rate by hand (e.g. from the TCMB daily rate). */
+  @Post('fx')
+  async setFx(@CurrentActor() actor: Actor, @Body() body: { rate: number }) {
+    if (!(body.rate > 0)) throw new Error('rate must be positive');
+    const row = await this.fx.set('TRY', body.rate, `admin:${actor.userId}`);
+    await this.events.emit('admin.fx_set', { rate: body.rate }, { actor });
+    return row;
+  }
+
+  @Post('fx/refresh')
+  async refreshFx() {
+    return { rate: await this.fx.refresh() };
   }
 
   @Get('abuse')

@@ -4,7 +4,7 @@ import { Shell } from '@/components/shell';
 
 export const metadata: Metadata = {
   title: 'pgcloud console',
-  description: 'AI-native developer cloud — Istanbul',
+  description: 'The developer cloud for Türkiye',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

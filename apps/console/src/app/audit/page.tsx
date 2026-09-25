@@ -6,7 +6,7 @@ import { useShell } from '@/components/shell';
 
 interface Entry { id: string; at: string; action: string; resource: string | null; userId: string | null; tokenId: string | null; request: Record<string, unknown> | null }
 
-/** Every API call by every user, token and agent — the audit trail ISO 27001 buyers ask for. */
+/** Every API call by every user, token and agent. The audit trail ISO 27001 buyers ask for. */
 export default function AuditPage() {
   const { locale } = useShell();
   const [rows, setRows] = useState<Entry[]>([]);

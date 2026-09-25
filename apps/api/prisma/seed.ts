@@ -10,17 +10,17 @@ const prisma = new PrismaClient();
 const PRICE_VALID_FROM = new Date(Date.UTC(2026, 0, 1));
 
 /**
- * Prices in minor units. USD ladder mirrors DigitalOcean's Basic Droplets (docs/competitors.md);
- * TRY ≈ USD × 40 is a placeholder until the Netlen benchmark is filled in.
+ * Prices in USD cents. The ladder mirrors DigitalOcean's Basic Droplets (docs/competitors.md).
+ * Lira prices are never stored: FxService converts at the current USD→TRY rate.
  */
 const SIZES = [
-  { id: 's-1vcpu-512mb', vcpu: 1, memoryMb: 512, diskGb: 10, transferTb: 0.5, usd: 400, try: 16000 },
-  { id: 's-1vcpu-1gb', vcpu: 1, memoryMb: 1024, diskGb: 25, transferTb: 1, usd: 600, try: 24000 },
-  { id: 's-1vcpu-2gb', vcpu: 1, memoryMb: 2048, diskGb: 50, transferTb: 2, usd: 1200, try: 48000 },
-  { id: 's-2vcpu-2gb', vcpu: 2, memoryMb: 2048, diskGb: 60, transferTb: 3, usd: 1800, try: 72000 },
-  { id: 's-2vcpu-4gb', vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4, usd: 2400, try: 96000 },
-  { id: 's-4vcpu-8gb', vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 5, usd: 4800, try: 192000 },
-  { id: 's-8vcpu-16gb', vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 6, usd: 9600, try: 384000 },
+  { id: 's-1vcpu-512mb', vcpu: 1, memoryMb: 512, diskGb: 10, transferTb: 0.5, usd: 400 },
+  { id: 's-1vcpu-1gb', vcpu: 1, memoryMb: 1024, diskGb: 25, transferTb: 1, usd: 600 },
+  { id: 's-1vcpu-2gb', vcpu: 1, memoryMb: 2048, diskGb: 50, transferTb: 2, usd: 1200 },
+  { id: 's-2vcpu-2gb', vcpu: 2, memoryMb: 2048, diskGb: 60, transferTb: 3, usd: 1800 },
+  { id: 's-2vcpu-4gb', vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4, usd: 2400 },
+  { id: 's-4vcpu-8gb', vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 5, usd: 4800 },
+  { id: 's-8vcpu-16gb', vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 6, usd: 9600 },
 ];
 
 const DISTROS = [
@@ -35,23 +35,24 @@ async function main() {
 
   for (const [i, s] of SIZES.entries()) {
     await prisma.size.upsert({ where: { id: s.id }, update: {}, create: { id: s.id, vcpu: s.vcpu, memoryMb: s.memoryMb, diskGb: s.diskGb, transferTb: s.transferTb, sortOrder: i } });
-    for (const [currency, monthlyMinor] of [['USD', s.usd], ['TRY', s.try]] as const) {
-      const exists = await prisma.price.findFirst({ where: { resourceType: 'server', sku: s.id, currency, validTo: null } });
-      if (!exists) await prisma.price.create({ data: { resourceType: 'server', sku: s.id, sizeId: s.id, currency, monthlyMinor, validFrom: PRICE_VALID_FROM } });
-    }
+    const exists = await prisma.price.findFirst({ where: { resourceType: 'server', sku: s.id, currency: 'USD', validTo: null } });
+    if (!exists) await prisma.price.create({ data: { resourceType: 'server', sku: s.id, sizeId: s.id, currency: 'USD', monthlyMinor: s.usd, validFrom: PRICE_VALID_FROM } });
   }
-  for (const [sku, type, usd, tr] of [
-    ['public_ip', 'public_ip', 300, 12000],
-    ['snapshot_gb', 'snapshot', 6, 240],
-    ['bandwidth_gb', 'bandwidth', 1, 40],
-    // Backups: 20% of the server's monthly price (DigitalOcean weekly-backup model). Stored as
-    // percent in monthlyMinor with unit "percent"; RatingService applies it per server-hour.
-    ['backups_pct', 'backup', 20, 20],
+  for (const [sku, type, usd] of [
+    ['public_ip', 'public_ip', 300],
+    ['snapshot_gb', 'snapshot', 6],
+    ['bandwidth_gb', 'bandwidth', 1],
+    // Backups: 20% of the server's monthly price (DigitalOcean weekly backup model). Stored as
+    // percent in monthlyMinor with unit "percent"; RatingService applies it per server hour.
+    ['backups_pct', 'backup', 20],
   ] as const) {
-    for (const [currency, monthlyMinor] of [['USD', usd], ['TRY', tr]] as const) {
-      const exists = await prisma.price.findFirst({ where: { resourceType: type, sku, currency, validTo: null } });
-      if (!exists) await prisma.price.create({ data: { resourceType: type, sku, currency, monthlyMinor, unit: sku === 'backups_pct' ? 'percent' : 'hour', validFrom: PRICE_VALID_FROM } });
-    }
+    const exists = await prisma.price.findFirst({ where: { resourceType: type, sku, currency: 'USD', validTo: null } });
+    if (!exists) await prisma.price.create({ data: { resourceType: type, sku, currency: 'USD', monthlyMinor: usd, unit: sku === 'backups_pct' ? 'percent' : 'hour', validFrom: PRICE_VALID_FROM } });
+  }
+
+  // Starting exchange rate; the hourly job replaces it with the provider's rate.
+  if (!(await prisma.fxRate.findFirst({ where: { quote: 'TRY' } }))) {
+    await prisma.fxRate.create({ data: { base: 'USD', quote: 'TRY', rate: 41, source: 'seed' } });
   }
 
   for (const d of DISTROS) {
@@ -100,7 +101,7 @@ async function main() {
       },
     });
     const team = await prisma.team.findUniqueOrThrow({ where: { slug: 'dev' } });
-    await prisma.credit.create({ data: { teamId: team.id, kind: 'promo', currency: 'TRY', amountMinor: 400000, remainingMinor: 400000, reason: 'dev seed' } });
+    await prisma.credit.create({ data: { teamId: team.id, kind: 'promo', currency: 'TRY', amountMinor: 410000, remainingMinor: 410000, reason: 'dev seed ($100 at 41)' } });
     const raw = 'pgc_' + randomBytes(32).toString('base64url');
     await prisma.apiToken.create({
       data: { teamId: team.id, userId: user.id, name: 'dev', prefix: raw.slice(0, 12), hash: createHash('sha256').update(raw).digest('hex'), scopes: ['servers:read', 'servers:write', 'servers:delete', 'images:read', 'snapshots:read', 'snapshots:write', 'network:read', 'network:write', 'apps:read', 'billing:read', 'billing:write', 'iam:read', 'iam:write'] },

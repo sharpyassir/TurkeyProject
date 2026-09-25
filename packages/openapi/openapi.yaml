@@ -112,9 +112,21 @@ paths:
     get:
       tags: [catalog]
       security: []
-      summary: Public price list
-      parameters: [{ name: currency, in: query, schema: { type: string, enum: [USD, TRY] } }]
-      responses: { "200": { description: OK } }
+      summary: Public price list (USD base; TRY converted at the current exchange rate)
+      parameters: [{ name: currency, in: query, schema: { type: string, enum: [USD, TRY], default: USD } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currency: { type: string }
+                  baseCurrency: { type: string, enum: [USD] }
+                  fxRate: { type: number, description: USD to currency rate used for this response }
+                  hoursPerMonth: { type: integer }
+                  data: { type: array, items: { type: object, properties: { resourceType: { type: string }, sku: { type: string }, unit: { type: string }, monthlyMinor: { type: integer }, hourlyMinor: { type: integer }, size: { $ref: "#/components/schemas/Size" } } } }
 
   /servers:
     get:

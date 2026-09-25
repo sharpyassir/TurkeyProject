@@ -38,7 +38,7 @@ export default function DeploysPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Git Deploy</h1>
-        <p className="text-sm text-neutral-500">Link a repository with a Dockerfile or docker-compose.yml. We build it on a server in Istanbul and redeploy on every push.</p>
+        <p className="text-sm text-neutral-500">Link a repository with a Dockerfile or docker-compose.yml. We build it on a server in Türkiye and redeploy on every push.</p>
       </div>
 
       {created && (

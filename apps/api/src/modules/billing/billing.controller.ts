@@ -1,12 +1,13 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { CurrentActor, RequireScopes } from '../../common/auth/decorators';
+import { CurrentActor, Public, RequireScopes } from '../../common/auth/decorators';
 import type { Actor } from '../../common/auth/actor';
 import { ApiError } from '../../common/errors/api-error';
 import { IamService } from '../iam/iam.service';
 import { InvoicesService } from './invoices.service';
 import { SpendService } from './spend.service';
+import { FxService } from './fx.service';
 import { displayPrice, startOfMonth } from './pricing';
 import { loadConfig } from '../../config/config';
 
@@ -49,20 +50,29 @@ export class BillingController {
   }
 }
 
-/** Public price list (no auth) — mirrors what the pricing page shows. */
+/**
+ * Public price list (no auth). Prices are kept in USD; asking for TRY returns the same
+ * list converted at the current exchange rate, plus the rate used.
+ */
 @ApiTags('pricing')
 @Controller('v1/pricing')
 export class PricingController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly fx: FxService) {}
 
-  @Get()
+  @Public() @Get()
   async prices(@Query('currency') currency: 'USD' | 'TRY' = loadConfig().DEFAULT_CURRENCY) {
-    const prices = await this.prisma.price.findMany({ where: { currency, validTo: null }, include: { size: true } });
+    const prices = await this.prisma.price.findMany({ where: { currency: 'USD', validTo: null }, include: { size: true } });
     const h = loadConfig().BILLING_HOURS_PER_MONTH;
+    const rate = await this.fx.rate(currency);
     return {
       currency,
+      baseCurrency: 'USD',
+      fxRate: rate,
       hoursPerMonth: h,
-      data: prices.map((p) => ({ resourceType: p.resourceType, sku: p.sku, unit: p.unit, ...displayPrice(p.monthlyMinor, h), size: p.size })),
+      data: prices.map((p) => {
+        const monthly = p.unit === 'percent' ? p.monthlyMinor : Math.round(p.monthlyMinor * rate);
+        return { resourceType: p.resourceType, sku: p.sku, unit: p.unit, ...displayPrice(monthly, h), size: p.size };
+      }),
     };
   }
 }
