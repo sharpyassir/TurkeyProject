@@ -44,6 +44,18 @@ export class AccountController {
     });
   }
 
+  /** Team audit trail, newest first (last 200). */
+  @Get('audit') @RequireScopes('iam:read')
+  async audit(@CurrentActor() actor: Actor) {
+    const data = await this.prisma.auditLog.findMany({
+      where: { teamId: actor.teamId },
+      select: { id: true, at: true, action: true, resource: true, userId: true, tokenId: true, request: true, status: true },
+      orderBy: { at: 'desc' },
+      take: 200,
+    });
+    return { data };
+  }
+
   @Get('account')
   me(@CurrentActor() actor: Actor) {
     return this.iam.me(actor);

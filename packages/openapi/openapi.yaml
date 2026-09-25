@@ -78,6 +78,8 @@ paths:
         "201": { description: "Created — `token` is shown once", content: { application/json: { schema: { type: object, properties: { id: { type: string }, token: { type: string }, prefix: { type: string } } } } } }
   /tokens/{id}:
     delete: { tags: [account], summary: Revoke a token, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "204": { description: Revoked } } }
+  /audit:
+    get: { tags: [account], summary: Team audit log (newest 200 entries), responses: { "200": { description: OK } } }
   /interest:
     post:
       tags: [account]
