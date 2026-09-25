@@ -13,6 +13,7 @@ web console, CLI, Terraform, SDKs and AI agents.
 apps/
   api/          Control plane — NestJS + Prisma modular monolith (TypeScript)
   console/      Web console — Next.js (TR / AR / EN, RTL-ready)
+  www/          Marketing site — Next.js (pgcloud.example), pricing pulled live from the API
 agents/
   host-agent/   Go service on every Proxmox node: takes jobs from NATS, calls the
                 Proxmox API, reports health + usage every minute
@@ -45,6 +46,7 @@ HYPERVISOR_DRIVER=fake pnpm --filter @pgcloud/api worker
 
 # 4. console
 pnpm --filter @pgcloud/console dev          # http://localhost:3000
+pnpm --filter @pgcloud/www dev              # http://localhost:3001 (marketing site)
 
 # 5. host agent (real node)
 cd agents/host-agent && go build ./... && ./host-agent --config /etc/pgcloud/agent.yaml
