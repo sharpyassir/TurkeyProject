@@ -18,7 +18,7 @@ export class DatabasesController {
 
   @Get('engines') @RequireScopes('databases:read')
   engines() {
-    return { data: Object.entries(ENGINE_VERSIONS).map(([engine, versions]) => ({ engine, versions, available: engine === 'postgres' })) };
+    return { data: Object.entries(ENGINE_VERSIONS).map(([engine, versions]) => ({ engine, versions, available: true })) };
   }
 
   @Post() @RequireScopes('databases:write') @HttpCode(202)

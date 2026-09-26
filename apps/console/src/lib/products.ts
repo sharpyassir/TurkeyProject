@@ -35,7 +35,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'ai-starter', name: 'AI Starter (Ollama + Open WebUI)', group: 'Inference Engine', href: '/servers/new?app=ai-starter', blurb: 'Run open models on CPU today with a chat UI in one click.' },
 
   // Data & Learning
-  { slug: 'databases', name: 'Managed Databases', group: 'Data & Learning', href: '/databases', blurb: 'PostgreSQL with pgvector, automatic failover, nightly backups and pooling. Valkey and MySQL next.' },
+  { slug: 'databases', name: 'Managed Databases', group: 'Data & Learning', href: '/databases', blurb: 'PostgreSQL with pgvector, Valkey and MySQL: automatic failover, nightly backups, TLS.' },
   { slug: 'caching', name: 'Caching', group: 'Data & Learning', phase: 3, blurb: 'Managed Redis / Valkey.' },
   { slug: 'knowledge-base', name: 'Knowledge Base', group: 'Data & Learning', phase: 3, blurb: 'RAG over your documents, served through the inference gateway.' },
 

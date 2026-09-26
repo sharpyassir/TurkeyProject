@@ -101,7 +101,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Scheduler: least-loaded placement, anti-affinity, capacity from heartbeats | ✅ |
 | Network: public IP pool, host-enforced firewalls | ✅ (VPCs, LBs, DNS: phase 2) |
 | Storage: snapshots | ✅ (backups: phase 2) |
-| Managed databases: PostgreSQL clusters (1 or 3 nodes with Patroni failover), VIP that follows the primary, pgBouncer, TLS, users and databases, trusted sources, nightly pgBackRest backups to object storage with WAL archiving, per node pricing, console, CLI, SDKs, Terraform | ✅ (Valkey and MySQL: engines wired, agents to do) |
+| Managed databases: PostgreSQL (Patroni failover, pgBouncer, pgBackRest with WAL archiving), Valkey (Sentinel, ACL users, RDB backups) and MySQL (GTID replication, XtraBackup); 1 or 3 nodes, VIP that follows the primary, TLS, users and databases, trusted sources, nightly backups to object storage, per node pricing, console, CLI, SDKs, Terraform | ✅ |
 | Object storage: S3 compatible buckets on Ceph RGW (fake in dev), access keys, presigned upload and download, bucket browser in the console, per GB pricing, CLI, SDKs, Terraform | ✅ |
 | DNS: hosted zones with every record type, PowerDNS backend with a fake for dev, zone file export, reverse DNS for public IPs, CLI, SDKs, Terraform | ✅ |
 | Load balancers: managed HAProxy nodes with a shared IP (keepalived), forwarding rules, health checks, sticky sessions, Let's Encrypt and uploaded certificates, tag based targets, CLI, SDKs, Terraform | ✅ |

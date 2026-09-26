@@ -146,9 +146,126 @@ write_files:
           except Exception: pass
           st = state(); st['backups'] = [b for b in st.get('backups', []) if b['id'] != bid] + [rec]; save(st)
 
-      APPLY = {'postgres': apply_postgres}
-      STATUS = {'postgres': status_postgres}
-      BACKUP = {'postgres': backup_postgres}
+      # ---- shared: SigV4 PUT of a file to the platform backup bucket ----
+      def s3_put(b, key, path):
+          import hashlib, hmac, datetime, urllib.parse
+          from urllib.parse import urlparse
+          u = urlparse(b['endpoint']); host = u.netloc; base = u.path.rstrip('/')
+          body = open(path, 'rb').read(); now = datetime.datetime.utcnow(); amz = now.strftime('%Y%m%dT%H%M%SZ'); day = now.strftime('%Y%m%d')
+          ph = hashlib.sha256(body).hexdigest(); canonical_uri = f"{base}/{b['bucket']}/{urllib.parse.quote(key)}"
+          headers = {'host': host, 'x-amz-content-sha256': ph, 'x-amz-date': amz}
+          signed = ';'.join(sorted(headers)); ch = ''.join(f"{k}:{headers[k]}\\n" for k in sorted(headers))
+          creq = '\\n'.join(['PUT', canonical_uri, '', ch, signed, ph]); scope = f"{day}/{b['region']}/s3/aws4_request"
+          sts = '\\n'.join(['AWS4-HMAC-SHA256', amz, scope, hashlib.sha256(creq.encode()).hexdigest()])
+          def h(k, m): return hmac.new(k, m.encode(), hashlib.sha256).digest()
+          sig = hmac.new(h(h(h(h(('AWS4' + b['secretKey']).encode(), day), b['region']), 's3'), 'aws4_request'), sts.encode(), hashlib.sha256).hexdigest()
+          headers['Authorization'] = f"AWS4-HMAC-SHA256 Credential={b['accessKey']}/{scope}, SignedHeaders={signed}, Signature={sig}"
+          req = urllib.request.Request(f"{u.scheme}://{host}{canonical_uri}", data=body, method='PUT', headers=headers)
+          urllib.request.urlopen(req, timeout=600).read()
+          return len(body)
+
+      def keepalived(c, me, check):
+          write('/etc/keepalived/keepalived.conf', "vrrp_script chk_primary {\\n  script \"%s\"\\n  interval 2\\n  fall 2\\n  rise 2\\n}\\nvrrp_instance VI_db {\\n  state BACKUP\\n  interface eth0\\n  virtual_router_id %d\\n  priority %d\\n  advert_int 1\\n  nopreempt\\n  authentication { auth_type PASS auth_pass pgclouddb }\\n  virtual_ipaddress { %s/%d }\\n  track_script { chk_primary }\\n}\\n" % (check, c['cluster']['vrid'], 100 - me['index'], c['cluster']['vip'], c['cluster']['prefix']))
+          sh('systemctl enable --now keepalived && systemctl restart keepalived', check=False)
+
+      # ---- valkey: replication plus sentinel on three nodes, ACL users, RDB backups ----
+      def apply_valkey(c):
+          me = [n for n in c['cluster']['nodes'] if n['isSelf']][0]
+          primary = min(c['cluster']['nodes'], key=lambda n: n['index'])
+          pw = c['admin']['password']
+          ensure_cert()
+          conf = [f"bind 0.0.0.0", "port 6379", "protected-mode yes", f"requirepass {pw}", f"masterauth {pw}", "appendonly yes", "dir /var/lib/valkey", "maxmemory-policy allkeys-lru",
+                  "tls-port 6380", "tls-cert-file /etc/pgcloud/server.crt", "tls-key-file /etc/pgcloud/server.key", "tls-auth-clients no", "tls-replication no"]
+          if not me['index'] == primary['index'] and not is_valkey_primary_by_sentinel(c, me):
+              conf.append(f"replicaof {primary['ip']} 6379")
+          write('/etc/valkey/valkey.conf', '\\n'.join(conf) + '\\n', 0o640, 'valkey:valkey')
+          write('/opt/pgcloud/acl.txt', '\\n'.join([f"user default on >{pw} ~* &* +@all"] + [f"user {u['name']} on >{u['password']} ~* &* +@all -@dangerous" for u in c.get('users', [])]) + '\\n', 0o600, 'valkey:valkey')
+          sh("grep -q aclfile /etc/valkey/valkey.conf || echo 'aclfile /opt/pgcloud/acl.txt' >> /etc/valkey/valkey.conf", check=False)
+          sh('systemctl enable --now valkey-server && systemctl restart valkey-server', check=False)
+          if len(c['cluster']['nodes']) > 1:
+              write('/etc/valkey/sentinel.conf', f"port 26379\\nbind 0.0.0.0\\nsentinel monitor main {primary['ip']} 6379 2\\nsentinel auth-pass main {pw}\\nsentinel down-after-milliseconds main 5000\\nsentinel failover-timeout main 60000\\nsentinel parallel-syncs main 1\\n", 0o640, 'valkey:valkey')
+              sh('systemctl enable --now valkey-sentinel && systemctl restart valkey-sentinel', check=False)
+          keepalived(c, me, f"/usr/bin/valkey-cli -a {pw} role | head -1 | grep -q master")
+          # Sentinel must know new passwords too; users live in the ACL file loaded at start.
+          sh(f"valkey-cli -a {pw} ACL LOAD", check=False)
+      def is_valkey_primary_by_sentinel(c, me):
+          try:
+              r = sh(['valkey-cli', '-p', '26379', 'SENTINEL', 'get-master-addr-by-name', 'main'], check=False)
+              return r.stdout.splitlines()[0].strip() == me['ip']
+          except Exception: return False
+      def status_valkey():
+          pw = open('/opt/pgcloud/admin.pw').read().strip()
+          role = sh(['valkey-cli', '-a', pw, 'role'], check=False).stdout.splitlines()
+          out = {'role': 'primary' if role and role[0].strip() == 'master' else 'replica', 'members': [], 'lagBytes': None, 'dbSizes': {}}
+          info = sh(['valkey-cli', '-a', pw, 'info', 'replication'], check=False).stdout
+          for line in info.splitlines():
+              if line.startswith('master_repl_offset:'): out['masterOffset'] = int(line.split(':')[1])
+              if line.startswith('slave_repl_offset:'): out['lagBytes'] = max(0, out.get('masterOffset', 0) - int(line.split(':')[1]))
+          mem = sh(['valkey-cli', '-a', pw, 'info', 'memory'], check=False).stdout
+          for line in mem.splitlines():
+              if line.startswith('used_memory:'): out['dbSizes']['default'] = int(line.split(':')[1])
+          st = os.statvfs('/var/lib/valkey'); out['diskUsedPercent'] = round(100 * (1 - st.f_bavail / st.f_blocks), 1)
+          return out
+      def backup_valkey(bid):
+          st = state(); rec = {'id': bid, 'status': 'running', 'startedAt': time.time()}
+          st['backups'] = [b for b in st.get('backups', []) if b['id'] != bid] + [rec]; save(st)
+          try:
+              pw = open('/opt/pgcloud/admin.pw').read().strip(); cfg = json.load(open('/opt/pgcloud/last-config.json'))
+              sh(['valkey-cli', '-a', pw, '--rdb', f'/var/lib/valkey/backup-{bid}.rdb'])
+              rec['sizeBytes'] = s3_put(cfg['backup'], f"{cfg['cluster']['name']}/{bid}.rdb", f'/var/lib/valkey/backup-{bid}.rdb'); os.remove(f'/var/lib/valkey/backup-{bid}.rdb')
+              rec['status'] = 'completed'
+          except Exception as e:
+              rec['status'] = 'failed'; rec['error'] = str(e)[-500:]
+          rec['completedAt'] = time.time(); st = state(); st['backups'] = [b for b in st.get('backups', []) if b['id'] != bid] + [rec]; save(st)
+
+      # ---- mysql: GTID replication with agent driven promotion, xtrabackup streamed to the bucket ----
+      def apply_mysql(c):
+          me = [n for n in c['cluster']['nodes'] if n['isSelf']][0]
+          primary = min(c['cluster']['nodes'], key=lambda n: n['index'])
+          pw = c['admin']['password']
+          ensure_cert()
+          write('/etc/mysql/mysql.conf.d/zz-pgcloud.cnf', f"[mysqld]\\nbind-address = 0.0.0.0\\nserver-id = {me['index'] + 1}\\ngtid_mode = ON\\nenforce_gtid_consistency = ON\\nlog_bin = binlog\\nbinlog_expire_logs_seconds = 604800\\nrelay_log = relay\\nread_only = {'OFF' if me['index'] == primary['index'] else 'ON'}\\nrequire_secure_transport = ON\\nssl_cert = /etc/pgcloud/server.crt\\nssl_key = /etc/pgcloud/server.key\\ninnodb_buffer_pool_size = {c.get('params', {}).get('innodb_buffer_pool_size', '256M')}\\n")
+          sh('chown mysql:mysql /etc/pgcloud/server.* ; systemctl enable --now mysql && systemctl restart mysql', check=False)
+          def q(sql): return sh(['mysql', '-uroot', '-e', sql], check=False)
+          q(f"ALTER USER 'root'@'localhost' IDENTIFIED BY '{pw}'") if q("SELECT 1").returncode == 0 else None
+          def qa(sql): return sh(['mysql', '-uroot', f'-p{pw}', '-e', sql], check=False)
+          qa(f"CREATE USER IF NOT EXISTS '{c['admin']['user']}'@'%' IDENTIFIED BY '{pw}'; ALTER USER '{c['admin']['user']}'@'%' IDENTIFIED BY '{pw}'; GRANT ALL ON *.* TO '{c['admin']['user']}'@'%' WITH GRANT OPTION;")
+          qa(f"CREATE USER IF NOT EXISTS 'replicator'@'%' IDENTIFIED BY '{c['replicationPassword']}'; ALTER USER 'replicator'@'%' IDENTIFIED BY '{c['replicationPassword']}'; GRANT REPLICATION SLAVE ON *.* TO 'replicator'@'%';")
+          if me['index'] == primary['index']:
+              for u in c.get('users', []):
+                  qa(f"CREATE USER IF NOT EXISTS '{u['name']}'@'%' IDENTIFIED BY '{u['password']}'; ALTER USER '{u['name']}'@'%' IDENTIFIED BY '{u['password']}';")
+              for d in c.get('databases', []):
+                  qa(f"CREATE DATABASE IF NOT EXISTS \`{d}\`")
+                  for u in c.get('users', []): qa(f"GRANT ALL ON \`{d}\`.* TO '{u['name']}'@'%'")
+          else:
+              qa(f"STOP REPLICA; CHANGE REPLICATION SOURCE TO SOURCE_HOST='{primary['ip']}', SOURCE_USER='replicator', SOURCE_PASSWORD='{c['replicationPassword']}', SOURCE_AUTO_POSITION=1, SOURCE_SSL=1; START REPLICA;")
+          keepalived(c, me, f"/usr/bin/mysql -uroot -p{pw} -N -e 'SELECT @@read_only' | grep -q 0")
+      def status_mysql():
+          pw = open('/opt/pgcloud/admin.pw').read().strip()
+          ro = sh(['mysql', '-uroot', f'-p{pw}', '-N', '-e', 'SELECT @@read_only'], check=False).stdout.strip()
+          out = {'role': 'primary' if ro == '0' else 'replica', 'members': [], 'lagBytes': None, 'dbSizes': {}}
+          r = sh(['mysql', '-uroot', f'-p{pw}', '-N', '-e', 'SHOW REPLICA STATUS\\G'], check=False).stdout
+          for line in r.splitlines():
+              if 'Seconds_Behind_Source' in line and line.split(':')[-1].strip().isdigit(): out['lagSeconds'] = int(line.split(':')[-1].strip())
+          for line in sh(['mysql', '-uroot', f'-p{pw}', '-N', '-e', "SELECT table_schema, SUM(data_length+index_length) FROM information_schema.tables GROUP BY table_schema"], check=False).stdout.splitlines():
+              n, sz = line.split('\t'); out['dbSizes'][n] = int(sz or 0)
+          st = os.statvfs('/var/lib/mysql'); out['diskUsedPercent'] = round(100 * (1 - st.f_bavail / st.f_blocks), 1)
+          return out
+      def backup_mysql(bid):
+          st = state(); rec = {'id': bid, 'status': 'running', 'startedAt': time.time()}
+          st['backups'] = [b for b in st.get('backups', []) if b['id'] != bid] + [rec]; save(st)
+          try:
+              pw = open('/opt/pgcloud/admin.pw').read().strip(); b = json.load(open('/opt/pgcloud/last-config.json'))['backup']; name = json.load(open('/opt/pgcloud/last-config.json'))['cluster']['name']
+              r = sh(f"xtrabackup --backup --stream=xbstream --user=root --password='{pw}' 2>/var/log/pgcloud-xtrabackup.log | xbcloud put --storage=s3 --s3-endpoint='{b['endpoint']}' --s3-access-key='{b['accessKey']}' --s3-secret-key='{b['secretKey']}' --s3-bucket='{b['bucket']}' --s3-region='{b['region']}' --parallel=2 '{name}/{bid}'", check=False)
+              if r.returncode != 0: raise RuntimeError((r.stderr or '')[-500:])
+              rec['status'] = 'completed'
+          except Exception as e:
+              rec['status'] = 'failed'; rec['error'] = str(e)[-500:]
+          rec['completedAt'] = time.time(); st = state(); st['backups'] = [b for b in st.get('backups', []) if b['id'] != bid] + [rec]; save(st)
+
+      APPLY = {'postgres': apply_postgres, 'valkey': apply_valkey, 'mysql': apply_mysql}
+      STATUS = {'postgres': status_postgres, 'valkey': status_valkey, 'mysql': status_mysql}
+      BACKUP = {'postgres': backup_postgres, 'valkey': backup_valkey, 'mysql': backup_mysql}
 
       class H(http.server.BaseHTTPRequestHandler):
           def log_message(self, *a): pass
@@ -163,13 +280,14 @@ write_files:
                   with lock:
                       try:
                           open('/opt/pgcloud/admin.pw', 'w').write(body['admin']['password']); os.chmod('/opt/pgcloud/admin.pw', 0o600)
+                          json.dump(body, open('/opt/pgcloud/last-config.json', 'w')); os.chmod('/opt/pgcloud/last-config.json', 0o600)
                           APPLY[ENGINE](body)
                           st = state(); st['version'] = body['version']; save(st)
                       except Exception as e:
                           return self._send(500, {'error': 'apply_failed', 'detail': str(e)[-800:]})
                   return self._send(200, {'version': body['version']})
               if self.path == '/backup':
-                  if not is_primary(): return self._send(409, {'error': 'not_primary'})
+                  if STATUS[ENGINE]().get('role') != 'primary': return self._send(409, {'error': 'not_primary'})
                   threading.Thread(target=BACKUP[ENGINE], args=(body['id'],), daemon=True).start()
                   return self._send(202, {'id': body['id']})
               self._send(404, {})

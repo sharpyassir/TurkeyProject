@@ -393,7 +393,7 @@ server.registerTool('list_databases', {
 
 server.registerTool('create_database', {
   title: 'Create a managed database',
-  description: 'Creates a PostgreSQL cluster we operate (pgvector included): 1 node, or 3 nodes with automatic failover. size is a server size id with at least 1 GB of memory; billed per node per month. Ready in a few minutes; poll list_databases with the id until status is active.',
+  description: 'Creates a managed database cluster we operate: postgres (pgvector included), valkey or mysql; 1 node, or 3 nodes with automatic failover. size is a server size id with at least 1 GB of memory; billed per node per month. Ready in a few minutes; poll list_databases with the id until status is active.',
   inputSchema: { name: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/), engine: z.enum(['postgres', 'valkey', 'mysql']).optional(), size: z.string(), nodes: z.union([z.literal(1), z.literal(3)]).optional(), trustedSources: z.array(z.string()).optional(), project: z.string().optional() },
 }, async (input) => run(() => api('POST', '/v1/databases', { ...input, engine: input.engine ?? 'postgres' })));
 

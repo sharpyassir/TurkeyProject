@@ -68,7 +68,6 @@ export class DatabasesService {
     const project = await this.iam.resolveProject(actor, dto.project);
     const region = await this.prisma.region.findUnique({ where: { id: dto.region ?? loadConfig().DEFAULT_REGION } });
     if (!region?.available) throw ApiError.invalid(`Unknown or unavailable region "${dto.region}"`);
-    if (dto.engine !== 'postgres') throw ApiError.invalid(`${dto.engine} is not available yet; postgres is`);
     const version = dto.version ?? ENGINE_VERSIONS[dto.engine][0];
     if (!ENGINE_VERSIONS[dto.engine].includes(version)) throw ApiError.invalid(`Unknown ${dto.engine} version "${version}"; available: ${ENGINE_VERSIONS[dto.engine].join(', ')}`);
     const size = await this.prisma.size.findUnique({ where: { id: dto.size } });
@@ -86,13 +85,13 @@ export class DatabasesService {
 
     const vip = await this.ips.reserve(region.id, project.id);
     const port = ENGINE_PORTS[dto.engine];
-    const fw = await this.firewalls.create(actor, project.id, { name: `db-${dto.name}`, rules: firewallRules(port, trusted) });
+    const fw = await this.firewalls.create(actor, project.id, { name: `db-${dto.name}`, rules: firewallRules(dto.engine, port, trusted) });
     const vmSecret = randomBytes(24).toString('base64url');
     const cluster = await this.prisma.dbCluster.create({
       data: {
         projectId: project.id, regionId: region.id, name: dto.name, engine: dto.engine, version, nodes, sizeId: size.id, port,
         adminUser: 'pgcloud_admin', adminPassword: password(), trustedSources: trusted, publicIpId: vip.id, firewallId: fw.id, vmSecret, backupHourUtc: dto.backupHourUtc ?? 2,
-        databases: { create: { name: 'defaultdb' } },
+        databases: dto.engine === 'valkey' ? undefined : { create: { name: 'defaultdb' } },
         users: { create: { name: 'app', password: password() } },
       },
     });
@@ -121,7 +120,7 @@ export class DatabasesService {
     if (!['active', 'updating', 'failed'].includes(c.status)) throw ApiError.invalidState(`Database is ${c.status}; wait for it to settle`);
     const trusted = dto.trustedSources !== undefined ? validateCidrs(dto.trustedSources) : undefined;
     await this.prisma.dbCluster.update({ where: { id }, data: { trustedSources: trusted, backupHourUtc: dto.backupHourUtc, status: 'updating', statusMessage: null, configVersion: { increment: 1 } } });
-    if (trusted && c.firewallId) await this.firewalls.replaceRules(actor, c.projectId, c.firewallId, firewallRules(c.port, trusted)).catch((err) => this.log.warn(`firewall update for ${id}: ${(err as Error).message}`));
+    if (trusted && c.firewallId) await this.firewalls.replaceRules(actor, c.projectId, c.firewallId, firewallRules(c.engine, c.port, trusted)).catch((err) => this.log.warn(`firewall update for ${id}: ${(err as Error).message}`));
     await this.pushLater(id, actor);
     return this.get(actor, id, project);
   }
@@ -139,7 +138,7 @@ export class DatabasesService {
 
   async addUser(actor: Actor, id: string, dto: DbNameDto, project?: string) {
     const c = await this.own(actor, id, project);
-    if (['postgres', 'pgcloud_admin', 'replicator'].includes(dto.name)) throw ApiError.invalid('That user name is reserved');
+    if (['postgres', 'pgcloud_admin', 'replicator', 'root', 'mysql', 'default'].includes(dto.name)) throw ApiError.invalid('That user name is reserved');
     if (c.users.some((u) => u.name === dto.name)) throw ApiError.conflict('name_taken', `User ${dto.name} already exists`);
     if (c.users.length >= 50) throw ApiError.quota('User limit (50) reached');
     const u = await this.prisma.dbUser.create({ data: { clusterId: id, name: dto.name, password: password() } });
@@ -166,7 +165,8 @@ export class DatabasesService {
 
   async addDatabase(actor: Actor, id: string, dto: DbNameDto, project?: string) {
     const c = await this.own(actor, id, project);
-    if (['postgres', 'template0', 'template1'].includes(dto.name)) throw ApiError.invalid('That database name is reserved');
+    if (c.engine === 'valkey') throw ApiError.invalid('Valkey has no named databases; use key prefixes or ACL selectors');
+    if (['postgres', 'template0', 'template1', 'mysql', 'sys', 'information_schema', 'performance_schema'].includes(dto.name)) throw ApiError.invalid('That database name is reserved');
     if (c.databases.some((d) => d.name === dto.name)) throw ApiError.conflict('name_taken', `Database ${dto.name} already exists`);
     if (c.databases.length >= 100) throw ApiError.quota('Database limit (100) reached');
     const d = await this.prisma.dbDatabase.create({ data: { clusterId: id, name: dto.name } });
@@ -327,12 +327,17 @@ export class DatabasesService {
     const privateHost = primary?.server.privateIp ?? null;
     const app = c.users[0];
     const db = c.databases[0]?.name ?? 'defaultdb';
-    const uri = (h: string | null, user: string, pw: string) => (h ? `${c.engine === 'postgres' ? 'postgresql' : c.engine === 'mysql' ? 'mysql' : 'redis'}://${user}:${pw}@${h}:${c.port}/${db}${c.engine === 'postgres' ? '?sslmode=require' : ''}` : null);
+    const uri = (h: string | null, user: string, pw: string) => {
+      if (!h) return null;
+      if (c.engine === 'valkey') return `rediss://${user}:${pw}@${h}:6380`;
+      if (c.engine === 'mysql') return `mysql://${user}:${pw}@${h}:${c.port}/${db}?ssl-mode=REQUIRED`;
+      return `postgresql://${user}:${pw}@${h}:${c.port}/${db}?sslmode=require`;
+    };
     return {
       id: c.id, name: c.name, engine: c.engine, version: c.version, status: c.status, statusMessage: c.statusMessage, regionId: c.regionId, projectId: c.projectId,
-      nodes: c.nodes, size: { id: c.size.id, vcpu: c.size.vcpu, memoryMb: c.size.memoryMb, diskGb: c.size.diskGb }, port: c.port, poolerPort: c.engine === 'postgres' ? 6432 : null,
+      nodes: c.nodes, size: { id: c.size.id, vcpu: c.size.vcpu, memoryMb: c.size.memoryMb, diskGb: c.size.diskGb }, port: c.port, poolerPort: c.engine === 'postgres' ? 6432 : null, tlsPort: c.engine === 'valkey' ? 6380 : null,
       trustedSources: c.trustedSources, backupHourUtc: c.backupHourUtc, configVersion: c.configVersion,
-      connection: withSecrets ? { host, privateHost, port: c.port, database: db, user: c.adminUser, password: c.adminPassword, ssl: c.engine === 'postgres', uri: uri(host, c.adminUser, c.adminPassword), privateUri: uri(privateHost, c.adminUser, c.adminPassword), appUri: app ? uri(host, app.name, app.password) : null } : { host, privateHost, port: c.port, database: db },
+      connection: withSecrets ? { host, privateHost, port: c.port, database: c.engine === 'valkey' ? null : db, user: c.engine === 'valkey' ? 'default' : c.adminUser, password: c.adminPassword, ssl: true, uri: uri(host, c.engine === 'valkey' ? 'default' : c.adminUser, c.adminPassword), privateUri: uri(privateHost, c.engine === 'valkey' ? 'default' : c.adminUser, c.adminPassword), appUri: app ? uri(host, app.name, app.password) : null } : { host, privateHost, port: c.port, database: db },
       users: c.users.map((u) => ({ id: u.id, name: u.name, ...(withSecrets ? { password: u.password } : {}), createdAt: u.createdAt })),
       databases: c.databases.map((d) => ({ id: d.id, name: d.name, createdAt: d.createdAt })),
       nodeStatus: c.nodeServers.map((n) => ({ index: n.index, status: n.server.status, role: n.role, appliedVersion: n.appliedVersion, lagBytes: n.lagBytes == null ? null : Number(n.lagBytes), lastSeenAt: n.lastSeenAt })),
@@ -341,14 +346,15 @@ export class DatabasesService {
   }
 }
 
-function firewallRules(port: number, trusted: string[]) {
+function firewallRules(engine: 'postgres' | 'valkey' | 'mysql', port: number, trusted: string[]) {
   const cidrs = trusted.length ? trusted : ['0.0.0.0/0', '::/0'];
+  const internal: Record<string, [string, string][]> = { postgres: [['2379-2380', 'cluster consensus'], ['8008', 'cluster api'], ['6432', 'pooler']], valkey: [['26379', 'sentinel'], ['6380', 'tls replication']], mysql: [] };
   return [
     { direction: 'inbound' as const, protocol: 'tcp' as const, ports: '22', cidrs: [process.env.CONTROL_PLANE_CIDR ?? '0.0.0.0/0'], description: 'platform ssh' },
     { direction: 'inbound' as const, protocol: 'tcp' as const, ports: String(port), cidrs },
-    ...(port === 5432 ? [{ direction: 'inbound' as const, protocol: 'tcp' as const, ports: '6432', cidrs, description: 'connection pooler' }] : []),
-    { direction: 'inbound' as const, protocol: 'tcp' as const, ports: '2379-2380', cidrs: [PRIVATE_NET], description: 'cluster consensus' },
-    { direction: 'inbound' as const, protocol: 'tcp' as const, ports: '8008', cidrs: [PRIVATE_NET], description: 'cluster api' },
+    ...(engine === 'postgres' ? [{ direction: 'inbound' as const, protocol: 'tcp' as const, ports: '6432', cidrs, description: 'connection pooler' }] : []),
+    ...(engine === 'valkey' ? [{ direction: 'inbound' as const, protocol: 'tcp' as const, ports: '6380', cidrs, description: 'tls port' }] : []),
+    ...internal[engine].map(([ports, description]) => ({ direction: 'inbound' as const, protocol: 'tcp' as const, ports, cidrs: [PRIVATE_NET], description })),
     { direction: 'inbound' as const, protocol: 'tcp' as const, ports: String(port), cidrs: [PRIVATE_NET], description: 'replication' },
     { direction: 'inbound' as const, protocol: 'tcp' as const, ports: '9009', cidrs: [process.env.CONTROL_PLANE_CIDR ?? '0.0.0.0/0'], description: 'pgcloud database agent' },
     { direction: 'outbound' as const, protocol: 'any' as const, cidrs: ['0.0.0.0/0'] },

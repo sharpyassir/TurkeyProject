@@ -6,8 +6,8 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useShell } from '@/components/shell';
 import { StatusBadge } from '@/components/status-badge';
-import { fmtBytes } from '@/lib/format';
-import { DbCluster, ENGINE_LABEL } from '../page';
+import { ENGINE_LABEL, fmtBytes } from '@/lib/format';
+import type { DbCluster } from '../page';
 
 interface Backup { id: string; kind: string; status: string; sizeBytes: number | null; label: string | null; startedAt: string; completedAt: string | null; error: string | null }
 
@@ -59,11 +59,11 @@ export default function DatabasePage() {
           <tr><td className="py-1 text-neutral-500">Private host</td><td className="py-1 font-mono">{conn.privateHost ?? 'pending'}</td></tr>
           <tr><td className="py-1 text-neutral-500">Port</td><td className="py-1 font-mono">{conn.port}{c.poolerPort ? ` (pooler ${c.poolerPort})` : ''}</td></tr>
           <tr><td className="py-1 text-neutral-500">Admin user</td><td className="py-1 font-mono">{conn.user} / {reveal ? conn.password : '••••••••'}</td></tr>
-          <tr><td className="py-1 text-neutral-500">Database</td><td className="py-1 font-mono">{conn.database}</td></tr>
+          {conn.database && <tr><td className="py-1 text-neutral-500">Database</td><td className="py-1 font-mono">{conn.database}</td></tr>}
           <tr><td className="py-1 text-neutral-500">Connection string</td><td className="py-1 font-mono break-all text-xs">{mask(conn.uri)}</td></tr>
           <tr><td className="py-1 text-neutral-500">Private network</td><td className="py-1 font-mono break-all text-xs">{mask(conn.privateUri)}</td></tr>
         </tbody></table>
-        <p className="text-xs text-neutral-500">TLS is required. Use the pooler port for many short lived connections. The host address follows the primary on failover.</p>
+        <p className="text-xs text-neutral-500">TLS is required{c.engine === 'valkey' ? ' on port 6380' : ''}. {c.poolerPort ? 'Use the pooler port for many short lived connections. ' : ''}The host address follows the primary on failover.</p>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -77,7 +77,7 @@ export default function DatabasePage() {
             <input className="input" name="name" placeholder="New user name" pattern="[a-z_][a-z0-9_]*" required /><button className="btn-primary" disabled={busy}>Add user</button>
           </form>
         </section>
-        <section className="card space-y-2 text-sm">
+        {c.engine !== 'valkey' && <section className="card space-y-2 text-sm">
           <h2 className="font-medium">Databases</h2>
           <table className="w-full"><tbody>
             {c.databases.map((d) => <tr key={d.id} className="border-t border-neutral-100 first:border-0 dark:border-neutral-800"><td className="py-1.5 font-mono">{d.name}</td><td className="py-1.5 text-end"><button className="btn-danger" disabled={busy || c.databases.length === 1} onClick={() => confirm(`Remove database ${d.name} from this cluster? The data stays until you drop it.`) && run(() => api(`/v1/databases/${id}/dbs/${d.id}`, { method: 'DELETE' }))}>Remove</button></td></tr>)}
@@ -85,7 +85,7 @@ export default function DatabasePage() {
           <form className="flex gap-2" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const name = String(new FormData(e.currentTarget).get('name')); const form = e.currentTarget; run(() => api(`/v1/databases/${id}/dbs`, { method: 'POST', body: JSON.stringify({ name }) }).then(() => form.reset())); }}>
             <input className="input" name="name" placeholder="New database name" pattern="[a-z_][a-z0-9_]*" required /><button className="btn-primary" disabled={busy}>Add database</button>
           </form>
-        </section>
+        </section>}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

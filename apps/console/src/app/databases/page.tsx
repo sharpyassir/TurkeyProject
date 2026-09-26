@@ -5,12 +5,12 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api, ApiError, money, Price, Size } from '@/lib/api';
 import { useShell } from '@/components/shell';
 import { StatusBadge } from '@/components/status-badge';
+import { ENGINE_LABEL } from '@/lib/format';
 
 export interface DbCluster { id: string; name: string; engine: string; version: string; status: string; statusMessage: string | null; nodes: number; size: { id: string; vcpu: number; memoryMb: number; diskGb: number }; port: number; poolerPort: number | null; trustedSources: string[]; backupHourUtc: number; configVersion: number; connection: { host: string | null; privateHost: string | null; port: number; database: string; user?: string; password?: string; ssl?: boolean; uri?: string | null; privateUri?: string | null; appUri?: string | null }; users: { id: string; name: string; password?: string; createdAt: string }[]; databases: { id: string; name: string; createdAt: string }[]; nodeStatus: { index: number; status: string; role: string; appliedVersion: number; lagBytes: number | null; lastSeenAt: string | null }[]; createdAt: string }
 interface Engine { engine: string; versions: string[]; available: boolean }
 
 const SETTLED = ['active', 'failed'];
-export const ENGINE_LABEL: Record<string, string> = { postgres: 'PostgreSQL', valkey: 'Valkey', mysql: 'MySQL' };
 
 /** Managed databases: clusters we run, with users, databases, backups and failover. */
 export default function DatabasesPage() {
@@ -51,7 +51,7 @@ export default function DatabasesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Managed databases</h1>
-        <p className="text-sm text-neutral-500">PostgreSQL clusters we run for you: automatic failover with three nodes, nightly backups to object storage, connection pooling, TLS, and users and databases managed from here. Priced per node per month.</p>
+        <p className="text-sm text-neutral-500">PostgreSQL, Valkey and MySQL clusters we run for you: automatic failover with three nodes, nightly backups to object storage, TLS, and users and databases managed from here. Priced per node per month.</p>
       </div>
       {error && <p className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700 dark:bg-red-950/30">{error}</p>}
 

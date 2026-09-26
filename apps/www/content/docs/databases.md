@@ -1,18 +1,19 @@
 ---
 title: Managed databases
-description: PostgreSQL clusters we run for you, with failover, backups and pooling.
+description: PostgreSQL, Valkey and MySQL clusters we run for you, with failover and backups.
 section: Guides
 order: 19
 ---
 
 ## What you get
 
-A managed database is a PostgreSQL cluster on nodes we own, patch and replace. One node for
+A managed database is a PostgreSQL, Valkey or MySQL cluster on nodes we own, patch and replace. One node for
 development, or three nodes with automatic failover for production: the nodes elect a primary
 between themselves, and the cluster address follows it, so your application reconnects to the
-same host after a failover. Every cluster has TLS, a connection pooler, nightly backups to
-object storage with continuous archiving, and the pgvector extension. Valkey and MySQL follow
-the same design and are next.
+same host after a failover. Every cluster has TLS and nightly backups to object storage. PostgreSQL adds a connection
+pooler, continuous archiving for point in time recovery and the pgvector extension; Valkey runs
+Sentinel for failover with ACL users and RDB backups; MySQL runs GTID replication with
+XtraBackup streamed to the bucket.
 
 Pricing is per node per month, twice the price of a server of the same size, backups and the
 address included.
@@ -30,13 +31,17 @@ POST /v1/databases
 { "name": "app-db", "engine": "postgres", "size": "s-1vcpu-2gb", "nodes": 3, "trustedSources": ["203.0.113.0/24"] }
 ```
 
-The size is any server size with at least 1 GB of memory. The cluster is `active` after a few
-minutes, and `GET /v1/databases/{id}` returns the connection details: host, private host, port
-5432, the pooler on 6432, an admin user, an `app` user, a `defaultdb` database and ready made
-connection strings. Connect with any PostgreSQL client:
+Pass `engine: valkey` or `engine: mysql` for the other engines. The size is any server size
+with at least 1 GB of memory. The cluster is `active` after a few minutes, and
+`GET /v1/databases/{id}` returns the connection details: host, private host, the engine port
+(5432, 6379 with TLS on 6380, or 3306), the PostgreSQL pooler on 6432, an admin user, an
+`app` user, a `defaultdb` database for PostgreSQL and MySQL, and ready made connection
+strings. Connect with any client:
 
 ```
 psql "postgresql://app:PASSWORD@HOST:5432/defaultdb?sslmode=require"
+valkey-cli --tls -h HOST -p 6380 -a PASSWORD
+mysql --ssl-mode=REQUIRED -h HOST -u app -pPASSWORD defaultdb
 ```
 
 Use the private host from servers in the same project; it never leaves our network. Use the
@@ -45,7 +50,8 @@ pooler port for applications that open many short lived connections.
 ## Users and databases
 
 Add users and databases from the cluster page, the CLI, or the API. Passwords are generated
-and shown once; reset one when it is lost. Removing a database from the cluster keeps the data
+and shown once; reset one when it is lost. Valkey users are ACL users and Valkey has no named
+databases. Removing a database from the cluster keeps the data
 on disk until you drop it yourself, so a slip is recoverable.
 
 ```
@@ -92,4 +98,4 @@ need `databases:read` and `databases:write`; the MCP server exposes `list_databa
 | Users per cluster | 50 |
 | Databases per cluster | 100 |
 | Trusted sources | 50 |
-| Engines | PostgreSQL 16 today; Valkey 8 and MySQL 8.0 next |
+| Engines | PostgreSQL 16, Valkey 8, MySQL 8.0 |
