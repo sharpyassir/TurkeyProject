@@ -468,6 +468,7 @@ components:
   responses:
     NotFound: { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
     Unauthorized: { description: Unauthorized, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Forbidden: { description: Forbidden, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
     Conflict: { description: Conflict, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
     Invalid: { description: Validation error, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   schemas:

@@ -7,6 +7,14 @@ order: 10
 
 The API powers the console, the CLI, the MCP server and every SDK. There is nothing the console can do that the API cannot. The full reference is generated from the OpenAPI spec at [/docs/api-reference](/docs/api-reference).
 
+## SDKs and Terraform
+
+- **TypeScript**: `npm install @pgcloud/sdk`, types generated from the OpenAPI document, works anywhere `fetch` exists.
+- **Python**: `pip install pgcloud`, no dependencies.
+- **Terraform**: the `pgcloud/pgcloud` provider with `pgcloud_server`, `pgcloud_firewall`, `pgcloud_ssh_key` and data sources for sizes and images.
+
+All three send an idempotency key on every write and surface API errors with their code, including `approval_required` when a person has to approve an agent's request.
+
 ## Base URL and auth
 
 ```

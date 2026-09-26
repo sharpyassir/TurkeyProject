@@ -111,7 +111,8 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Account security: TOTP two factor (required for owners), email verification, password reset, rate limits | ✅ |
 | Hosting: Dockerfiles, production compose with Caddy TLS and backups, Ansible for the management host and Proxmox nodes, deploy workflow ([docs/hosting.md](docs/hosting.md)) | ✅ |
 | Payments: Stripe (USD) and iyzico (TRY) checkout, credit top up, invoice pay, invoice PDF, built in test page | ✅ |
-| Terraform, SDK generation | ⏳ |
+| SDKs: TypeScript (types generated from OpenAPI) and Python, both with tests | ✅ |
+| Terraform provider: server, firewall, SSH key resources; sizes and images data sources | ✅ (registry publishing: to do) |
 
 ### Local dev without Docker
 
