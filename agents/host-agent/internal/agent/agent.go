@@ -20,7 +20,14 @@ import (
 	"github.com/pgcloud/host-agent/internal/proxmox"
 )
 
-const snippetsDir = "/var/lib/vz/snippets"
+// snippetsDir is where cloud-init user-data lands so Proxmox can serve it as a snippet.
+// PGCLOUD_SNIPPETS_DIR overrides it (the test harness points it at a temp dir).
+func snippetsDir() string {
+	if d := os.Getenv("PGCLOUD_SNIPPETS_DIR"); d != "" {
+		return d
+	}
+	return "/var/lib/vz/snippets"
+}
 
 type Agent struct {
 	cfg     *config.Config
@@ -239,7 +246,7 @@ func (a *Agent) dispatch(ctx context.Context, job protocol.Job, log *slog.Logger
 		case protocol.JobReboot:
 			return nil, a.pve.Reboot(ctx, ref.VMID)
 		case protocol.JobDelete:
-			os.Remove(filepath.Join(snippetsDir, fmt.Sprintf("pgcloud-%d-user.yaml", ref.VMID)))
+			os.Remove(filepath.Join(snippetsDir(), fmt.Sprintf("pgcloud-%d-user.yaml", ref.VMID)))
 			return nil, a.pve.Delete(ctx, ref.VMID)
 		default:
 			return a.status(ctx, ref.VMID)
@@ -338,8 +345,8 @@ func (a *Agent) create(ctx context.Context, spec protocol.VmSpec, log *slog.Logg
 
 	userDataRef := ""
 	if spec.UserData != "" {
-		if err := os.MkdirAll(snippetsDir, 0o755); err == nil {
-			path := filepath.Join(snippetsDir, fmt.Sprintf("pgcloud-%d-user.yaml", vmid))
+		if err := os.MkdirAll(snippetsDir(), 0o755); err == nil {
+			path := filepath.Join(snippetsDir(), fmt.Sprintf("pgcloud-%d-user.yaml", vmid))
 			if err := os.WriteFile(path, []byte(spec.UserData), 0o600); err == nil {
 				userDataRef = a.pve.SnippetRef(vmid)
 			} else {

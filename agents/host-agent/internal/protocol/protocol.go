@@ -79,17 +79,17 @@ type FirewallRule struct {
 }
 
 type Heartbeat struct {
-	HostID        string   `json:"hostId"`
-	Node          string   `json:"node"`
-	At            string   `json:"at"`
-	TotalVcpu     int      `json:"totalVcpu"`
-	TotalMemoryMb int64    `json:"totalMemoryMb"`
-	TotalDiskGb   int64    `json:"totalDiskGb"`
-	UsedVcpu      int      `json:"usedVcpu"`
-	UsedMemoryMb  int64    `json:"usedMemoryMb"`
-	UsedDiskGb    int64    `json:"usedDiskGb"`
+	HostID        string    `json:"hostId"`
+	Node          string    `json:"node"`
+	At            string    `json:"at"`
+	TotalVcpu     int       `json:"totalVcpu"`
+	TotalMemoryMb int64     `json:"totalMemoryMb"`
+	TotalDiskGb   int64     `json:"totalDiskGb"`
+	UsedVcpu      int       `json:"usedVcpu"`
+	UsedMemoryMb  int64     `json:"usedMemoryMb"`
+	UsedDiskGb    int64     `json:"usedDiskGb"`
 	Vms           []VmBrief `json:"vms"`
-	AgentVersion  string   `json:"agentVersion"`
+	AgentVersion  string    `json:"agentVersion"`
 }
 
 type VmBrief struct {

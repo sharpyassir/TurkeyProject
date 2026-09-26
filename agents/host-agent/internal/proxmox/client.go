@@ -155,14 +155,14 @@ type VMConfig struct {
 
 func (c *Client) Configure(ctx context.Context, vmid int, v VMConfig) error {
 	f := url.Values{
-		"cores":    {fmt.Sprint(v.Cores)},
-		"memory":   {fmt.Sprint(v.MemoryMb)},
-		"agent":    {"enabled=1"},
-		"onboot":   {"1"},
-		"name":     {v.Hostname},
-		"tags":     {v.Tags},
-		"ciuser":   {"root"},
-		"net0":     {"virtio,bridge=" + v.Bridge + ",firewall=1"},
+		"cores":     {fmt.Sprint(v.Cores)},
+		"memory":    {fmt.Sprint(v.MemoryMb)},
+		"agent":     {"enabled=1"},
+		"onboot":    {"1"},
+		"name":      {v.Hostname},
+		"tags":      {v.Tags},
+		"ciuser":    {"root"},
+		"net0":      {"virtio,bridge=" + v.Bridge + ",firewall=1"},
 		"ipconfig0": {"ip=" + v.PrivateIP},
 	}
 	if v.PublicIP != "" {
@@ -345,16 +345,16 @@ func (c *Client) StorageStatus(ctx context.Context) (*StorageStatus, error) {
 }
 
 type VMListEntry struct {
-	VMID   int     `json:"vmid"`
-	Name   string  `json:"name"`
-	Status string  `json:"status"`
-	Cpus   int     `json:"cpus"`
-	MaxMem int64   `json:"maxmem"`
-	Tags   string  `json:"tags"`
-	CPU    float64 `json:"cpu"`
-	NetIn  int64   `json:"netin"`
-	NetOut int64   `json:"netout"`
-	Template int   `json:"template"`
+	VMID     int     `json:"vmid"`
+	Name     string  `json:"name"`
+	Status   string  `json:"status"`
+	Cpus     int     `json:"cpus"`
+	MaxMem   int64   `json:"maxmem"`
+	Tags     string  `json:"tags"`
+	CPU      float64 `json:"cpu"`
+	NetIn    int64   `json:"netin"`
+	NetOut   int64   `json:"netout"`
+	Template int     `json:"template"`
 }
 
 func (c *Client) ListVMs(ctx context.Context) ([]VMListEntry, error) {

@@ -9,14 +9,14 @@ import (
 )
 
 type Proxmox struct {
-	URL         string `yaml:"url"`          // https://127.0.0.1:8006
-	Node        string `yaml:"node"`         // pve1
-	TokenID     string `yaml:"token_id"`     // pgcloud@pve!agent
-	TokenSecret string `yaml:"token_secret"` // from Vault / env PVE_TOKEN_SECRET
-	Storage     string `yaml:"storage"`      // Ceph RBD pool storage id, e.g. "vm-disks"
-	Bridge      string `yaml:"bridge"`       // SDN vnet for the default tenant overlay, e.g. "customers"
+	URL          string `yaml:"url"`           // https://127.0.0.1:8006
+	Node         string `yaml:"node"`          // pve1
+	TokenID      string `yaml:"token_id"`      // pgcloud@pve!agent
+	TokenSecret  string `yaml:"token_secret"`  // from Vault / env PVE_TOKEN_SECRET
+	Storage      string `yaml:"storage"`       // Ceph RBD pool storage id, e.g. "vm-disks"
+	Bridge       string `yaml:"bridge"`        // SDN vnet for the default tenant overlay, e.g. "customers"
 	PublicBridge string `yaml:"public_bridge"` // bridge carrying our public IP blocks, e.g. "vmbr0"
-	Insecure    bool   `yaml:"insecure"`     // skip TLS verify for the local PVE cert
+	Insecure     bool   `yaml:"insecure"`      // skip TLS verify for the local PVE cert
 }
 
 type Config struct {
