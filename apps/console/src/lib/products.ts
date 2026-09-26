@@ -50,7 +50,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'snapshots', name: 'Snapshots', group: 'Core Cloud', href: '/snapshots', blurb: 'Point-in-time copies of a server.' },
   { slug: 'volumes', name: 'Block Volumes', group: 'Core Cloud', phase: 2, blurb: 'Ceph-backed volumes you attach and detach from servers.' },
   { slug: 'object-storage', name: 'Object Storage', group: 'Core Cloud', phase: 3, blurb: 'S3 compatible buckets in Türkiye.' },
-  { slug: 'monitoring', name: 'Monitoring & Alerts', group: 'Core Cloud', phase: 2, blurb: 'Metrics from every server, alert rules to email, SMS or webhook.' },
+  { slug: 'monitoring', name: 'Monitoring & Alerts', group: 'Core Cloud', href: '/monitoring', blurb: 'Metrics from every server, alert rules to email and webhook.' },
   { slug: 'webhooks', name: 'Webhooks', group: 'Core Cloud', href: '/webhooks', blurb: 'Signed event deliveries: server.active, invoice.issued, spend.limit_reached…' },
 
   // Marketplace

@@ -345,16 +345,19 @@ func (c *Client) StorageStatus(ctx context.Context) (*StorageStatus, error) {
 }
 
 type VMListEntry struct {
-	VMID     int     `json:"vmid"`
-	Name     string  `json:"name"`
-	Status   string  `json:"status"`
-	Cpus     int     `json:"cpus"`
-	MaxMem   int64   `json:"maxmem"`
-	Tags     string  `json:"tags"`
-	CPU      float64 `json:"cpu"`
-	NetIn    int64   `json:"netin"`
-	NetOut   int64   `json:"netout"`
-	Template int     `json:"template"`
+	VMID      int     `json:"vmid"`
+	Name      string  `json:"name"`
+	Status    string  `json:"status"`
+	Cpus      int     `json:"cpus"`
+	MaxMem    int64   `json:"maxmem"`
+	Mem       int64   `json:"mem"`
+	DiskRead  int64   `json:"diskread"`
+	DiskWrite int64   `json:"diskwrite"`
+	Tags      string  `json:"tags"`
+	CPU       float64 `json:"cpu"`
+	NetIn     int64   `json:"netin"`
+	NetOut    int64   `json:"netout"`
+	Template  int     `json:"template"`
 }
 
 func (c *Client) ListVMs(ctx context.Context) ([]VMListEntry, error) {

@@ -34,6 +34,11 @@ export interface FirewallRule { id?: string; direction: 'inbound' | 'outbound'; 
 export interface Snapshot { id: string; name: string; status: string; sizeGb: number; serverId: string | null; createdAt: string }
 export interface SshKey { id: string; name: string; fingerprint: string; createdAt: string }
 export interface ApiToken { id: string; name: string; prefix: string; scopes: string[]; isAgent: boolean; spendCapMinor: number | null; spentThisMonthMinor: number; requireApprovalFor: string[]; expiresAt: string | null; lastUsedAt: string | null; createdAt: string }
+export interface MetricPoint { at: string; cpu: number; cpuMax?: number; memoryUsedMb: number; memoryTotalMb: number; netInBps: number; netOutBps: number; diskReadBps: number; diskWriteBps: number; diskUsedPercent?: number | null }
+export interface MetricSeries { serverId: string; period: string; resolution: 'minute' | 'hour'; from: string; to: string; latest: MetricPoint | null; points: MetricPoint[] }
+export type AlertMetric = 'cpu' | 'memory' | 'disk' | 'net_in' | 'net_out';
+export interface AlertPolicy { id: string; name: string; metric: AlertMetric; comparator: 'above' | 'below'; threshold: number; windowMinutes: number; serverIds: string[]; tags: string[]; emails: string[]; enabled: boolean; createdAt: string }
+export interface AlertIncident { id: string; policyId: string; serverId: string; value: number; peakValue: number; startedAt: string; resolvedAt: string | null }
 export interface List<T> { data: T[]; meta?: { next_cursor?: string | null } }
 
 export class PgcloudError extends Error {
@@ -108,6 +113,8 @@ export class Pgcloud {
       this.request<{ id: string; type: string; status: string }>('POST', `/v1/servers/${id}/actions`, body),
     actions: (id: string) => this.request<List<{ id: string; type: string; status: string; startedAt: string; finishedAt: string | null; error: string | null }>>('GET', `/v1/servers/${id}/actions`),
     delete: (id: string) => this.request<{ id: string; status: string }>('DELETE', `/v1/servers/${id}`),
+    /** CPU, memory, network and disk series. Minute resolution up to 24h, hourly for 7d and 30d. */
+    metrics: (id: string, period: '1h' | '6h' | '24h' | '7d' | '30d' = '1h') => this.request<MetricSeries>('GET', `/v1/servers/${id}/metrics`, undefined, { period }),
     /** Polls until the server is active, off or failed. Throws on failed. */
     waitUntilActive: async (id: string, opts: { timeoutMs?: number; intervalMs?: number } = {}) => {
       const until = Date.now() + (opts.timeoutMs ?? 180_000);
@@ -150,6 +157,15 @@ export class Pgcloud {
     invoices: () => this.request<List<{ id: string; number: string; status: string; totalMinor: number; currency: string; periodStart: string; dueAt: string | null }>>('GET', '/v1/billing/invoices'),
     topup: (amountMinor: number) => this.request<Checkout>('POST', '/v1/billing/topup', { amountMinor }),
     payInvoice: (id: string) => this.request<Checkout>('POST', `/v1/billing/invoices/${id}/pay`, {}),
+  };
+
+  readonly alerts = {
+    list: () => this.request<List<AlertPolicy & { _count: { incidents: number } }>>('GET', '/v1/alerts'),
+    get: (id: string) => this.request<AlertPolicy & { incidents: AlertIncident[] }>('GET', `/v1/alerts/${id}`),
+    create: (body: { name: string; metric: AlertMetric; comparator?: 'above' | 'below'; threshold: number; windowMinutes?: number; serverIds?: string[]; tags?: string[]; emails?: string[]; enabled?: boolean }) => this.request<AlertPolicy>('POST', '/v1/alerts', body),
+    update: (id: string, body: Partial<{ name: string; metric: AlertMetric; comparator: 'above' | 'below'; threshold: number; windowMinutes: number; serverIds: string[]; tags: string[]; emails: string[]; enabled: boolean }>) => this.request<AlertPolicy>('PATCH', `/v1/alerts/${id}`, body),
+    delete: (id: string) => this.request<void>('DELETE', `/v1/alerts/${id}`),
+    incidents: (open?: boolean) => this.request<List<AlertIncident & { policy: { name: string; metric: AlertMetric; threshold: number } }>>('GET', '/v1/alerts/incidents', undefined, { open: open ? 'true' : undefined }),
   };
 
   readonly approvals = {

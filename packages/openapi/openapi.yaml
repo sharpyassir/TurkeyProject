@@ -26,6 +26,7 @@ tags:
   - name: auth
   - name: account
   - name: approvals
+  - name: monitoring
   - name: servers
   - name: catalog
   - name: deploys
@@ -384,6 +385,39 @@ paths:
       summary: GitHub App webhook (push, installation)
       description: One URL for every installation, verified with X-Hub-Signature-256 and the app webhook secret. A push redeploys every deployment on that repository and branch.
       responses: { "200": { description: OK } }
+  /servers/{id}/metrics:
+    get:
+      tags: [monitoring]
+      summary: Time series for a server
+      description: One point per minute for 1h, 6h and 24h; hourly averages (with the hour's CPU peak) for 7d and 30d. Network and disk are bytes per second; multiply by 8 and divide by a million for Mbps.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: period, in: query, schema: { type: string, enum: [1h, 6h, 24h, 7d, 30d], default: 1h } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MetricSeries" } } } }
+  /alerts:
+    get: { tags: [monitoring], summary: List alert rules, responses: { "200": { description: OK } } }
+    post:
+      tags: [monitoring]
+      summary: Create an alert rule
+      description: Fires when the metric, averaged over windowMinutes, is above or below the threshold on any matching server. Empty serverIds and tags means every server in the team. Owners and admins are emailed, plus any addresses in emails; webhooks get alert.triggered and alert.resolved.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AlertRuleInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AlertRule" } } } } }
+  /alerts/incidents:
+    get:
+      tags: [monitoring]
+      summary: Incidents (open and recent)
+      parameters: [{ name: open, in: query, schema: { type: boolean } }]
+      responses: { "200": { description: OK } }
+  /alerts/{id}:
+    get: { tags: [monitoring], summary: Get an alert rule with recent incidents, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: OK }, "404": { $ref: "#/components/responses/NotFound" } } }
+    patch:
+      tags: [monitoring]
+      summary: Update an alert rule (any field, including enabled to mute)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AlertRuleInput" } } } }
+      responses: { "200": { description: OK } }
+    delete: { tags: [monitoring], summary: Delete an alert rule, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "204": { description: Deleted } } }
   /firewalls:
     get: { tags: [network], summary: List firewalls, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK } } }
     post:
@@ -514,6 +548,48 @@ components:
         amountMinor: { type: integer }
         currency: { type: string, enum: [USD, TRY] }
         redirectUrl: { type: string, description: Hosted payment page }
+    MetricPoint:
+      type: object
+      properties:
+        at: { type: string, format: date-time }
+        cpu: { type: number, description: percent }
+        cpuMax: { type: number, description: peak within the hour (hourly resolution only) }
+        memoryUsedMb: { type: integer }
+        memoryTotalMb: { type: integer }
+        netInBps: { type: number }
+        netOutBps: { type: number }
+        diskReadBps: { type: number }
+        diskWriteBps: { type: number }
+        diskUsedPercent: { type: number, nullable: true }
+    MetricSeries:
+      type: object
+      properties:
+        serverId: { type: string }
+        period: { type: string }
+        resolution: { type: string, enum: [minute, hour] }
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        latest: { $ref: "#/components/schemas/MetricPoint" }
+        points: { type: array, items: { $ref: "#/components/schemas/MetricPoint" } }
+    AlertRuleInput:
+      type: object
+      properties:
+        name: { type: string }
+        metric: { type: string, enum: [cpu, memory, disk, net_in, net_out] }
+        comparator: { type: string, enum: [above, below], default: above }
+        threshold: { type: number, description: percent for cpu, memory and disk; Mbps for network }
+        windowMinutes: { type: integer, default: 5 }
+        serverIds: { type: array, items: { type: string } }
+        tags: { type: array, items: { type: string } }
+        emails: { type: array, items: { type: string, format: email } }
+        enabled: { type: boolean }
+    AlertRule:
+      allOf:
+        - $ref: "#/components/schemas/AlertRuleInput"
+        - type: object
+          properties:
+            id: { type: string }
+            createdAt: { type: string, format: date-time }
     TotpCode:
       type: object
       required: [code]

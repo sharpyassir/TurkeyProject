@@ -91,6 +91,7 @@ model Team {
   apiTokens ApiToken[]
   approvals Approval[]
   githubInstallations GithubInstallation[]
+  alertPolicies AlertPolicy[]
   invoices  Invoice[]
   credits   Credit[]
   payments  Payment[]
@@ -853,4 +854,104 @@ model IdempotencyKey {
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ───────────────────────── Monitoring ─────────────────────────
+
+/// One metrics sample per server per minute (rates already derived from the agent's counters).
+model MetricSample {
+  serverId        String
+  at              DateTime
+  cpuPercent      Float    @default(0)
+  memoryUsedMb    Int      @default(0)
+  memoryTotalMb   Int      @default(0)
+  netInBps        Float    @default(0)
+  netOutBps       Float    @default(0)
+  diskReadBps     Float    @default(0)
+  diskWriteBps    Float    @default(0)
+  diskUsedPercent Float?
+
+  @@id([serverId, at])
+  @@index([at])
+}
+
+/// Hourly rollup of MetricSample, kept for a year.
+model MetricHourly {
+  serverId      String
+  at            DateTime
+  cpuPercent    Float
+  cpuMax        Float
+  memoryUsedMb  Int
+  memoryTotalMb Int
+  netInBps      Float
+  netOutBps     Float
+  diskReadBps   Float
+  diskWriteBps  Float
+  samples       Int
+
+  @@id([serverId, at])
+}
+
+/// Last cumulative counters per server, to turn the agent's totals into per second rates.
+model MetricCursor {
+  serverId       String   @id
+  at             DateTime
+  netInBytes     BigInt
+  netOutBytes    BigInt
+  diskReadBytes  BigInt
+  diskWriteBytes BigInt
+}
+
+enum AlertMetric {
+  cpu
+  memory
+  disk
+  net_in
+  net_out
+}
+
+enum AlertComparator {
+  above
+  below
+}
+
+/// A resource alert rule: metric over a threshold for a window, on chosen servers or tags.
+model AlertPolicy {
+  id            String          @id @default(cuid())
+  teamId        String
+  name          String
+  metric        AlertMetric
+  comparator    AlertComparator @default(above)
+  /// Percent for cpu, memory and disk; megabits per second for network.
+  threshold     Float
+  windowMinutes Int             @default(5)
+  /// Empty serverIds and tags means every server in the team.
+  serverIds     String[]        @default([])
+  tags          String[]        @default([])
+  /// Extra recipients; team owners always get the email.
+  emails        String[]        @default([])
+  enabled       Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  team      Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  incidents AlertIncident[]
+
+  @@index([teamId])
+}
+
+model AlertIncident {
+  id         String    @id @default(cuid())
+  policyId   String
+  teamId     String
+  serverId   String
+  value      Float
+  peakValue  Float
+  startedAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  policy AlertPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, resolvedAt, startedAt])
+  @@index([policyId, serverId, resolvedAt])
 }

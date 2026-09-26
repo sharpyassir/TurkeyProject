@@ -168,7 +168,7 @@ func (s *Sim) handle(w http.ResponseWriter, r *http.Request) {
 			if v.Template {
 				t = 1
 			}
-			out = append(out, map[string]interface{}{"vmid": v.VMID, "name": v.Name, "status": v.Status, "cpus": v.Cores, "maxmem": int64(v.MemoryMb) << 20, "tags": v.Tags, "cpu": 0.03, "netin": 1000, "netout": 2000, "template": t})
+			out = append(out, map[string]interface{}{"vmid": v.VMID, "name": v.Name, "status": v.Status, "cpus": v.Cores, "maxmem": int64(v.MemoryMb) << 20, "mem": int64(v.MemoryMb) << 19, "tags": v.Tags, "cpu": 0.03, "netin": 1000, "netout": 2000, "diskread": 4096, "diskwrite": 8192, "template": t})
 		}
 		ok(out)
 		return

@@ -110,6 +110,23 @@ type UsageEvent struct {
 	Meta         map[string]interface{} `json:"meta,omitempty"`
 }
 
+// MetricSample is metrics.v1: one per VM per minute, raw counters from the hypervisor.
+// Network and disk counters are cumulative bytes since boot; the control plane derives rates.
+type MetricSample struct {
+	V              int     `json:"v"`
+	At             string  `json:"at"`
+	ServerID       string  `json:"serverId"`
+	HostID         string  `json:"hostId"`
+	Power          string  `json:"power"`
+	CpuPercent     float64 `json:"cpuPercent"`
+	MemoryUsedMb   int64   `json:"memoryUsedMb"`
+	MemoryTotalMb  int64   `json:"memoryTotalMb"`
+	NetInBytes     int64   `json:"netInBytes"`
+	NetOutBytes    int64   `json:"netOutBytes"`
+	DiskReadBytes  int64   `json:"diskReadBytes"`
+	DiskWriteBytes int64   `json:"diskWriteBytes"`
+}
+
 // VmRef is the opaque handle stored in Server.driverRef for the Proxmox driver.
 type VmRef struct {
 	VMID int    `json:"vmid"`

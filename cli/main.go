@@ -87,6 +87,8 @@ func main() {
 		err = cmdSSHKeys(rest)
 	case "approvals":
 		err = cmdApprovals(rest)
+	case "alerts":
+		err = cmdAlerts(rest)
 	case "tokens":
 		err = cmdTokens(rest)
 	case "firewalls":
@@ -114,6 +116,7 @@ USAGE  pgcloud [--json] [--project SLUG] <command> [args]
 
 ACCOUNT   login · logout · whoami · billing [invoices|payments|topup AMOUNT|pay INVOICE_ID] · tokens create NAME [--agent --cap 500] · ssh-keys ls|add NAME FILE
 AGENTS    approvals [ls | approve ID | deny ID --reason TEXT]   (requests parked by agent tokens)
+MONITOR   servers metrics ID [--period 1h|6h|24h|7d|30d] · alerts [ls | incidents | create NAME --metric cpu --above 90 | mute ID | delete ID]
 SERVERS   servers ls | create NAME [--size s-2vcpu-4gb] [--image ubuntu-24-04|wordpress] [--key ID] [--wait]
                   | get ID | start|stop|reboot|delete ID | resize ID --size S | snapshot ID
           ssh NAME|ID [-- command]
@@ -512,6 +515,40 @@ func cmdServers(args []string) error {
 			fmt.Fprintf(stdout, "✓ %s created (%s) — status %s. Watch with: pgcloud servers get %s\n", s["name"], s["id"], s["status"], s["id"])
 		}
 		return nil
+	case "metrics":
+		if len(args) < 2 {
+			return errors.New("server id required")
+		}
+		period, _ := flag(args[2:], "--period")
+		if period == "" {
+			period = "1h"
+		}
+		var m struct {
+			Resolution string           `json:"resolution"`
+			Points     []map[string]any `json:"points"`
+			Latest     map[string]any   `json:"latest"`
+		}
+		if err := call(http.MethodGet, "/v1/servers/"+args[1]+"/metrics?period="+period, nil, &m); err != nil {
+			return err
+		}
+		if jsonOut {
+			emit(m)
+			return nil
+		}
+		if m.Latest == nil {
+			fmt.Fprintln(stdout, "no samples yet")
+			return nil
+		}
+		fmt.Fprintf(stdout, "%d points (%s)\n", len(m.Points), m.Resolution)
+		for _, p := range m.Points {
+			used, total := p["memoryUsedMb"].(float64), p["memoryTotalMb"].(float64)
+			mem := 0.0
+			if total > 0 {
+				mem = used / total * 100
+			}
+			fmt.Fprintf(stdout, "%s  cpu %5.1f%%  mem %5.1f%%  net in %7.2f Mbps  out %7.2f Mbps\n", fmt.Sprint(p["at"])[11:16], p["cpu"], mem, p["netInBps"].(float64)*8/1e6, p["netOutBps"].(float64)*8/1e6)
+		}
+		return nil
 	case "get":
 		id, err := resolveServer(rest)
 		if err != nil {
@@ -876,6 +913,70 @@ func cmdBilling(args []string) error {
 		return nil
 	}
 	return errors.New("usage: pgcloud billing [invoices | payments | topup AMOUNT | pay INVOICE_ID]")
+}
+
+func cmdAlerts(args []string) error {
+	if len(args) == 0 || args[0] == "ls" {
+		return cmdList("/v1/alerts", nil, []string{"name", "metric", "comparator", "threshold", "windowMinutes", "enabled", "id"})
+	}
+	switch args[0] {
+	case "incidents":
+		return cmdList("/v1/alerts/incidents?open=true", nil, []string{"serverId", "value", "peakValue", "startedAt", "id"})
+	case "create":
+		// pgcloud alerts create NAME --metric cpu --above 90 [--minutes 10] [--server ID ...] [--tag T ...] [--email E ...]
+		if len(args) < 2 {
+			return errors.New("usage: pgcloud alerts create NAME --metric cpu|memory|disk|net_in|net_out --above N|--below N [--minutes 5] [--server ID] [--tag TAG] [--email ADDR]")
+		}
+		metric, rest := flag(args[2:], "--metric")
+		above, rest := flag(rest, "--above")
+		below, rest := flag(rest, "--below")
+		minutes, rest := flag(rest, "--minutes")
+		servers, rest := multi(rest, "--server")
+		tags, rest := multi(rest, "--tag")
+		emails, _ := multi(rest, "--email")
+		body := map[string]any{"name": args[1], "metric": metric, "serverIds": servers, "tags": tags, "emails": emails}
+		var thr float64
+		if above != "" {
+			fmt.Sscanf(above, "%f", &thr)
+			body["comparator"], body["threshold"] = "above", thr
+		} else if below != "" {
+			fmt.Sscanf(below, "%f", &thr)
+			body["comparator"], body["threshold"] = "below", thr
+		} else {
+			return errors.New("--above N or --below N is required")
+		}
+		if minutes != "" {
+			var m int
+			fmt.Sscanf(minutes, "%d", &m)
+			body["windowMinutes"] = m
+		}
+		var a map[string]any
+		if err := call(http.MethodPost, "/v1/alerts", body, &a); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ alert rule %s created (%s)\n", a["name"], a["id"])
+		return nil
+	case "mute", "enable":
+		if len(args) < 2 {
+			return errors.New("alert id required")
+		}
+		var a map[string]any
+		if err := call(http.MethodPatch, "/v1/alerts/"+args[1], map[string]any{"enabled": args[0] == "enable"}, &a); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ %s: enabled=%v\n", a["name"], a["enabled"])
+		return nil
+	case "delete", "rm":
+		if len(args) < 2 {
+			return errors.New("alert id required")
+		}
+		if err := call(http.MethodDelete, "/v1/alerts/"+args[1], nil, nil); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "✓ deleted")
+		return nil
+	}
+	return errors.New("usage: pgcloud alerts [ls | incidents | create ... | mute ID | enable ID | delete ID]")
 }
 
 func cmdApprovals(args []string) error {

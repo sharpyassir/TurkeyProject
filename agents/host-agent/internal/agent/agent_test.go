@@ -288,10 +288,13 @@ func TestHeartbeatAndUsage(t *testing.T) {
 	h := newHarness(t)
 	hb := make(chan *nats.Msg, 256)
 	usage := make(chan *nats.Msg, 1024)
+	metrics := make(chan *nats.Msg, 1024)
 	sub1, _ := h.nc.ChanSubscribe("pgcloud.host.host_test.heartbeat", hb)
 	sub2, _ := h.nc.ChanSubscribe("pgcloud.usage", usage)
+	sub3, _ := h.nc.ChanSubscribe("pgcloud.metrics", metrics)
 	defer sub1.Unsubscribe()
 	defer sub2.Unsubscribe()
+	defer sub3.Unsubscribe()
 
 	h.mustOK(h.job(protocol.JobCreate, map[string]interface{}{"spec": spec("srv_6")}))
 
@@ -326,7 +329,7 @@ haveHeartbeat:
 
 	// Usage: one server minute per tick for srv_6, attributed to its project, plus bandwidth.
 	udeadline := time.After(3 * time.Second)
-	for {
+	for done := false; !done; {
 		select {
 		case m := <-usage:
 			var u protocol.UsageEvent
@@ -335,10 +338,27 @@ haveHeartbeat:
 				if u.V != 1 || u.ProjectID != "proj_1" || u.Unit != "minute" || u.Quantity != 1 || u.HostID != "host_test" {
 					t.Fatalf("usage event wrong: %+v", u)
 				}
-				return
+				done = true
 			}
 		case <-udeadline:
 			t.Fatal("no usage event for srv_6")
+		}
+	}
+	// Metrics: raw counters per VM per tick, for graphs and alerts.
+	mdeadline := time.After(3 * time.Second)
+	for {
+		select {
+		case m := <-metrics:
+			var s protocol.MetricSample
+			_ = json.Unmarshal(m.Data, &s)
+			if s.ServerID == "srv_6" {
+				if s.V != 1 || s.MemoryTotalMb != 4096 || s.MemoryUsedMb != 2048 || s.NetOutBytes != 2000 || s.DiskWriteBytes != 8192 || s.Power != "running" {
+					t.Fatalf("metric sample wrong: %+v", s)
+				}
+				return
+			}
+		case <-mdeadline:
+			t.Fatal("no metric sample for srv_6")
 		}
 	}
 }

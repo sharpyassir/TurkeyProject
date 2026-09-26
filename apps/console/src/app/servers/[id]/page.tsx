@@ -7,10 +7,11 @@ import { api, ApiError, Firewall, Image, money, Price, Server, ServerAction, Siz
 import { Locale, t, tf } from '@/lib/i18n';
 import { useShell } from '@/components/shell';
 import { StatusBadge } from '@/components/status-badge';
+import { ServerMetrics } from '@/components/server-metrics';
 
-type Tab = 'overview' | 'power' | 'networking' | 'snapshots' | 'activity';
-const TABS: { id: Tab; key: 'tabOverview' | 'tabPower' | 'tabNetworking' | 'tabSnapshots' | 'tabActivity' }[] = [
-  { id: 'overview', key: 'tabOverview' }, { id: 'power', key: 'tabPower' }, { id: 'networking', key: 'tabNetworking' },
+type Tab = 'overview' | 'metrics' | 'power' | 'networking' | 'snapshots' | 'activity';
+const TABS: { id: Tab; key: 'tabOverview' | 'tabMetrics' | 'tabPower' | 'tabNetworking' | 'tabSnapshots' | 'tabActivity' }[] = [
+  { id: 'overview', key: 'tabOverview' }, { id: 'metrics', key: 'tabMetrics' }, { id: 'power', key: 'tabPower' }, { id: 'networking', key: 'tabNetworking' },
   { id: 'snapshots', key: 'tabSnapshots' }, { id: 'activity', key: 'tabActivity' },
 ];
 const SETTLED = ['active', 'off', 'failed'];
@@ -137,6 +138,8 @@ export default function ServerDetailPage() {
           </section>
         </div>
       )}
+
+      {tab === 'metrics' && <ServerMetrics serverId={server.id} />}
 
       {tab === 'power' && (
         <div className="grid gap-4 md:grid-cols-2">

@@ -12,6 +12,7 @@ export const CUSTOMER_EVENTS = [
   'spend.alert', 'spend.limit_reached', 'account.suspended',
   'approval.requested', 'approval.decided',
   'payment.started', 'payment.succeeded',
+  'alert.triggered', 'alert.resolved',
 ] as const;
 
 export type EventName = (typeof CUSTOMER_EVENTS)[number] | (string & {});

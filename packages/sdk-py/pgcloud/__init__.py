@@ -51,6 +51,7 @@ class Pgcloud:
         self.snapshots = _Snapshots(self)
         self.billing = _Billing(self)
         self.approvals = _Approvals(self)
+        self.alerts = _Alerts(self)
 
     def request(self, method: str, path: str, body: Any = None, query: Optional[Dict[str, Any]] = None) -> Any:
         url = self.base + path
@@ -133,6 +134,10 @@ class _Servers(_Res):
     def delete(self, id: str):
         return self.c.request("DELETE", f"/v1/servers/{id}")
 
+    def metrics(self, id: str, period: str = "1h"):
+        """CPU, memory, network and disk series: minute resolution up to 24h, hourly for 7d and 30d."""
+        return self.c.request("GET", f"/v1/servers/{id}/metrics", query={"period": period})
+
     def wait_until_active(self, id: str, timeout: float = 180.0, interval: float = 3.0):
         """Polls until the server is active or off. Raises PgcloudError on failed or timeout."""
         until = time.time() + timeout
@@ -208,6 +213,26 @@ class _Billing(_Res):
 
     def pay_invoice(self, id: str):
         return self.c.request("POST", f"/v1/billing/invoices/{id}/pay", {})
+
+
+class _Alerts(_Res):
+    def list(self):
+        return self.c.request("GET", "/v1/alerts")["data"]
+
+    def get(self, id: str):
+        return self.c.request("GET", f"/v1/alerts/{id}")
+
+    def create(self, name: str, metric: str, threshold: float, comparator: str = "above", window_minutes: int = 5, server_ids=None, tags=None, emails=None):
+        return self.c.request("POST", "/v1/alerts", {"name": name, "metric": metric, "threshold": threshold, "comparator": comparator, "windowMinutes": window_minutes, "serverIds": server_ids or [], "tags": tags or [], "emails": emails or []})
+
+    def update(self, id: str, **fields):
+        return self.c.request("PATCH", f"/v1/alerts/{id}", fields)
+
+    def delete(self, id: str):
+        return self.c.request("DELETE", f"/v1/alerts/{id}")
+
+    def incidents(self, open: bool = False):
+        return self.c.request("GET", "/v1/alerts/incidents", query={"open": "true" if open else None})["data"]
 
 
 class _Approvals(_Res):

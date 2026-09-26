@@ -47,6 +47,22 @@ export interface Heartbeat {
 }
 
 /** usage.v1 — one per resource per minute. */
+/** metrics.v1: raw counters per VM per minute; network and disk are cumulative bytes. */
+export interface MetricSampleV1 {
+  v: 1;
+  at: string;
+  serverId: string;
+  hostId: string;
+  power: string;
+  cpuPercent: number;
+  memoryUsedMb: number;
+  memoryTotalMb: number;
+  netInBytes: number;
+  netOutBytes: number;
+  diskReadBytes: number;
+  diskWriteBytes: number;
+}
+
 export interface UsageEventV1 {
   v: 1;
   at: string; // minute-aligned ISO timestamp

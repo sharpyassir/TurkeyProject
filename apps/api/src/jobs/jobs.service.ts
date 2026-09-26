@@ -9,6 +9,8 @@ import { SpendService } from '../modules/billing/spend.service';
 import { FxService } from '../modules/billing/fx.service';
 import { EventsService } from '../modules/events/events.service';
 import { ApprovalsService } from '../modules/approvals/approvals.service';
+import { MetricsService } from '../modules/monitoring/metrics.service';
+import { AlertsService } from '../modules/monitoring/alerts.service';
 
 /**
  * Periodic jobs. Each takes a Redis lock so only one API replica runs it.
@@ -28,6 +30,8 @@ export class JobsService {
     private readonly events: EventsService,
     private readonly fx: FxService,
     private readonly approvals: ApprovalsService,
+    private readonly metrics: MetricsService,
+    private readonly alerts: AlertsService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -51,6 +55,21 @@ export class JobsService {
   @Cron('7 * * * *') // hourly: refresh the USD→TRY rate
   fxRefresh() {
     return this.locked('fx-refresh', 60_000, () => this.fx.refresh());
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  syntheticMetrics() {
+    return this.locked('synthetic-metrics', 50_000, () => this.metrics.tickSynthetic());
+  }
+
+  @Cron('30 * * * * *') // every minute at :30, after samples for the minute have landed
+  evaluateAlerts() {
+    return this.locked('evaluate-alerts', 50_000, () => this.alerts.evaluate());
+  }
+
+  @Cron('3 * * * *') // three past every hour
+  metricsRollup() {
+    return this.locked('metrics-rollup', 5 * 60_000, () => this.metrics.rollupAndPrune());
   }
 
   @Cron(CronExpression.EVERY_10_MINUTES)

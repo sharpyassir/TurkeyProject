@@ -23,6 +23,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { DeployModule } from './modules/deploy/deploy.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { GithubModule } from './modules/github/github.module';
+import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { JobsModule } from './jobs/jobs.module';
 import { HealthController } from './health.controller';
 
@@ -33,7 +34,7 @@ import { HealthController } from './health.controller';
     PrismaModule, NatsModule, RedisModule, TemporalModule, DriversModule, MailModule,
     // domain
     IamModule,
-    ApprovalsModule, EventsModule, ComputeModule, SchedulerModule, NetworkModule, StorageModule, MarketplaceModule, BillingModule, TrustModule, AdminModule, DeployModule, GithubModule,
+    ApprovalsModule, EventsModule, ComputeModule, SchedulerModule, NetworkModule, StorageModule, MarketplaceModule, BillingModule, TrustModule, AdminModule, DeployModule, GithubModule, MonitoringModule,
     // background
     JobsModule,
   ],

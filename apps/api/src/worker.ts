@@ -6,6 +6,7 @@ import { WorkerModule } from './worker.module';
 import { createActivities } from './workflows/activities';
 import { loadConfig } from './config/config';
 import { SchedulerService } from './modules/scheduler/scheduler.service';
+import { MetricsService } from './modules/monitoring/metrics.service';
 import { MeteringService } from './modules/billing/metering.service';
 
 /**
@@ -19,6 +20,7 @@ async function main() {
 
   app.get(SchedulerService).listenHeartbeats();
   app.get(MeteringService).listen();
+  app.get(MetricsService).listen();
 
   const connection = await NativeConnection.connect({ address: cfg.TEMPORAL_ADDRESS });
   const worker = await Worker.create({

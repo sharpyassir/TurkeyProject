@@ -53,6 +53,8 @@ Every error has the same shape:
 | `invalid_state` | the server is busy; retry when it is active or off |
 | `rate_limited` | slow down; `Retry-After` says how long |
 
+Webhook events for monitoring are `alert.triggered` and `alert.resolved`; see the [monitoring guide](/docs/monitoring).
+
 ## Rate limits
 
 600 requests per minute per token or session, 120 per minute per address when anonymous, 10 sign in attempts per minute per address. Over the limit you get `429` with a `Retry-After` header.

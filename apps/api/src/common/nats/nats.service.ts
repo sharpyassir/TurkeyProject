@@ -13,6 +13,7 @@ export const Subjects = {
   hostJobs: (hostId: string) => `pgcloud.host.${hostId}.jobs`,
   hostHeartbeat: 'pgcloud.host.*.heartbeat',
   usage: 'pgcloud.usage',
+  metrics: 'pgcloud.metrics',
   event: (name: string) => `pgcloud.events.${name}`,
 } as const;
 

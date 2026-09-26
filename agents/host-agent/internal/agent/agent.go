@@ -120,6 +120,11 @@ func (a *Agent) tick(ctx context.Context) {
 				V: 1, At: now.Format(time.RFC3339), ResourceType: "server", ResourceID: ref.ServerID, ProjectID: ref.ProjectID,
 				HostID: a.cfg.HostID, Quantity: 1, Unit: "minute", Meta: map[string]interface{}{"power": vm.Status, "cpu": vm.CPU},
 			})
+			a.publish("pgcloud.metrics", protocol.MetricSample{
+				V: 1, At: now.Format(time.RFC3339), ServerID: ref.ServerID, HostID: a.cfg.HostID, Power: vm.Status,
+				CpuPercent: vm.CPU * 100, MemoryUsedMb: vm.Mem >> 20, MemoryTotalMb: vm.MaxMem >> 20,
+				NetInBytes: vm.NetIn, NetOutBytes: vm.NetOut, DiskReadBytes: vm.DiskRead, DiskWriteBytes: vm.DiskWrite,
+			})
 			if vm.NetOut > 0 {
 				a.publish("pgcloud.usage", protocol.UsageEvent{
 					V: 1, At: now.Format(time.RFC3339), ResourceType: "bandwidth", ResourceID: ref.ServerID, ProjectID: ref.ProjectID,
