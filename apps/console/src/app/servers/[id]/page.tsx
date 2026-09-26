@@ -4,14 +4,14 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError, Firewall, Image, money, Price, Server, ServerAction, Size, Snapshot } from '@/lib/api';
-import { Locale, t } from '@/lib/i18n';
+import { Locale, t, tf } from '@/lib/i18n';
 import { useShell } from '@/components/shell';
 import { StatusBadge } from '@/components/status-badge';
 
 type Tab = 'overview' | 'power' | 'networking' | 'snapshots' | 'activity';
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'overview', label: 'Overview' }, { id: 'power', label: 'Power and resize' }, { id: 'networking', label: 'Networking' },
-  { id: 'snapshots', label: 'Snapshots' }, { id: 'activity', label: 'Activity' },
+const TABS: { id: Tab; key: 'tabOverview' | 'tabPower' | 'tabNetworking' | 'tabSnapshots' | 'tabActivity' }[] = [
+  { id: 'overview', key: 'tabOverview' }, { id: 'power', key: 'tabPower' }, { id: 'networking', key: 'tabNetworking' },
+  { id: 'snapshots', key: 'tabSnapshots' }, { id: 'activity', key: 'tabActivity' },
 ];
 const SETTLED = ['active', 'off', 'failed'];
 
@@ -79,7 +79,7 @@ export default function ServerDetailPage() {
   const ip = server?.networks.v4[0]?.ipAddress;
   const monthly = useMemo(() => server ? (priceOf(server.size.id)?.monthlyMinor ?? 0) + (priceOf('public_ip')?.monthlyMinor ?? 0) : 0, [server, prices]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!server) return <p className="text-sm text-neutral-500">{error ?? 'Loading…'}</p>;
+  if (!server) return <p className="text-sm text-neutral-500">{error ?? t(locale, 'loading')}</p>;
   const settled = SETTLED.includes(server.status);
 
   return (
@@ -105,34 +105,34 @@ export default function ServerDetailPage() {
 
       <nav className="flex gap-1 overflow-x-auto border-b border-neutral-200 text-sm dark:border-neutral-800">
         {TABS.map((x) => (
-          <button key={x.id} onClick={() => setTab(x.id)} className={`whitespace-nowrap px-3 py-2 ${tab === x.id ? 'border-b-2 border-blue-600 font-medium' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'}`}>{x.label}</button>
+          <button key={x.id} onClick={() => setTab(x.id)} className={`whitespace-nowrap px-3 py-2 ${tab === x.id ? 'border-b-2 border-blue-600 font-medium' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'}`}>{t(locale, x.key)}</button>
         ))}
       </nav>
 
       {tab === 'overview' && (
         <div className="grid gap-4 md:grid-cols-2">
           <section className="card space-y-2 text-sm">
-            <h2 className="font-medium">Details</h2>
+            <h2 className="font-medium">{t(locale, 'details')}</h2>
             <Row k="ID"><code className="font-mono text-xs">{server.id}</code></Row>
             <Row k={t(locale, 'image')}>{server.image.name}</Row>
             <Row k={t(locale, 'size')}>{server.size.id}</Row>
             <Row k={t(locale, 'region')}>{server.region.name}</Row>
-            <Row k="Private IP">{server.networks.private[0]?.ipAddress ?? '—'}</Row>
-            <Row k="Backups">{server.backupsEnabled ? 'On' : 'Off'}</Row>
+            <Row k={t(locale, 'privateIp')}>{server.networks.private[0]?.ipAddress ?? '—'}</Row>
+            <Row k={t(locale, 'backups')}>{t(locale, server.backupsEnabled ? 'on' : 'off')}</Row>
             <Row k={t(locale, 'created')}>{new Date(server.createdAt).toLocaleString(locale)}</Row>
-            {server.tags.length > 0 && <Row k="Tags">{server.tags.join(', ')}</Row>}
+            {server.tags.length > 0 && <Row k={t(locale, 'tags')}>{server.tags.join(', ')}</Row>}
           </section>
           <section className="card space-y-2 text-sm">
-            <h2 className="font-medium">Cost</h2>
-            <Row k="Price">{money(monthly, currency, locale)}{t(locale, 'perMonth')} <span className="text-neutral-500">({money(priceOf(server.size.id)?.hourlyMinor ?? 0, currency, locale)}{t(locale, 'perHour')} plus the public IP)</span></Row>
+            <h2 className="font-medium">{t(locale, 'cost')}</h2>
+            <Row k={t(locale, 'price')}>{money(monthly, currency, locale)}{t(locale, 'perMonth')} <span className="text-neutral-500">({money(priceOf(server.size.id)?.hourlyMinor ?? 0, currency, locale)}{t(locale, 'perHour')} {t(locale, 'plusPublicIp')})</span></Row>
             <Row k={t(locale, 'mtd')}>{spent === null ? '…' : money(spent, currency, locale)}</Row>
-            <p className="text-xs text-neutral-500">Billed by the hour while the server exists, capped at the monthly price. Stopping a server does not stop billing; delete it or take a snapshot first.</p>
+            <p className="text-xs text-neutral-500">{t(locale, 'costNote')}</p>
           </section>
           <section className="card space-y-2 text-sm md:col-span-2">
-            <h2 className="font-medium">Connect</h2>
-            <p className="text-neutral-500">Your SSH keys were added when the server was created.</p>
-            <pre className="overflow-x-auto rounded bg-neutral-900 p-3 font-mono text-xs text-neutral-100">{ip ? `ssh root@${ip}` : 'Waiting for the public IP…'}</pre>
-            <p className="text-neutral-500">From the CLI:</p>
+            <h2 className="font-medium">{t(locale, 'connect')}</h2>
+            <p className="text-neutral-500">{t(locale, 'connectNote')}</p>
+            <pre className="overflow-x-auto rounded bg-neutral-900 p-3 font-mono text-xs text-neutral-100">{ip ? `ssh root@${ip}` : t(locale, 'waitingIp')}</pre>
+            <p className="text-neutral-500">{t(locale, 'fromCli')}</p>
             <pre className="overflow-x-auto rounded bg-neutral-900 p-3 font-mono text-xs text-neutral-100">{`pgcloud servers get ${server.id}\npgcloud ssh ${server.name}`}</pre>
           </section>
         </div>
@@ -141,27 +141,27 @@ export default function ServerDetailPage() {
       {tab === 'power' && (
         <div className="grid gap-4 md:grid-cols-2">
           <section className="card space-y-3 text-sm">
-            <h2 className="font-medium">Power</h2>
-            <p className="text-neutral-500">Stop sends a clean shutdown signal. Force stop cuts power, like pulling the plug.</p>
+            <h2 className="font-medium">{t(locale, 'power')}</h2>
+            <p className="text-neutral-500">{t(locale, 'powerNote')}</p>
             <div className="flex flex-wrap gap-2">
               <button className="btn-ghost" disabled={busy || server.status !== 'off'} onClick={() => act({ type: 'start' })}>{t(locale, 'start')}</button>
               <button className="btn-ghost" disabled={busy || server.status !== 'active'} onClick={() => act({ type: 'reboot' })}>{t(locale, 'reboot')}</button>
               <button className="btn-ghost" disabled={busy || server.status !== 'active'} onClick={() => act({ type: 'stop' })}>{t(locale, 'stop')}</button>
-              <button className="btn-danger" disabled={busy || server.status !== 'active'} onClick={() => confirm('Force stop can corrupt files that are being written. Continue?') && act({ type: 'stop', force: true })}>Force stop</button>
+              <button className="btn-danger" disabled={busy || server.status !== 'active'} onClick={() => confirm(t(locale, 'forceStopConfirm')) && act({ type: 'stop', force: true })}>{t(locale, 'forceStop')}</button>
             </div>
           </section>
-          <ResizeCard server={server} sizes={sizes} prices={prices} currency={currency} locale={locale} busy={busy || !settled} onResize={(size) => act({ type: 'resize', size }, 'Resize started. The server restarts on the new size.')} />
+          <ResizeCard server={server} sizes={sizes} prices={prices} currency={currency} locale={locale} busy={busy || !settled} onResize={(size) => act({ type: 'resize', size }, t(locale, 'resizeStarted'))} />
           <section className="card space-y-3 text-sm">
-            <h2 className="font-medium">Rebuild</h2>
-            <p className="text-neutral-500">Reinstalls the operating system on the same disk and IP. Everything on the disk is erased.</p>
-            <form className="flex gap-2" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const image = new FormData(e.currentTarget).get('image'); if (confirm(`Erase this server and reinstall ${image}?`)) act({ type: 'rebuild', image }, 'Rebuild started.'); }}>
+            <h2 className="font-medium">{t(locale, 'rebuild')}</h2>
+            <p className="text-neutral-500">{t(locale, 'rebuildNote')}</p>
+            <form className="flex gap-2" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const image = new FormData(e.currentTarget).get('image'); if (confirm(tf(locale, 'rebuildConfirm')(String(image)))) act({ type: 'rebuild', image }, t(locale, 'rebuildStarted')); }}>
               <select name="image" className="input" defaultValue={server.image.id}>{images.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</select>
-              <button className="btn-danger whitespace-nowrap" disabled={busy || !settled}>Rebuild</button>
+              <button className="btn-danger whitespace-nowrap" disabled={busy || !settled}>{t(locale, 'rebuild')}</button>
             </form>
           </section>
           <section className="card space-y-3 text-sm">
-            <h2 className="font-medium text-red-700">Delete server</h2>
-            <p className="text-neutral-500">Removes the server, its disk and its public IP. Billing stops at the end of the hour. Snapshots are kept.</p>
+            <h2 className="font-medium text-red-700">{t(locale, 'deleteServer')}</h2>
+            <p className="text-neutral-500">{t(locale, 'deleteNote')}</p>
             <button className="btn-danger" disabled={busy || !settled} onClick={() => confirm(t(locale, 'confirmDelete')) && run(() => api(`/v1/servers/${id}`, { method: 'DELETE', idempotent: true }).then(() => router.replace('/servers')))}>{t(locale, 'delete')}</button>
           </section>
         </div>
@@ -170,28 +170,28 @@ export default function ServerDetailPage() {
       {tab === 'networking' && (
         <div className="grid gap-4 md:grid-cols-2">
           <section className="card space-y-2 text-sm">
-            <h2 className="font-medium">Addresses</h2>
+            <h2 className="font-medium">{t(locale, 'addresses')}</h2>
             <table className="w-full"><tbody>
               {server.networks.v4.map((a) => (
-                <tr key={a.ipAddress}><td className="py-1 font-mono">{a.ipAddress}</td><td className="py-1 text-neutral-500">{a.floating ? 'Reserved IP' : 'Public IPv4'}</td><td className="py-1 text-neutral-500">{a.reverseDns ?? ''}</td></tr>
+                <tr key={a.ipAddress}><td className="py-1 font-mono">{a.ipAddress}</td><td className="py-1 text-neutral-500">{t(locale, a.floating ? 'reservedIp' : 'publicIpv4')}</td><td className="py-1 text-neutral-500">{a.reverseDns ?? ''}</td></tr>
               ))}
               {server.networks.private.map((a) => (
-                <tr key={a.ipAddress}><td className="py-1 font-mono">{a.ipAddress}</td><td className="py-1 text-neutral-500">Private network</td><td /></tr>
+                <tr key={a.ipAddress}><td className="py-1 font-mono">{a.ipAddress}</td><td className="py-1 text-neutral-500">{t(locale, 'privateNetwork')}</td><td /></tr>
               ))}
             </tbody></table>
-            <p className="text-xs text-neutral-500">Reserved IPs and reverse DNS are managed under <Link href="/public-ips" className="text-blue-600 hover:underline">Public IPs</Link>.</p>
+            <p className="text-xs text-neutral-500">{t(locale, 'addressesNote')} <Link href="/public-ips" className="text-blue-600 hover:underline">{t(locale, 'publicIps')}</Link>.</p>
           </section>
           <section className="card space-y-3 text-sm">
             <h2 className="font-medium">{t(locale, 'firewalls')}</h2>
-            {firewalls.length === 0 && <p className="text-neutral-500">No firewalls yet. <Link href="/firewalls" className="text-blue-600 hover:underline">Create one</Link> to allow only the ports you need.</p>}
+            {firewalls.length === 0 && <p className="text-neutral-500">{t(locale, 'noFirewalls')} <Link href="/firewalls" className="text-blue-600 hover:underline">{t(locale, 'createOne')}</Link> {t(locale, 'noFirewallsTail')}</p>}
             {firewalls.map((f) => {
               const attached = server.firewalls.includes(f.id);
               return (
                 <div key={f.id} className="flex items-center gap-3 border-t border-neutral-100 pt-2 first:border-0 first:pt-0 dark:border-neutral-800">
                   <div className="flex-1"><Link href="/firewalls" className="font-medium hover:underline">{f.name}</Link><span className="ms-2 text-neutral-500">{f.rules.length} {t(locale, 'rules')}</span></div>
                   {attached
-                    ? <button className="btn-ghost" disabled={busy} onClick={() => run(() => api(`/v1/firewalls/${f.id}/servers/${id}`, { method: 'DELETE' }), `Detached ${f.name}.`)}>Detach</button>
-                    : <button className="btn-ghost" disabled={busy} onClick={() => run(() => api(`/v1/firewalls/${f.id}/servers`, { method: 'POST', body: JSON.stringify({ serverId: id }) }), `Attached ${f.name}.`)}>Attach</button>}
+                    ? <button className="btn-ghost" disabled={busy} onClick={() => run(() => api(`/v1/firewalls/${f.id}/servers/${id}`, { method: 'DELETE' }), tf(locale, 'detached')(f.name))}>{t(locale, 'detach')}</button>
+                    : <button className="btn-ghost" disabled={busy} onClick={() => run(() => api(`/v1/firewalls/${f.id}/servers`, { method: 'POST', body: JSON.stringify({ serverId: id }) }), tf(locale, 'attached')(f.name))}>{t(locale, 'attach')}</button>}
                 </div>
               );
             })}
@@ -203,19 +203,19 @@ export default function ServerDetailPage() {
         <section className="card space-y-3 text-sm">
           <div className="flex items-center gap-3">
             <h2 className="font-medium">{t(locale, 'snapshots')}</h2>
-            <form className="ms-auto flex gap-2" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const name = new FormData(e.currentTarget).get('name') || undefined; act({ type: 'snapshot', ...(name ? { name } : {}) }, 'Snapshot started.').then(loadSide); e.currentTarget.reset(); }}>
-              <input name="name" className="input max-w-[14rem]" placeholder="Snapshot name (optional)" />
-              <button className="btn-primary whitespace-nowrap" disabled={busy || !settled}>Take snapshot</button>
+            <form className="ms-auto flex gap-2" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const name = new FormData(e.currentTarget).get('name') || undefined; act({ type: 'snapshot', ...(name ? { name } : {}) }, t(locale, 'snapshotStarted')).then(loadSide); e.currentTarget.reset(); }}>
+              <input name="name" className="input max-w-[14rem]" placeholder={t(locale, 'snapshotName')} />
+              <button className="btn-primary whitespace-nowrap" disabled={busy || !settled}>{t(locale, 'takeSnapshot')}</button>
             </form>
           </div>
-          <p className="text-neutral-500">A snapshot copies the whole disk. Charged per GB per month at {money(priceOf('snapshot_gb')?.monthlyMinor ?? 0, currency, locale)}. Snapshots taken while the server runs may miss data still in memory.</p>
-          {snapshots.length === 0 ? <p className="text-neutral-500">No snapshots of this server yet.</p> : (
+          <p className="text-neutral-500">{tf(locale, 'snapshotNote')(money(priceOf('snapshot_gb')?.monthlyMinor ?? 0, currency, locale))}</p>
+          {snapshots.length === 0 ? <p className="text-neutral-500">{t(locale, 'noSnapshots')}</p> : (
             <table className="w-full"><tbody>
               {snapshots.map((s) => (
                 <tr key={s.id} className="border-t border-neutral-100 dark:border-neutral-800">
                   <td className="py-2 font-medium">{s.name}</td><td className="py-2"><StatusBadge status={s.status} /></td><td className="py-2">{s.sizeGb} GB</td>
                   <td className="py-2 text-neutral-500">{new Date(s.createdAt).toLocaleString(locale)}</td>
-                  <td className="py-2 text-end"><button className="btn-danger" disabled={busy} onClick={() => confirm('Delete this snapshot?') && run(() => api(`/v1/snapshots/${s.id}`, { method: 'DELETE' }).then(loadSide))}>{t(locale, 'delete')}</button></td>
+                  <td className="py-2 text-end"><button className="btn-danger" disabled={busy} onClick={() => confirm(t(locale, 'deleteSnapshotConfirm')) && run(() => api(`/v1/snapshots/${s.id}`, { method: 'DELETE' }).then(loadSide))}>{t(locale, 'delete')}</button></td>
                 </tr>
               ))}
             </tbody></table>
@@ -226,9 +226,9 @@ export default function ServerDetailPage() {
       {tab === 'activity' && (
         <section className="card p-0 text-sm">
           <table className="w-full">
-            <thead className="text-xs uppercase text-neutral-500"><tr><th className="px-4 py-2 text-start">Action</th><th className="px-4 py-2 text-start">{t(locale, 'status')}</th><th className="px-4 py-2 text-start">Started</th><th className="px-4 py-2 text-start">Took</th><th className="px-4 py-2 text-start">Notes</th></tr></thead>
+            <thead className="text-xs uppercase text-neutral-500"><tr><th className="px-4 py-2 text-start">{t(locale, 'action')}</th><th className="px-4 py-2 text-start">{t(locale, 'status')}</th><th className="px-4 py-2 text-start">{t(locale, 'started')}</th><th className="px-4 py-2 text-start">{t(locale, 'took')}</th><th className="px-4 py-2 text-start">{t(locale, 'notes')}</th></tr></thead>
             <tbody>
-              {actions.length === 0 && <tr><td className="px-4 py-3 text-neutral-500" colSpan={5}>Nothing yet.</td></tr>}
+              {actions.length === 0 && <tr><td className="px-4 py-3 text-neutral-500" colSpan={5}>{t(locale, 'nothingYet')}</td></tr>}
               {actions.map((a) => (
                 <tr key={a.id} className="border-t border-neutral-100 dark:border-neutral-800">
                   <td className="px-4 py-2 font-medium">{a.type}{a.params && <span className="ms-2 font-normal text-neutral-500">{Object.entries(a.params).filter(([k, v]) => k !== 'op' && v !== null && v !== undefined && v !== '' && v !== false).map(([k, v]) => `${k}=${v}`).join(' ')}</span>}</td>
@@ -240,7 +240,7 @@ export default function ServerDetailPage() {
               ))}
             </tbody>
           </table>
-          <p className="border-t border-neutral-100 px-4 py-2 text-xs text-neutral-500 dark:border-neutral-800">Who did what, including agent tokens, is in the <Link href="/audit" className="text-blue-600 hover:underline">audit log</Link>.</p>
+          <p className="border-t border-neutral-100 px-4 py-2 text-xs text-neutral-500 dark:border-neutral-800">{t(locale, 'auditNote')} <Link href="/audit" className="text-blue-600 hover:underline">{t(locale, 'auditLog')}</Link>.</p>
         </section>
       )}
     </div>
@@ -259,13 +259,13 @@ function ResizeCard({ server, sizes, prices, currency, locale, busy, onResize }:
   const shrinks = !!target && target.diskGb < server.size.diskGb;
   return (
     <section className="card space-y-3 text-sm">
-      <h2 className="font-medium">Resize</h2>
-      <p className="text-neutral-500">The server restarts on the new size. The disk can grow but never shrink.</p>
+      <h2 className="font-medium">{t(locale, 'resize')}</h2>
+      <p className="text-neutral-500">{t(locale, 'resizeNote')}</p>
       <select className="input" value={size} onChange={(e) => setSize(e.target.value)}>
         {sizes.map((s) => <option key={s.id} value={s.id} disabled={s.diskGb < server.size.diskGb}>{s.id} · {s.vcpu} vCPU · {s.memoryMb / 1024} GB · {s.diskGb} GB · {money(price(s.id), currency, locale)}{t(locale, 'perMonth')}</option>)}
       </select>
-      {size !== server.size.id && !shrinks && <p>{delta >= 0 ? '+' : ''}{money(delta, currency, locale)}{t(locale, 'perMonth')} compared with today.</p>}
-      <button className="btn-primary" disabled={busy || size === server.size.id || shrinks} onClick={() => confirm(`Resize ${server.name} to ${size}? It will restart.`) && onResize(size)}>Resize</button>
+      {size !== server.size.id && !shrinks && <p>{delta >= 0 ? '+' : ''}{money(delta, currency, locale)}{t(locale, 'perMonth')} {t(locale, 'comparedToday')}</p>}
+      <button className="btn-primary" disabled={busy || size === server.size.id || shrinks} onClick={() => confirm(tf(locale, 'resizeConfirm')(server.name, size)) && onResize(size)}>{t(locale, 'resize')}</button>
     </section>
   );
 }

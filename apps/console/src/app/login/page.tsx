@@ -50,8 +50,8 @@ export default function LoginPage() {
         <input className="input" name="password" type="password" placeholder={t(locale, 'password')} required minLength={10} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
         {needCode && (
           <div className="space-y-1">
-            <input className="input" name="totp" inputMode="numeric" placeholder="Authenticator code" autoFocus autoComplete="one-time-code" />
-            <p className="text-xs text-neutral-500">Enter the six digit code from your app, or one of your recovery codes.</p>
+            <input className="input" name="totp" inputMode="numeric" placeholder={t(locale, 'authCode')} autoFocus autoComplete="one-time-code" />
+            <p className="text-xs text-neutral-500">{t(locale, 'authCodeHint')}</p>
           </div>
         )}
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -60,7 +60,7 @@ export default function LoginPage() {
           <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setNeedCode(false); }}>
             {t(locale, mode === 'login' ? 'signup' : 'login')} →
           </button>
-          {mode === 'login' && <Link href="/forgot-password" className="hover:underline">Forgot password?</Link>}
+          {mode === 'login' && <Link href="/forgot-password" className="hover:underline">{t(locale, 'forgotPassword')}</Link>}
         </div>
       </form>
     </div>

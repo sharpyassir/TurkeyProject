@@ -1,57 +1,177 @@
-/** Minimal i18n: three launch languages, Arabic is RTL. Strings live here until we adopt next-intl. */
+/** Console strings in the three launch languages. Arabic is RTL. English is the source of truth. */
 export type Locale = 'en' | 'tr' | 'ar';
 
 export const RTL: Record<Locale, boolean> = { en: false, tr: false, ar: true };
 
-const dict = {
-  en: {
-    products: 'Products', servers: 'Servers', create: 'Create server', apps: 'Marketplace', billing: 'Billing', agents: 'Agents', signOut: 'Sign out',
-    name: 'Name', size: 'Size', image: 'Image', region: 'Region', status: 'Status', ip: 'Public IP', created: 'Created',
-    noServers: 'No servers yet. Create your first one. It takes about a minute.',
-    creating: 'Creating…', deploy: 'Deploy', perMonth: '/mo', perHour: '/hr',
-    login: 'Sign in', email: 'Email', password: 'Password', signup: 'Create account', teamName: 'Team name',
-    balance: 'Credit balance', mtd: 'Month to date', actions: 'Actions', stop: 'Stop', start: 'Start', reboot: 'Reboot', delete: 'Delete',
-    confirmDelete: 'Delete this server? This cannot be undone.', oneClick: 'One-click apps', distributions: 'Distributions',
-    comingSoon: 'Coming soon', interest: 'Notify me when this launches', interested: 'Thanks. We will let you know.',
-    agentTokens: 'Agent tokens', newAgentToken: 'Create agent token', spendCap: 'Monthly spend cap', requireApproval: 'Require human approval for',
-    scopes: 'Scopes', tokenShownOnce: 'Copy this token now. It is shown only once.', revoke: 'Revoke',
-    firewalls: 'Firewalls', rules: 'rules', attachedServers: 'servers', newFirewall: 'Create firewall',
-    snapshots: 'Snapshots', publicIps: 'Public IPs', webhooks: 'Webhooks', newWebhook: 'Add webhook', events: 'Events', url: 'URL',
-  },
-  tr: {
-    products: 'Ürünler', servers: 'Sunucular', create: 'Sunucu oluştur', apps: 'Uygulama Mağazası', billing: 'Faturalama', agents: 'Ajanlar', signOut: 'Çıkış',
-    name: 'Ad', size: 'Boyut', image: 'İmaj', region: 'Bölge', status: 'Durum', ip: 'Genel IP', created: 'Oluşturulma',
-    noServers: 'Henüz sunucu yok. İlk sunucunu oluştur. Yaklaşık bir dakika sürer.',
-    creating: 'Oluşturuluyor…', deploy: 'Kur', perMonth: '/ay', perHour: '/saat',
-    login: 'Giriş yap', email: 'E-posta', password: 'Şifre', signup: 'Hesap oluştur', teamName: 'Takım adı',
-    balance: 'Kredi bakiyesi', mtd: 'Bu ay', actions: 'İşlemler', stop: 'Durdur', start: 'Başlat', reboot: 'Yeniden başlat', delete: 'Sil',
-    confirmDelete: 'Bu sunucu silinsin mi? Geri alınamaz.', oneClick: 'Tek tıkla uygulamalar', distributions: 'Dağıtımlar',
-    comingSoon: 'Çok yakında', interest: 'Yayınlanınca haber ver', interested: 'Teşekkürler. Haber vereceğiz.',
-    agentTokens: 'Ajan tokenları', newAgentToken: 'Ajan tokenı oluştur', spendCap: 'Aylık harcama limiti', requireApproval: 'İnsan onayı gerektir',
-    scopes: 'Yetkiler', tokenShownOnce: 'Bu tokenı şimdi kopyala. Yalnızca bir kez gösterilir.', revoke: 'İptal et',
-    firewalls: 'Güvenlik duvarları', rules: 'kural', attachedServers: 'sunucu', newFirewall: 'Güvenlik duvarı oluştur',
-    snapshots: 'Anlık görüntüler', publicIps: 'Genel IP’ler', webhooks: 'Webhook’lar', newWebhook: 'Webhook ekle', events: 'Olaylar', url: 'URL',
-  },
-  ar: {
-    products: 'المنتجات', servers: 'الخوادم', create: 'إنشاء خادم', apps: 'المتجر', billing: 'الفوترة', agents: 'الوكلاء', signOut: 'تسجيل الخروج',
-    name: 'الاسم', size: 'الحجم', image: 'الصورة', region: 'المنطقة', status: 'الحالة', ip: 'IP عام', created: 'تاريخ الإنشاء',
-    noServers: 'لا توجد خوادم بعد. أنشئ أول خادم. يستغرق حوالي دقيقة.',
-    creating: 'جارٍ الإنشاء…', deploy: 'نشر', perMonth: '/شهر', perHour: '/ساعة',
-    login: 'تسجيل الدخول', email: 'البريد الإلكتروني', password: 'كلمة المرور', signup: 'إنشاء حساب', teamName: 'اسم الفريق',
-    balance: 'الرصيد', mtd: 'هذا الشهر', actions: 'إجراءات', stop: 'إيقاف', start: 'تشغيل', reboot: 'إعادة تشغيل', delete: 'حذف',
-    confirmDelete: 'حذف هذا الخادم؟ لا يمكن التراجع.', oneClick: 'تطبيقات بنقرة واحدة', distributions: 'التوزيعات',
-    comingSoon: 'قريبًا', interest: 'أعلمني عند الإطلاق', interested: 'شكرًا. سنعلمك.',
-    agentTokens: 'رموز الوكلاء', newAgentToken: 'إنشاء رمز وكيل', spendCap: 'حد الإنفاق الشهري', requireApproval: 'يتطلب موافقة بشرية لـ',
-    scopes: 'الصلاحيات', tokenShownOnce: 'انسخ هذا الرمز الآن. يُعرض مرة واحدة فقط.', revoke: 'إلغاء',
-    firewalls: 'جدران الحماية', rules: 'قواعد', attachedServers: 'خوادم', newFirewall: 'إنشاء جدار حماية',
-    snapshots: 'اللقطات', publicIps: 'عناوين IP العامة', webhooks: 'Webhooks', newWebhook: 'إضافة webhook', events: 'الأحداث', url: 'الرابط',
-  },
-} as const;
+const en = {
+  // shell and nav
+  products: 'Products', servers: 'Servers', create: 'Create server', apps: 'Marketplace', billing: 'Billing', agents: 'Agents', signOut: 'Sign out',
+  groupProjects: 'Projects', groupAgents: 'Managed Agents', groupInference: 'Inference Engine', groupData: 'Data & Learning', groupCore: 'Core Cloud', groupMarketplace: 'Marketplace', groupSecurity: 'Security',
+  menu: 'Menu', close: 'Close', loading: 'Loading…', back: 'Back', cancel: 'Cancel', save: 'Save', confirm: 'Confirm',
+  // servers
+  name: 'Name', size: 'Size', image: 'Image', region: 'Region', status: 'Status', ip: 'Public IP', created: 'Created',
+  noServers: 'No servers yet. Create your first one. It takes about a minute.',
+  creating: 'Creating…', deploy: 'Deploy', perMonth: '/mo', perHour: '/hr',
+  actions: 'Actions', stop: 'Stop', start: 'Start', reboot: 'Reboot', delete: 'Delete', forceStop: 'Force stop', resize: 'Resize', rebuild: 'Rebuild',
+  confirmDelete: 'Delete this server? This cannot be undone.',
+  approvalsWaiting: (n: number) => `${n} agent ${n === 1 ? 'request is' : 'requests are'} waiting for your approval →`,
+  // server detail
+  tabOverview: 'Overview', tabPower: 'Power and resize', tabNetworking: 'Networking', tabSnapshots: 'Snapshots', tabActivity: 'Activity',
+  details: 'Details', cost: 'Cost', price: 'Price', privateIp: 'Private IP', backups: 'Backups', on: 'On', off: 'Off', tags: 'Tags',
+  plusPublicIp: 'plus the public IP', costNote: 'Billed by the hour while the server exists, capped at the monthly price. Stopping a server does not stop billing; delete it or take a snapshot first.',
+  connect: 'Connect', connectNote: 'Your SSH keys were added when the server was created.', waitingIp: 'Waiting for the public IP…', fromCli: 'From the CLI:',
+  power: 'Power', powerNote: 'Stop sends a clean shutdown signal. Force stop cuts power, like pulling the plug.', forceStopConfirm: 'Force stop can corrupt files that are being written. Continue?',
+  resizeNote: 'The server restarts on the new size. The disk can grow but never shrink.', comparedToday: 'compared with today.', resizeConfirm: (name: string, size: string) => `Resize ${name} to ${size}? It will restart.`, resizeStarted: 'Resize started. The server restarts on the new size.',
+  rebuildNote: 'Reinstalls the operating system on the same disk and IP. Everything on the disk is erased.', rebuildConfirm: (image: string) => `Erase this server and reinstall ${image}?`, rebuildStarted: 'Rebuild started.',
+  deleteServer: 'Delete server', deleteNote: 'Removes the server, its disk and its public IP. Billing stops at the end of the hour. Snapshots are kept.',
+  addresses: 'Addresses', reservedIp: 'Reserved IP', publicIpv4: 'Public IPv4', privateNetwork: 'Private network', addressesNote: 'Reserved IPs and reverse DNS are managed under', attach: 'Attach', detach: 'Detach',
+  noFirewalls: 'No firewalls yet.', createOne: 'Create one', noFirewallsTail: 'to allow only the ports you need.', attached: (n: string) => `Attached ${n}.`, detached: (n: string) => `Detached ${n}.`,
+  snapshotName: 'Snapshot name (optional)', takeSnapshot: 'Take snapshot', snapshotStarted: 'Snapshot started.', snapshotNote: (price: string) => `A snapshot copies the whole disk. Charged per GB per month at ${price}. Snapshots taken while the server runs may miss data still in memory.`, noSnapshots: 'No snapshots of this server yet.', deleteSnapshotConfirm: 'Delete this snapshot?',
+  action: 'Action', started: 'Started', took: 'Took', notes: 'Notes', nothingYet: 'Nothing yet.', auditNote: 'Who did what, including agent tokens, is in the', auditLog: 'audit log',
+  // auth
+  login: 'Sign in', email: 'Email', password: 'Password', signup: 'Create account', teamName: 'Team name', forgotPassword: 'Forgot password?',
+  authCode: 'Authenticator code', authCodeHint: 'Enter the six digit code from your app, or one of your recovery codes.',
+  resetTitle: 'Reset your password', resetLead: 'Enter your email and we will send you a link. It stays valid for one hour.', resetSent: 'If an account exists for that address, the email is on its way. Check your inbox and spam folder.', sendResetLink: 'Send reset link', backToSignIn: 'Back to sign in',
+  newPasswordTitle: 'Choose a new password', newPassword: 'New password (10 characters or more)', repeatPassword: 'Repeat the new password', passwordsDiffer: 'The two passwords do not match.', passwordChanged: 'Your password has been changed.', changePassword: 'Change password', missingToken: 'This link is missing its token.', requestNew: 'request a new one',
+  verifyTitle: 'Email confirmation', verifying: 'Confirming your email…', verified: 'Your email is confirmed. You can create servers now.', continue: 'Continue', verifyFailedHint: 'Sign in and open Security to request a new link.',
+  // security
+  security: 'Security', welcomeSecurity: 'Welcome. Confirm your email from the message we just sent, and set up two factor sign in below to protect your account.',
+  confirmed: 'confirmed', notConfirmed: 'not confirmed', needConfirmed: 'You need a confirmed email before you can create servers.', sendAgain: 'Send the link again', sentAgain: 'We sent you a new confirmation link.',
+  twoFactor: 'Two factor sign in', twoFactorOn: 'On. Sign in asks for a code from your authenticator app.', codeToTurnOff: 'Code to turn off', turnOff: 'Turn off', twoFactorOff: 'Two factor sign in is off.',
+  twoFactorOffOwner: 'Off. Team owners are required to turn this on.', twoFactorOffMember: 'Off. We recommend turning this on.', setUp: 'Set up',
+  scanStep: '1. Scan this code with Google Authenticator, 1Password, Authy or any TOTP app.', typeKey: 'Or type the key by hand:', confirmStep: '2. Enter the six digit code the app shows to confirm.',
+  recoveryTitle: 'Save these recovery codes now. They are shown only once. Each one signs you in a single time if you lose your device.',
+  rateLimits: 'API rate limits', rateLimitsNote: 'Each token or session may make 600 requests per minute. Sign in attempts are limited to 10 per minute per address. Responses over the limit return status 429 with a Retry-After header.',
+  // approvals
+  approvalQueue: 'Approval queue', approvalsLead: 'Agent tokens with approval rules park these actions here. Nothing runs until a team owner or admin approves it. Requests expire after 24 hours. Set the rules per token under', agentAccess: 'Agent Access',
+  waitingForYou: 'Waiting for you', nothingWaiting: 'Nothing is waiting. Agents can keep working within their scopes and spending caps.',
+  requestedByToken: 'Requested by token', expires: 'Expires', server: 'Server', approveRun: 'Approve and run', deny: 'Deny', history: 'History',
+  denyReasonPrompt: 'Tell the agent why (optional):', approveConfirm: (s: string) => `Approve and run now: ${s}?`, deletedToken: 'deleted token',
+  // billing
+  balance: 'Credit balance', mtd: 'Month to date',
+  // marketplace and catalog
+  oneClick: 'One-click apps', distributions: 'Distributions', comingSoon: 'Coming soon', interest: 'Notify me when this launches', interested: 'Thanks. We will let you know.',
+  // agents
+  agentTokens: 'Agent tokens', newAgentToken: 'Create agent token', spendCap: 'Monthly spend cap', requireApproval: 'Require human approval for',
+  scopes: 'Scopes', tokenShownOnce: 'Copy this token now. It is shown only once.', revoke: 'Revoke',
+  // network and storage
+  firewalls: 'Firewalls', rules: 'rules', attachedServers: 'servers', newFirewall: 'Create firewall',
+  snapshots: 'Snapshots', publicIps: 'Public IPs', webhooks: 'Webhooks', newWebhook: 'Add webhook', events: 'Events', url: 'URL',
+};
 
-export type Key = keyof typeof dict.en;
+type Dict = { [K in keyof typeof en]: (typeof en)[K] };
 
-export function t(locale: Locale, key: Key): string {
+const tr: Dict = {
+  products: 'Ürünler', servers: 'Sunucular', create: 'Sunucu oluştur', apps: 'Uygulama Mağazası', billing: 'Faturalama', agents: 'Ajanlar', signOut: 'Çıkış',
+  groupProjects: 'Projeler', groupAgents: 'Yönetilen Ajanlar', groupInference: 'Çıkarım Motoru', groupData: 'Veri ve Öğrenme', groupCore: 'Çekirdek Bulut', groupMarketplace: 'Uygulama Mağazası', groupSecurity: 'Güvenlik',
+  menu: 'Menü', close: 'Kapat', loading: 'Yükleniyor…', back: 'Geri', cancel: 'Vazgeç', save: 'Kaydet', confirm: 'Onayla',
+  name: 'Ad', size: 'Boyut', image: 'İmaj', region: 'Bölge', status: 'Durum', ip: 'Genel IP', created: 'Oluşturulma',
+  noServers: 'Henüz sunucu yok. İlk sunucunu oluştur. Yaklaşık bir dakika sürer.',
+  creating: 'Oluşturuluyor…', deploy: 'Kur', perMonth: '/ay', perHour: '/saat',
+  actions: 'İşlemler', stop: 'Durdur', start: 'Başlat', reboot: 'Yeniden başlat', delete: 'Sil', forceStop: 'Zorla durdur', resize: 'Boyutlandır', rebuild: 'Yeniden kur',
+  confirmDelete: 'Bu sunucu silinsin mi? Geri alınamaz.',
+  approvalsWaiting: (n) => `${n} ajan isteği onayınızı bekliyor →`,
+  tabOverview: 'Genel bakış', tabPower: 'Güç ve boyut', tabNetworking: 'Ağ', tabSnapshots: 'Anlık görüntüler', tabActivity: 'Etkinlik',
+  details: 'Ayrıntılar', cost: 'Maliyet', price: 'Fiyat', privateIp: 'Özel IP', backups: 'Yedekler', on: 'Açık', off: 'Kapalı', tags: 'Etiketler',
+  plusPublicIp: 'artı genel IP', costNote: 'Sunucu var olduğu sürece saatlik faturalanır, aylık fiyatla sınırlıdır. Sunucuyu durdurmak faturalamayı durdurmaz; silin ya da önce anlık görüntü alın.',
+  connect: 'Bağlan', connectNote: 'SSH anahtarlarınız sunucu oluşturulurken eklendi.', waitingIp: 'Genel IP bekleniyor…', fromCli: 'Komut satırından:',
+  power: 'Güç', powerNote: 'Durdur temiz bir kapatma sinyali gönderir. Zorla durdur fişi çekmek gibi gücü keser.', forceStopConfirm: 'Zorla durdurmak yazılmakta olan dosyaları bozabilir. Devam edilsin mi?',
+  resizeNote: 'Sunucu yeni boyutta yeniden başlar. Disk büyüyebilir ama asla küçülemez.', comparedToday: 'bugüne göre.', resizeConfirm: (name, size) => `${name} ${size} boyutuna getirilsin mi? Yeniden başlayacak.`, resizeStarted: 'Boyutlandırma başladı. Sunucu yeni boyutta yeniden başlıyor.',
+  rebuildNote: 'İşletim sistemini aynı disk ve IP üzerine yeniden kurar. Diskteki her şey silinir.', rebuildConfirm: (image) => `Bu sunucu silinip ${image} yeniden kurulsun mu?`, rebuildStarted: 'Yeniden kurulum başladı.',
+  deleteServer: 'Sunucuyu sil', deleteNote: 'Sunucuyu, diskini ve genel IP’sini kaldırır. Faturalama saat sonunda durur. Anlık görüntüler saklanır.',
+  addresses: 'Adresler', reservedIp: 'Ayrılmış IP', publicIpv4: 'Genel IPv4', privateNetwork: 'Özel ağ', addressesNote: 'Ayrılmış IP’ler ve ters DNS şurada yönetilir:', attach: 'Bağla', detach: 'Ayır',
+  noFirewalls: 'Henüz güvenlik duvarı yok.', createOne: 'Bir tane oluşturun', noFirewallsTail: 've yalnızca gereken portlara izin verin.', attached: (n) => `${n} bağlandı.`, detached: (n) => `${n} ayrıldı.`,
+  snapshotName: 'Anlık görüntü adı (isteğe bağlı)', takeSnapshot: 'Anlık görüntü al', snapshotStarted: 'Anlık görüntü başladı.', snapshotNote: (price) => `Anlık görüntü tüm diski kopyalar. GB başına aylık ${price} ücretlendirilir. Sunucu çalışırken alınan görüntüler bellekteki verileri kaçırabilir.`, noSnapshots: 'Bu sunucunun anlık görüntüsü yok.', deleteSnapshotConfirm: 'Bu anlık görüntü silinsin mi?',
+  action: 'İşlem', started: 'Başlangıç', took: 'Süre', notes: 'Notlar', nothingYet: 'Henüz bir şey yok.', auditNote: 'Ajan tokenları dahil kimin ne yaptığı şurada:', auditLog: 'denetim kaydı',
+  login: 'Giriş yap', email: 'E-posta', password: 'Şifre', signup: 'Hesap oluştur', teamName: 'Takım adı', forgotPassword: 'Şifremi unuttum',
+  authCode: 'Doğrulama kodu', authCodeHint: 'Uygulamanızdaki altı haneli kodu ya da kurtarma kodlarınızdan birini girin.',
+  resetTitle: 'Şifrenizi sıfırlayın', resetLead: 'E-postanızı girin, size bir bağlantı gönderelim. Bir saat geçerlidir.', resetSent: 'Bu adrese ait bir hesap varsa e-posta yolda. Gelen kutunuzu ve spam klasörünü kontrol edin.', sendResetLink: 'Sıfırlama bağlantısı gönder', backToSignIn: 'Girişe dön',
+  newPasswordTitle: 'Yeni bir şifre seçin', newPassword: 'Yeni şifre (en az 10 karakter)', repeatPassword: 'Yeni şifreyi tekrar girin', passwordsDiffer: 'İki şifre eşleşmiyor.', passwordChanged: 'Şifreniz değiştirildi.', changePassword: 'Şifreyi değiştir', missingToken: 'Bu bağlantıda token eksik.', requestNew: 'yeni bir tane isteyin',
+  verifyTitle: 'E-posta doğrulama', verifying: 'E-postanız doğrulanıyor…', verified: 'E-postanız doğrulandı. Artık sunucu oluşturabilirsiniz.', continue: 'Devam', verifyFailedHint: 'Giriş yapıp Güvenlik sayfasından yeni bir bağlantı isteyin.',
+  security: 'Güvenlik', welcomeSecurity: 'Hoş geldiniz. Az önce gönderdiğimiz e-postadan adresinizi doğrulayın ve hesabınızı korumak için aşağıdan iki adımlı girişi kurun.',
+  confirmed: 'doğrulandı', notConfirmed: 'doğrulanmadı', needConfirmed: 'Sunucu oluşturabilmek için doğrulanmış bir e-posta gerekir.', sendAgain: 'Bağlantıyı yeniden gönder', sentAgain: 'Size yeni bir doğrulama bağlantısı gönderdik.',
+  twoFactor: 'İki adımlı giriş', twoFactorOn: 'Açık. Girişte doğrulama uygulamanızdaki kod istenir.', codeToTurnOff: 'Kapatmak için kod', turnOff: 'Kapat', twoFactorOff: 'İki adımlı giriş kapalı.',
+  twoFactorOffOwner: 'Kapalı. Takım sahiplerinin bunu açması zorunludur.', twoFactorOffMember: 'Kapalı. Açmanızı öneririz.', setUp: 'Kur',
+  scanStep: '1. Bu kodu Google Authenticator, 1Password, Authy ya da herhangi bir TOTP uygulamasıyla tarayın.', typeKey: 'Ya da anahtarı elle girin:', confirmStep: '2. Uygulamanın gösterdiği altı haneli kodu girerek onaylayın.',
+  recoveryTitle: 'Bu kurtarma kodlarını şimdi kaydedin. Yalnızca bir kez gösterilir. Cihazınızı kaybederseniz her biri bir kez giriş sağlar.',
+  rateLimits: 'API istek limitleri', rateLimitsNote: 'Her token veya oturum dakikada 600 istek yapabilir. Giriş denemeleri adres başına dakikada 10 ile sınırlıdır. Limit aşımında 429 durumu ve Retry-After başlığı döner.',
+  approvalQueue: 'Onay kuyruğu', approvalsLead: 'Onay kuralı olan ajan tokenları bu işlemleri burada bekletir. Takım sahibi ya da yönetici onaylayana kadar hiçbir şey çalışmaz. İstekler 24 saat sonra sona erer. Kuralları token bazında şurada ayarlayın:', agentAccess: 'Ajan Erişimi',
+  waitingForYou: 'Sizi bekleyenler', nothingWaiting: 'Bekleyen istek yok. Ajanlar yetkileri ve harcama limitleri içinde çalışmaya devam edebilir.',
+  requestedByToken: 'İsteyen token', expires: 'Sona erme', server: 'Sunucu', approveRun: 'Onayla ve çalıştır', deny: 'Reddet', history: 'Geçmiş',
+  denyReasonPrompt: 'Ajana nedenini söyleyin (isteğe bağlı):', approveConfirm: (s) => `Şimdi onaylanıp çalıştırılsın mı: ${s}?`, deletedToken: 'silinmiş token',
+  balance: 'Kredi bakiyesi', mtd: 'Bu ay',
+  oneClick: 'Tek tıkla uygulamalar', distributions: 'Dağıtımlar', comingSoon: 'Çok yakında', interest: 'Yayınlanınca haber ver', interested: 'Teşekkürler. Haber vereceğiz.',
+  agentTokens: 'Ajan tokenları', newAgentToken: 'Ajan tokenı oluştur', spendCap: 'Aylık harcama limiti', requireApproval: 'İnsan onayı gerektir',
+  scopes: 'Yetkiler', tokenShownOnce: 'Bu tokenı şimdi kopyala. Yalnızca bir kez gösterilir.', revoke: 'İptal et',
+  firewalls: 'Güvenlik duvarları', rules: 'kural', attachedServers: 'sunucu', newFirewall: 'Güvenlik duvarı oluştur',
+  snapshots: 'Anlık görüntüler', publicIps: 'Genel IP’ler', webhooks: 'Webhook’lar', newWebhook: 'Webhook ekle', events: 'Olaylar', url: 'URL',
+};
+
+const ar: Dict = {
+  products: 'المنتجات', servers: 'الخوادم', create: 'إنشاء خادم', apps: 'المتجر', billing: 'الفوترة', agents: 'الوكلاء', signOut: 'تسجيل الخروج',
+  groupProjects: 'المشاريع', groupAgents: 'الوكلاء المُدارون', groupInference: 'محرك الاستدلال', groupData: 'البيانات والتعلم', groupCore: 'السحابة الأساسية', groupMarketplace: 'المتجر', groupSecurity: 'الأمان',
+  menu: 'القائمة', close: 'إغلاق', loading: 'جارٍ التحميل…', back: 'رجوع', cancel: 'إلغاء', save: 'حفظ', confirm: 'تأكيد',
+  name: 'الاسم', size: 'الحجم', image: 'الصورة', region: 'المنطقة', status: 'الحالة', ip: 'IP عام', created: 'تاريخ الإنشاء',
+  noServers: 'لا توجد خوادم بعد. أنشئ أول خادم. يستغرق حوالي دقيقة.',
+  creating: 'جارٍ الإنشاء…', deploy: 'نشر', perMonth: '/شهر', perHour: '/ساعة',
+  actions: 'إجراءات', stop: 'إيقاف', start: 'تشغيل', reboot: 'إعادة تشغيل', delete: 'حذف', forceStop: 'إيقاف قسري', resize: 'تغيير الحجم', rebuild: 'إعادة بناء',
+  confirmDelete: 'حذف هذا الخادم؟ لا يمكن التراجع.',
+  approvalsWaiting: (n) => `${n} من طلبات الوكلاء بانتظار موافقتك ←`,
+  tabOverview: 'نظرة عامة', tabPower: 'الطاقة والحجم', tabNetworking: 'الشبكة', tabSnapshots: 'اللقطات', tabActivity: 'النشاط',
+  details: 'التفاصيل', cost: 'التكلفة', price: 'السعر', privateIp: 'IP خاص', backups: 'النسخ الاحتياطي', on: 'مفعّل', off: 'معطّل', tags: 'الوسوم',
+  plusPublicIp: 'بالإضافة إلى عنوان IP العام', costNote: 'يُفوتر بالساعة ما دام الخادم موجودًا، بسقف السعر الشهري. إيقاف الخادم لا يوقف الفوترة؛ احذفه أو خذ لقطة أولًا.',
+  connect: 'الاتصال', connectNote: 'أُضيفت مفاتيح SSH الخاصة بك عند إنشاء الخادم.', waitingIp: 'بانتظار عنوان IP العام…', fromCli: 'من سطر الأوامر:',
+  power: 'الطاقة', powerNote: 'الإيقاف يرسل إشارة إغلاق نظيفة. الإيقاف القسري يقطع الطاقة كنزع القابس.', forceStopConfirm: 'قد يُتلف الإيقاف القسري الملفات قيد الكتابة. المتابعة؟',
+  resizeNote: 'يُعاد تشغيل الخادم بالحجم الجديد. يمكن للقرص أن يكبر لكنه لا يصغر أبدًا.', comparedToday: 'مقارنة باليوم.', resizeConfirm: (name, size) => `تغيير حجم ${name} إلى ${size}؟ سيُعاد تشغيله.`, resizeStarted: 'بدأ تغيير الحجم. يُعاد تشغيل الخادم بالحجم الجديد.',
+  rebuildNote: 'يعيد تثبيت نظام التشغيل على نفس القرص والعنوان. يُمحى كل ما على القرص.', rebuildConfirm: (image) => `محو هذا الخادم وإعادة تثبيت ${image}؟`, rebuildStarted: 'بدأت إعادة البناء.',
+  deleteServer: 'حذف الخادم', deleteNote: 'يزيل الخادم وقرصه وعنوان IP العام. تتوقف الفوترة في نهاية الساعة. تُحفظ اللقطات.',
+  addresses: 'العناوين', reservedIp: 'IP محجوز', publicIpv4: 'IPv4 عام', privateNetwork: 'شبكة خاصة', addressesNote: 'تُدار عناوين IP المحجوزة وDNS العكسي في', attach: 'ربط', detach: 'فصل',
+  noFirewalls: 'لا توجد جدران حماية بعد.', createOne: 'أنشئ واحدًا', noFirewallsTail: 'للسماح بالمنافذ التي تحتاجها فقط.', attached: (n) => `تم ربط ${n}.`, detached: (n) => `تم فصل ${n}.`,
+  snapshotName: 'اسم اللقطة (اختياري)', takeSnapshot: 'أخذ لقطة', snapshotStarted: 'بدأت اللقطة.', snapshotNote: (price) => `اللقطة تنسخ القرص كاملًا. تُحتسب ${price} لكل GB شهريًا. اللقطات المأخوذة أثناء عمل الخادم قد تفوّت بيانات في الذاكرة.`, noSnapshots: 'لا توجد لقطات لهذا الخادم بعد.', deleteSnapshotConfirm: 'حذف هذه اللقطة؟',
+  action: 'الإجراء', started: 'البداية', took: 'المدة', notes: 'ملاحظات', nothingYet: 'لا شيء بعد.', auditNote: 'من فعل ماذا، بما في ذلك رموز الوكلاء، موجود في', auditLog: 'سجل التدقيق',
+  login: 'تسجيل الدخول', email: 'البريد الإلكتروني', password: 'كلمة المرور', signup: 'إنشاء حساب', teamName: 'اسم الفريق', forgotPassword: 'نسيت كلمة المرور؟',
+  authCode: 'رمز المصادقة', authCodeHint: 'أدخل الرمز المكوّن من ستة أرقام من تطبيقك، أو أحد رموز الاسترداد.',
+  resetTitle: 'إعادة تعيين كلمة المرور', resetLead: 'أدخل بريدك وسنرسل لك رابطًا. يبقى صالحًا لساعة واحدة.', resetSent: 'إذا كان هناك حساب لهذا العنوان، فالبريد في الطريق. تحقق من صندوق الوارد والبريد المزعج.', sendResetLink: 'إرسال رابط إعادة التعيين', backToSignIn: 'العودة لتسجيل الدخول',
+  newPasswordTitle: 'اختر كلمة مرور جديدة', newPassword: 'كلمة مرور جديدة (10 أحرف أو أكثر)', repeatPassword: 'أعد كتابة كلمة المرور الجديدة', passwordsDiffer: 'كلمتا المرور غير متطابقتين.', passwordChanged: 'تم تغيير كلمة المرور.', changePassword: 'تغيير كلمة المرور', missingToken: 'هذا الرابط ينقصه الرمز.', requestNew: 'اطلب رابطًا جديدًا',
+  verifyTitle: 'تأكيد البريد الإلكتروني', verifying: 'جارٍ تأكيد بريدك…', verified: 'تم تأكيد بريدك. يمكنك إنشاء الخوادم الآن.', continue: 'متابعة', verifyFailedHint: 'سجّل الدخول وافتح صفحة الأمان لطلب رابط جديد.',
+  security: 'الأمان', welcomeSecurity: 'مرحبًا. أكّد بريدك من الرسالة التي أرسلناها للتو، وفعّل تسجيل الدخول بخطوتين أدناه لحماية حسابك.',
+  confirmed: 'مؤكد', notConfirmed: 'غير مؤكد', needConfirmed: 'تحتاج إلى بريد مؤكد قبل إنشاء الخوادم.', sendAgain: 'إرسال الرابط مجددًا', sentAgain: 'أرسلنا لك رابط تأكيد جديدًا.',
+  twoFactor: 'تسجيل الدخول بخطوتين', twoFactorOn: 'مفعّل. يطلب تسجيل الدخول رمزًا من تطبيق المصادقة.', codeToTurnOff: 'رمز للتعطيل', turnOff: 'تعطيل', twoFactorOff: 'تسجيل الدخول بخطوتين معطّل.',
+  twoFactorOffOwner: 'معطّل. يجب على مالكي الفريق تفعيله.', twoFactorOffMember: 'معطّل. ننصح بتفعيله.', setUp: 'إعداد',
+  scanStep: '1. امسح هذا الرمز بتطبيق Google Authenticator أو 1Password أو Authy أو أي تطبيق TOTP.', typeKey: 'أو اكتب المفتاح يدويًا:', confirmStep: '2. أدخل الرمز المكوّن من ستة أرقام الذي يعرضه التطبيق للتأكيد.',
+  recoveryTitle: 'احفظ رموز الاسترداد هذه الآن. تُعرض مرة واحدة فقط. كل رمز يسجّل دخولك مرة واحدة إذا فقدت جهازك.',
+  rateLimits: 'حدود طلبات API', rateLimitsNote: 'يمكن لكل رمز أو جلسة إجراء 600 طلب في الدقيقة. محاولات تسجيل الدخول محدودة بـ 10 في الدقيقة لكل عنوان. الردود فوق الحد تعيد الحالة 429 مع ترويسة Retry-After.',
+  approvalQueue: 'قائمة الموافقات', approvalsLead: 'رموز الوكلاء ذات قواعد الموافقة تُوقف هذه الإجراءات هنا. لا يعمل شيء حتى يوافق مالك الفريق أو المدير. تنتهي الطلبات بعد 24 ساعة. اضبط القواعد لكل رمز في', agentAccess: 'وصول الوكلاء',
+  waitingForYou: 'بانتظارك', nothingWaiting: 'لا شيء بالانتظار. يمكن للوكلاء مواصلة العمل ضمن صلاحياتهم وحدود إنفاقهم.',
+  requestedByToken: 'طلبه الرمز', expires: 'ينتهي', server: 'الخادم', approveRun: 'موافقة وتشغيل', deny: 'رفض', history: 'السجل',
+  denyReasonPrompt: 'أخبر الوكيل بالسبب (اختياري):', approveConfirm: (s) => `الموافقة والتشغيل الآن: ${s}؟`, deletedToken: 'رمز محذوف',
+  balance: 'الرصيد', mtd: 'هذا الشهر',
+  oneClick: 'تطبيقات بنقرة واحدة', distributions: 'التوزيعات', comingSoon: 'قريبًا', interest: 'أعلمني عند الإطلاق', interested: 'شكرًا. سنعلمك.',
+  agentTokens: 'رموز الوكلاء', newAgentToken: 'إنشاء رمز وكيل', spendCap: 'حد الإنفاق الشهري', requireApproval: 'يتطلب موافقة بشرية لـ',
+  scopes: 'الصلاحيات', tokenShownOnce: 'انسخ هذا الرمز الآن. يُعرض مرة واحدة فقط.', revoke: 'إلغاء',
+  firewalls: 'جدران الحماية', rules: 'قواعد', attachedServers: 'خوادم', newFirewall: 'إنشاء جدار حماية',
+  snapshots: 'اللقطات', publicIps: 'عناوين IP العامة', webhooks: 'Webhooks', newWebhook: 'إضافة webhook', events: 'الأحداث', url: 'الرابط',
+};
+
+const dict: Record<Locale, Dict> = { en, tr, ar };
+
+export type Key = keyof Dict;
+type StringKey = { [K in Key]: Dict[K] extends string ? K : never }[Key];
+
+/** Plain string lookup. Falls back to English when a translation is missing. */
+export function t(locale: Locale, key: StringKey): string {
+  return (dict[locale][key] as string) ?? (dict.en[key] as string);
+}
+
+/** Lookup for strings that take arguments, e.g. `tf(locale, 'resizeConfirm')(name, size)`. */
+export function tf<K extends Key>(locale: Locale, key: K): Dict[K] {
   return dict[locale][key] ?? dict.en[key];
+}
+
+/** Product group names live in products.ts as English identifiers; this maps them for display. */
+export function groupLabel(locale: Locale, group: string): string {
+  const map: Record<string, StringKey> = { Projects: 'groupProjects', 'Managed Agents': 'groupAgents', 'Inference Engine': 'groupInference', 'Data & Learning': 'groupData', 'Core Cloud': 'groupCore', Marketplace: 'groupMarketplace', Security: 'groupSecurity' };
+  return map[group] ? t(locale, map[group]) : group;
 }
 
 export function getLocale(): Locale {

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { api, Server } from '@/lib/api';
-import { t } from '@/lib/i18n';
+import { t, tf } from '@/lib/i18n';
 import { useShell } from '@/components/shell';
 import { StatusBadge } from '@/components/status-badge';
 
@@ -41,7 +41,7 @@ export default function ServersPage() {
         <h1 className="text-xl font-semibold">{t(locale, 'servers')}</h1>
         <Link href="/servers/new" className="btn-primary ms-auto">{t(locale, 'create')}</Link>
       </div>
-      {pending > 0 && <Link href="/approvals" className="mb-4 block rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-200">{pending} agent {pending === 1 ? 'request is' : 'requests are'} waiting for your approval →</Link>}
+      {pending > 0 && <Link href="/approvals" className="mb-4 block rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-200">{tf(locale, 'approvalsWaiting')(pending)}</Link>}
       {servers && servers.length === 0 && <p className="card text-neutral-500">{t(locale, 'noServers')}</p>}
       {servers && servers.length > 0 && (
         <div className="card overflow-x-auto p-0">
