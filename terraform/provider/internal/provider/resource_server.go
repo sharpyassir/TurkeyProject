@@ -30,6 +30,7 @@ type serverModel struct {
 	Tags      types.List   `tfsdk:"tags"`
 	UserData  types.String `tfsdk:"user_data"`
 	Backups   types.Bool   `tfsdk:"backups"`
+	Managed   types.Bool   `tfsdk:"managed"`
 	Status    types.String `tfsdk:"status"`
 	IPv4      types.String `tfsdk:"ipv4_address"`
 	PrivateIP types.String `tfsdk:"private_ip"`
@@ -57,6 +58,7 @@ func (r *serverResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"tags":         schema.ListAttribute{ElementType: types.StringType, Optional: true},
 			"user_data":    schema.StringAttribute{Optional: true, PlanModifiers: forceNew, Description: "cloud-init user data."},
 			"backups":      schema.BoolAttribute{Optional: true},
+			"managed":      schema.BoolAttribute{Optional: true, Description: "Managed tier: patched, hardened and watched, daily backups included."},
 			"status":       schema.StringAttribute{Computed: true},
 			"ipv4_address": schema.StringAttribute{Computed: true},
 			"private_ip":   schema.StringAttribute{Computed: true},
@@ -83,6 +85,9 @@ func (r *serverResource) Create(ctx context.Context, req resource.CreateRequest,
 	setIf(body, "userData", m.UserData)
 	if !m.Backups.IsNull() {
 		body["backups"] = m.Backups.ValueBool()
+	}
+	if !m.Managed.IsNull() {
+		body["managed"] = m.Managed.ValueBool()
 	}
 	for k, l := range map[string]types.List{"sshKeys": m.SshKeys, "firewalls": m.Firewalls, "tags": m.Tags} {
 		if v := strings(ctx, l); v != nil {
@@ -160,6 +165,22 @@ func (r *serverResource) Update(ctx context.Context, req resource.UpdateRequest,
 			}
 		}
 	}
+	patch := map[string]interface{}{}
+	if !plan.Backups.IsNull() && plan.Backups.ValueBool() != state.Backups.ValueBool() {
+		patch["backups"] = plan.Backups.ValueBool()
+	}
+	if !plan.Managed.IsNull() && plan.Managed.ValueBool() != state.Managed.ValueBool() {
+		patch["managed"] = plan.Managed.ValueBool()
+	}
+	if plan.Name.ValueString() != state.Name.ValueString() {
+		patch["name"] = plan.Name.ValueString()
+	}
+	if len(patch) > 0 {
+		if err := r.c.Do(ctx, http.MethodPatch, "/v1/servers/"+id, patch, nil); err != nil {
+			res.Diagnostics.AddError("Updating server", err.Error())
+			return
+		}
+	}
 	var s client.Server
 	if err := r.c.Do(ctx, http.MethodGet, "/v1/servers/"+id, nil, &s); err != nil {
 		res.Diagnostics.AddError("Reading server", err.Error())
@@ -204,6 +225,7 @@ func fill(m *serverModel, s *client.Server) {
 	m.Region = types.StringValue(s.Region.ID)
 	m.Status = types.StringValue(s.Status)
 	m.Backups = types.BoolValue(s.BackupsEnabled)
+	m.Managed = types.BoolValue(s.Managed)
 	if len(s.Networks.V4) > 0 {
 		m.IPv4 = types.StringValue(s.Networks.V4[0].IPAddress)
 	} else {

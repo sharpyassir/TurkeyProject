@@ -13,6 +13,8 @@ export class CreateServerDto {
   @IsOptional() @IsString() @MaxLength(65536) userData?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) tags?: string[];
   @IsOptional() @IsBoolean() backups?: boolean;
+  /** Managed tier: patched, hardened and watched by our care agent, daily backups included. */
+  @IsOptional() @IsBoolean() managed?: boolean;
   @IsOptional() @IsArray() @IsString({ each: true }) firewalls?: string[];
   /** Marketplace app variables, e.g. { admin_email: "…" } */
   @IsOptional() @IsObject() appVariables?: Record<string, string>;
@@ -31,6 +33,7 @@ export class ServerActionDto {
 export class UpdateServerDto {
   @IsOptional() @IsString() @Length(1, 63) @Matches(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/) name?: string;
   @IsOptional() @IsBoolean() backups?: boolean;
+  @IsOptional() @IsBoolean() managed?: boolean;
   @IsOptional() @IsArray() @IsString({ each: true }) @ArrayMaxSize(20) tags?: string[];
 }
 

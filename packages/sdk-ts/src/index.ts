@@ -22,8 +22,9 @@ export interface Server {
   region: { id: string; name: string }; size: { id: string; vcpu: number; memoryMb: number; diskGb: number; transferTb: number };
   image: { id: string; name: string; kind: string };
   networks: { v4: { ipAddress: string; floating?: boolean; reverseDns?: string | null }[]; private: { ipAddress: string }[] };
-  firewalls: string[]; backupsEnabled: boolean; projectId: string; tags: string[]; createdAt: string;
+  firewalls: string[]; backupsEnabled: boolean; managed: boolean; managedHealth: 'ok' | 'warn' | 'stale' | 'pending' | null; projectId: string; tags: string[]; createdAt: string;
 }
+export interface ManagedStatus { serverId: string; managed: boolean; backupsEnabled: boolean; health: 'ok' | 'warn' | 'stale' | 'pending' | null; issues: string[]; reportedAt: string | null; report: Record<string, unknown> | null; installCommand: string | null }
 export interface Deployment { id: string; name: string; repoUrl: string; repo: string | null; source: 'github_app' | 'url'; branch: string; port: number; status: string; url: string | null; serverId: string; serverStatus: string; lastCommit: string | null; lastDeployAt: string | null; createdAt: string }
 export interface Size { id: string; vcpu: number; memoryMb: number; diskGb: number; transferTb: number }
 export interface Image { id: string; kind: 'distribution' | 'marketplace'; name: string; distribution?: string; version?: string }
@@ -123,12 +124,14 @@ export class Pgcloud {
   readonly servers = {
     list: (q?: { project?: string; status?: string; tag?: string }) => this.request<List<Server>>('GET', '/v1/servers', undefined, { project: this.opts.project, ...q }),
     get: (id: string) => this.request<Server>('GET', `/v1/servers/${id}`),
-    create: (body: { name: string; size: string; image: string; region?: string; project?: string; sshKeys?: string[]; userData?: string; tags?: string[]; backups?: boolean; firewalls?: string[]; appVariables?: Record<string, string> }) =>
+    create: (body: { name: string; size: string; image: string; region?: string; project?: string; sshKeys?: string[]; userData?: string; tags?: string[]; backups?: boolean; managed?: boolean; firewalls?: string[]; appVariables?: Record<string, string> }) =>
       this.request<Server>('POST', '/v1/servers', { project: this.opts.project, ...body }),
     action: (id: string, body: { type: 'start' | 'stop' | 'reboot' | 'resize' | 'rebuild' | 'snapshot'; size?: string; image?: string; name?: string; force?: boolean }) =>
       this.request<{ id: string; type: string; status: string }>('POST', `/v1/servers/${id}/actions`, body),
     actions: (id: string) => this.request<List<{ id: string; type: string; status: string; startedAt: string; finishedAt: string | null; error: string | null }>>('GET', `/v1/servers/${id}/actions`),
-    update: (id: string, body: { name?: string; tags?: string[]; backups?: boolean }) => this.request<Server>('PATCH', `/v1/servers/${id}`, body),
+    update: (id: string, body: { name?: string; tags?: string[]; backups?: boolean; managed?: boolean }) => this.request<Server>('PATCH', `/v1/servers/${id}`, body),
+    /** Managed tier: health, the agent's last report and the install command while it is not reporting. */
+    managed: (id: string) => this.request<ManagedStatus>('GET', `/v1/servers/${id}/managed`),
     delete: (id: string) => this.request<{ id: string; status: string }>('DELETE', `/v1/servers/${id}`),
     /** CPU, memory, network and disk series. Minute resolution up to 24h, hourly for 7d and 30d. */
     metrics: (id: string, period: '1h' | '6h' | '24h' | '7d' | '30d' = '1h') => this.request<MetricSeries>('GET', `/v1/servers/${id}/metrics`, undefined, { period }),

@@ -81,7 +81,12 @@ export default function ServerDetailPage() {
 
   const priceOf = (sku: string) => prices.find((p) => p.sku === sku);
   const ip = server?.networks.v4[0]?.ipAddress;
-  const monthly = useMemo(() => server ? (priceOf(server.size.id)?.monthlyMinor ?? 0) + (priceOf('public_ip')?.monthlyMinor ?? 0) : 0, [server, prices]); // eslint-disable-line react-hooks/exhaustive-deps
+  const monthly = useMemo(() => {
+    if (!server) return 0;
+    const plan = priceOf(server.size.id)?.monthlyMinor ?? 0;
+    const pct = (server.backupsEnabled ? priceOf('backups_pct')?.monthlyMinor ?? 20 : 0) + (server.managed ? priceOf('managed_pct')?.monthlyMinor ?? 30 : 0);
+    return plan + (priceOf('public_ip')?.monthlyMinor ?? 0) + Math.round((plan * pct) / 100);
+  }, [server, prices]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!server) return <p className="text-sm text-neutral-500">{error ?? t(locale, 'loading')}</p>;
   const settled = SETTLED.includes(server.status);
@@ -123,6 +128,7 @@ export default function ServerDetailPage() {
             <Row k={t(locale, 'region')}>{server.region.name}</Row>
             <Row k={t(locale, 'privateIp')}>{server.networks.private[0]?.ipAddress ?? '—'}</Row>
             <Row k={t(locale, 'backups')}>{t(locale, server.backupsEnabled ? 'on' : 'off')} <button className="btn-ghost ms-2" disabled={busy} onClick={() => run(() => api(`/v1/servers/${id}`, { method: 'PATCH', body: JSON.stringify({ backups: !server.backupsEnabled }) }))}>{t(locale, server.backupsEnabled ? 'backupsOff' : 'backupsOn')}</button><div className="text-xs text-neutral-500">{tf(locale, 'backupsNote')(`${priceOf('backups_pct')?.monthlyMinor ?? 20}%`)}</div></Row>
+            <Row k={t(locale, 'managedTier')}>{t(locale, server.managed ? 'on' : 'off')} <button className="btn-ghost ms-2" disabled={busy} onClick={() => run(() => api(`/v1/servers/${id}`, { method: 'PATCH', body: JSON.stringify({ managed: !server.managed }) }))}>{t(locale, server.managed ? 'managedOff' : 'managedOn')}</button><div className="text-xs text-neutral-500">{tf(locale, 'managedNote')(`${priceOf('managed_pct')?.monthlyMinor ?? 30}%`)}</div></Row>
             <Row k={t(locale, 'created')}>{new Date(server.createdAt).toLocaleString(locale)}</Row>
             {server.tags.length > 0 && <Row k={t(locale, 'tags')}>{server.tags.join(', ')}</Row>}
           </section>
@@ -132,6 +138,7 @@ export default function ServerDetailPage() {
             <Row k={t(locale, 'mtd')}>{spent === null ? '…' : money(spent, currency, locale)}</Row>
             <p className="text-xs text-neutral-500">{t(locale, 'costNote')}</p>
           </section>
+          {server.managed && <ManagedCard id={id} locale={locale} health={server.managedHealth} />}
           <section className="card space-y-2 text-sm md:col-span-2">
             <h2 className="font-medium">{t(locale, 'connect')}</h2>
             <p className="text-neutral-500">{t(locale, 'connectNote')}</p>
@@ -304,6 +311,47 @@ function ResizeCard({ server, sizes, prices, currency, locale, busy, onResize }:
       </select>
       {size !== server.size.id && !shrinks && <p>{delta >= 0 ? '+' : ''}{money(delta, currency, locale)}{t(locale, 'perMonth')} {t(locale, 'comparedToday')}</p>}
       <button className="btn-primary" disabled={busy || size === server.size.id || shrinks} onClick={() => confirm(tf(locale, 'resizeConfirm')(server.name, size)) && onResize(size)}>{t(locale, 'resize')}</button>
+    </section>
+  );
+}
+
+interface ManagedStatus { health: 'ok' | 'warn' | 'stale' | 'pending' | null; issues: string[]; reportedAt: string | null; installCommand: string | null; report: { uptimeSec?: number; load1?: number; memUsedMb?: number; memTotalMb?: number; diskUsedGb?: number; diskTotalGb?: number; diskUsedPct?: number; pendingUpdates?: number; securityUpdates?: number; rebootRequired?: boolean; lastUpgradeAt?: string | null; failedUnits?: string[]; sshBanned?: number; kernel?: string } | null }
+
+/** Managed care: what the in VM agent reported last, and how to install it when it is not reporting. */
+function ManagedCard({ id, locale, health }: { id: string; locale: Locale; health: string | null }) {
+  const [st, setSt] = useState<ManagedStatus | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () => api<ManagedStatus>(`/v1/servers/${id}/managed`).then((s) => { if (live) setSt(s); }).catch(() => {});
+    load();
+    const iv = setInterval(load, 30_000);
+    return () => { live = false; clearInterval(iv); };
+  }, [id, health]);
+  const r = st?.report;
+  const tone = st?.health === 'ok' ? 'text-green-700' : st?.health === 'warn' ? 'text-amber-700' : 'text-neutral-500';
+  return (
+    <section className="card space-y-2 text-sm md:col-span-2">
+      <h2 className="font-medium">{t(locale, 'managedCare')} <span className={`ms-2 text-xs ${tone}`}>{st ? t(locale, `health_${st.health ?? 'pending'}` as Parameters<typeof t>[1]) : '…'}</span></h2>
+      {st?.issues.map((i) => <p key={i} className="text-amber-700">{i}</p>)}
+      {st?.installCommand && (
+        <div>
+          <p className="text-neutral-500">{t(locale, 'managedInstallNote')}</p>
+          <pre className="mt-1 overflow-x-auto rounded bg-neutral-100 p-2 font-mono text-xs dark:bg-neutral-800">{st.installCommand}</pre>
+        </div>
+      )}
+      {r && (
+        <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+          <Row k={t(locale, 'lastReport')}>{st?.reportedAt ? new Date(st.reportedAt).toLocaleString(locale) : '—'}</Row>
+          <Row k={t(locale, 'uptime')}>{r.uptimeSec !== undefined ? `${Math.floor(r.uptimeSec / 86400)}d ${Math.floor((r.uptimeSec % 86400) / 3600)}h` : '—'} · load {r.load1?.toFixed(2) ?? '—'}</Row>
+          <Row k={t(locale, 'memory')}>{r.memUsedMb ?? '—'} / {r.memTotalMb ?? '—'} MB</Row>
+          <Row k={t(locale, 'disk')}>{r.diskUsedGb ?? '—'} / {r.diskTotalGb ?? '—'} GB ({r.diskUsedPct ?? 0}%)</Row>
+          <Row k={t(locale, 'updates')}>{r.pendingUpdates ?? 0} {t(locale, 'pendingOf')} {r.securityUpdates ?? 0} {t(locale, 'securityUpdates')}{r.rebootRequired ? ` · ${t(locale, 'rebootAt4')}` : ''}</Row>
+          <Row k={t(locale, 'lastPatched')}>{r.lastUpgradeAt ? new Date(r.lastUpgradeAt).toLocaleString(locale) : '—'}</Row>
+          <Row k={t(locale, 'sshBans')}>{r.sshBanned ?? 0}</Row>
+          <Row k={t(locale, 'failedServices')}>{r.failedUnits?.length ? r.failedUnits.join(', ') : t(locale, 'none')}</Row>
+        </div>
+      )}
+      <p className="text-xs text-neutral-500">{t(locale, 'managedCareNote')}</p>
     </section>
   );
 }

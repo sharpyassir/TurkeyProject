@@ -6,7 +6,7 @@ import { loadConfig } from '../../config/config';
 const FONT = ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', '/usr/share/fonts/dejavu/DejaVuSans.ttf'].find(existsSync);
 const FONT_BOLD = ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf'].find(existsSync);
 
-const LABEL: Record<string, string> = { server: 'Servers', public_ip: 'Public IP addresses', snapshot: 'Snapshots', backup: 'Backups', volume: 'Volumes', bandwidth: 'Bandwidth', app: 'Marketplace apps' };
+const LABEL: Record<string, string> = { server: 'Servers', public_ip: 'Public IP addresses', snapshot: 'Snapshots', backup: 'Backups', managed_server: 'Managed servers', volume: 'Volumes', bandwidth: 'Bandwidth', app: 'Marketplace apps' };
 
 /** Renders an invoice as a one page PDF. DejaVu Sans covers Latin letters with accents; Helvetica is the fallback. */
 export function renderInvoicePdf(inv: Invoice & { team: Team; records: UsageRecord[] }): Promise<Buffer> {

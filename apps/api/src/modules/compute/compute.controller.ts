@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Headers, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CurrentActor, Public, RequireScopes } from '../../common/auth/decorators';
 import type { Actor } from '../../common/auth/actor';
-import { ServersService } from './servers.service';
+import { ManagedCareService, ServersService } from './servers.service';
+import type { ManagedReport } from './managed-agent';
 import { CreateServerDto, ListServersQuery, ServerActionDto, UpdateServerDto } from './compute.dto';
 
 @ApiTags('servers')
@@ -31,6 +32,12 @@ export class ServersController {
   @Patch(':id') @RequireScopes('servers:write')
   update(@CurrentActor() actor: Actor, @Param('id') id: string, @Body() dto: UpdateServerDto) {
     return this.servers.update(actor, id, dto);
+  }
+
+  /** Managed tier: health, the last care report and the install command while the agent is not reporting. */
+  @Get(':id/managed') @RequireScopes('servers:read')
+  managed(@CurrentActor() actor: Actor, @Param('id') id: string) {
+    return this.servers.managedStatus(actor, id);
   }
 
   @Post(':id/actions') @RequireScopes('servers:write') @HttpCode(202)
@@ -73,5 +80,22 @@ export class CatalogController {
         orderBy: [{ kind: 'asc' }, { name: 'asc' }],
       }),
     };
+  }
+}
+
+/** Called by the care agent inside managed servers, authenticated by the server's own token. */
+@ApiTags('servers')
+@Controller('v1/managed')
+export class ManagedCareController {
+  constructor(private readonly care: ManagedCareService) {}
+
+  @Public() @Get('install/:token') @Header('Content-Type', 'text/plain; charset=utf-8')
+  install(@Param('token') token: string) {
+    return this.care.installScript(token);
+  }
+
+  @Public() @Post('report') @HttpCode(200)
+  report(@Headers('x-pgcloud-managed-token') token: string | undefined, @Body() body: ManagedReport) {
+    return this.care.report(token, body ?? {});
   }
 }

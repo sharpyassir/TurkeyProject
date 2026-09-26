@@ -141,6 +141,10 @@ class _Servers(_Res):
     def update(self, id: str, **fields):
         return self.c.request("PATCH", f"/v1/servers/{id}", fields)
 
+    def managed(self, id: str):
+        """Managed tier status: health, the agent's last report and the install command while it is not reporting."""
+        return self.c.request("GET", f"/v1/servers/{id}/managed")
+
     def delete(self, id: str):
         return self.c.request("DELETE", f"/v1/servers/{id}")
 

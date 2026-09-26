@@ -54,9 +54,11 @@ async function main() {
     // Backups: 20% of the server's monthly price (DigitalOcean weekly backup model). Stored as
     // percent in monthlyMinor with unit "percent"; RatingService applies it per server hour.
     ['backups_pct', 'backup', 20],
+    // Managed tier: 30% of the server's monthly price, same percent mechanism.
+    ['managed_pct', 'managed_server', 30],
   ] as const) {
     const exists = await prisma.price.findFirst({ where: { resourceType: type, sku, currency: 'USD', validTo: null } });
-    if (!exists) await prisma.price.create({ data: { resourceType: type, sku, currency: 'USD', monthlyMinor: usd, unit: sku === 'backups_pct' ? 'percent' : 'hour', validFrom: PRICE_VALID_FROM } });
+    if (!exists) await prisma.price.create({ data: { resourceType: type, sku, currency: 'USD', monthlyMinor: usd, unit: sku.endsWith('_pct') ? 'percent' : 'hour', validFrom: PRICE_VALID_FROM } });
   }
 
   // Starting exchange rate; the hourly job replaces it with the provider's rate.

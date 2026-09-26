@@ -43,7 +43,7 @@ export class MeteringService {
   async tickFallback(now = new Date()) {
     const at = minuteAligned(now);
     const [servers, ips, snapshots, volumes, lbs, buckets, dbs] = await Promise.all([
-      this.prisma.server.findMany({ where: { status: { in: ['active', 'off', 'rebooting', 'resizing', 'rebuilding'] }, meteredSince: { not: null }, managedBy: null }, select: { id: true, projectId: true, hostId: true, backupsEnabled: true } }),
+      this.prisma.server.findMany({ where: { status: { in: ['active', 'off', 'rebooting', 'resizing', 'rebuilding'] }, meteredSince: { not: null }, managedBy: null }, select: { id: true, projectId: true, hostId: true, backupsEnabled: true, managed: true } }),
       // IPs held by a load balancer (the VIP) or its nodes are part of the load balancer price.
       this.prisma.publicIp.findMany({ where: { status: { in: ['assigned', 'reserved'] }, projectId: { not: null }, loadBalancer: null, dbCluster: null, OR: [{ serverId: null }, { server: { managedBy: null } }] }, select: { id: true, projectId: true } }),
       this.prisma.snapshot.findMany({ where: { status: 'available', kind: 'manual' }, select: { id: true, projectId: true, sizeGb: true } }),
@@ -56,6 +56,7 @@ export class MeteringService {
     const data: Prisma.UsageEventCreateManyInput[] = [
       ...servers.map((s) => ({ at, resourceType: 'server' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...servers.filter((s) => s.backupsEnabled).map((s) => ({ at, resourceType: 'backup' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
+      ...servers.filter((s) => s.managed).map((s) => ({ at, resourceType: 'managed_server' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...ips.map((ip) => ({ at, resourceType: 'public_ip' as const, resourceId: ip.id, projectId: ip.projectId!, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...snapshots.map((sn) => ({ at, resourceType: 'snapshot' as const, resourceId: sn.id, projectId: sn.projectId, quantity: sn.sizeGb, unit: 'gb_minute', meta: { source: 'fallback' } })),
       ...volumes.map((v) => ({ at, resourceType: 'volume' as const, resourceId: v.id, projectId: v.projectId, quantity: v.sizeGb, unit: 'gb_minute', meta: { source: 'fallback' } })),

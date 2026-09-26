@@ -108,6 +108,7 @@ type Server struct {
 	} `json:"networks"`
 	Firewalls      []string `json:"firewalls"`
 	BackupsEnabled bool     `json:"backupsEnabled"`
+	Managed        bool     `json:"managed"`
 	Tags           []string `json:"tags"`
 	ProjectID      string   `json:"projectId"`
 }

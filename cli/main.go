@@ -141,7 +141,7 @@ DNS       domains [ls | add NAME [--ip A.B.C.D] | get NAME | zone-file NAME | de
 VOLUMES   volumes [ls | create NAME --size GB [--server ID] | attach ID SERVER_ID | detach ID | resize ID --size GB | delete ID]
 MONITOR   servers metrics ID [--period 1h|6h|24h|7d|30d] · alerts [ls | incidents | create NAME --metric cpu --above 90 | mute ID | delete ID]
 SERVERS   servers ls | create NAME [--size s-2vcpu-4gb] [--image ubuntu-24-04|wordpress] [--key ID] [--wait]
-                  | get ID | start|stop|reboot|delete ID | resize ID --size S | snapshot ID | backups ID on|off | rename ID NAME | backups ID on|off | rename ID NAME
+                  | get ID | start|stop|reboot|delete ID | resize ID --size S | snapshot ID | backups ID on|off | managed ID on|off|status | rename ID NAME
           ssh NAME|ID [-- command]
 DEPLOY    deploy REPO_URL [--branch main] [--port 3000] [--size S] [--env K=V ...] [--name N] [--wait]
           deploys ls | get ID | redeploy ID | logs ID [--follow]
@@ -379,6 +379,13 @@ func hasFlag(args []string, name string) bool {
 }
 
 // orEmpty renders a nullable JSON value without the word "<nil>".
+func toList(v any) []any {
+	if l, ok := v.([]any); ok {
+		return l
+	}
+	return nil
+}
+
 func orEmpty(v any) string {
 	if v == nil {
 		return ""
@@ -549,17 +556,21 @@ func cmdServers(args []string) error {
 		return cmdList("/v1/servers", nil, serverCols)
 	case "create":
 		if len(rest) == 0 {
-			return errors.New("usage: servers create NAME [--size S] [--image I] [--key ID] [--user-data FILE] [--wait]")
+			return errors.New("usage: servers create NAME [--size S] [--image I] [--key ID] [--user-data FILE] [--managed] [--wait]")
 		}
 		name := rest[0]
 		size, rest := flag(rest[1:], "--size")
 		image, rest := flag(rest, "--image")
 		keys, rest := multi(rest, "--key")
 		userData, rest := flag(rest, "--user-data")
+		managed, rest := has(rest, "--managed")
 		wait, _ := has(rest, "--wait")
 		body := map[string]any{"name": name, "size": or(size, "s-1vcpu-1gb"), "image": or(image, "ubuntu-24-04")}
 		if project != "" {
 			body["project"] = project
+		}
+		if managed {
+			body["managed"] = true
 		}
 		if len(keys) > 0 {
 			body["sshKeys"] = keys
@@ -626,21 +637,45 @@ func cmdServers(args []string) error {
 			return err
 		}
 		return cmdGet("/v1/servers/"+id, func(s map[string]any) { table([]map[string]any{s}, serverCols) })
-	case "backups", "rename":
+	case "backups", "rename", "managed":
 		if len(rest) < 2 {
-			return errors.New("usage: pgcloud servers backups ID on|off | rename ID NAME")
+			return errors.New("usage: pgcloud servers backups ID on|off | rename ID NAME | managed ID on|off|status")
+		}
+		if sub == "managed" && rest[1] == "status" {
+			var st map[string]any
+			if err := call(http.MethodGet, "/v1/servers/"+rest[0]+"/managed", nil, &st); err != nil {
+				return err
+			}
+			if jsonOut {
+				emit(st)
+				return nil
+			}
+			fmt.Fprintf(stdout, "managed: %v  health: %v\n", st["managed"], orEmpty(st["health"]))
+			for _, i := range toList(st["issues"]) {
+				fmt.Fprintf(stdout, "  ! %v\n", i)
+			}
+			if r, ok := st["report"].(map[string]any); ok {
+				fmt.Fprintf(stdout, "  disk %s%%  updates pending %s (security %s)  reboot required %v  failed units %d  last report %v\n", orEmpty(r["diskUsedPct"]), orEmpty(r["pendingUpdates"]), orEmpty(r["securityUpdates"]), r["rebootRequired"], len(toList(r["failedUnits"])), st["reportedAt"])
+			}
+			if c, _ := st["installCommand"].(string); c != "" {
+				fmt.Fprintf(stdout, "  agent not reporting; install with:\n  %s\n", c)
+			}
+			return nil
 		}
 		body := map[string]any{}
-		if sub == "backups" {
+		switch sub {
+		case "backups":
 			body["backups"] = rest[1] == "on"
-		} else {
+		case "managed":
+			body["managed"] = rest[1] == "on"
+		default:
 			body["name"] = rest[1]
 		}
 		var s map[string]any
 		if err := call(http.MethodPatch, "/v1/servers/"+rest[0], body, &s); err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "✓ %v: backups=%v\n", s["name"], s["backupsEnabled"])
+		fmt.Fprintf(stdout, "✓ %v: backups=%v managed=%v\n", s["name"], s["backupsEnabled"], s["managed"])
 		return nil
 	case "start", "stop", "reboot", "snapshot", "resize", "rebuild":
 		id, err := resolveServer(rest)

@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { api, ApiError, App, Image, money, Price, Size } from '@/lib/api';
-import { t } from '@/lib/i18n';
+import { t, tf } from '@/lib/i18n';
 import { useShell } from '@/components/shell';
 
 function CreateServerForm() {
@@ -19,6 +19,7 @@ function CreateServerForm() {
   const [size, setSize] = useState('s-2vcpu-4gb');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [managed, setManaged] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -36,7 +37,9 @@ function CreateServerForm() {
 
   const app = useMemo(() => apps.find((a) => a.slug === image), [apps, image]);
   const priceOf = (sku: string) => prices.find((p) => p.sku === sku);
-  const estimate = (priceOf(size)?.monthlyMinor ?? 0) + (priceOf('public_ip')?.monthlyMinor ?? 0) + (app?.priceMonthlyMinor ?? 0);
+  const plan = priceOf(size)?.monthlyMinor ?? 0;
+  const managedPct = (priceOf('managed_pct')?.monthlyMinor ?? 30) + (priceOf('backups_pct')?.monthlyMinor ?? 20);
+  const estimate = plan + (priceOf('public_ip')?.monthlyMinor ?? 0) + (app?.priceMonthlyMinor ?? 0) + (managed ? Math.round((plan * managedPct) / 100) : 0);
 
   useEffect(() => {
     if (app && sizes.length) {
@@ -53,7 +56,7 @@ function CreateServerForm() {
     const appVariables: Record<string, string> = {};
     app?.variables.forEach((v) => { const val = f.get(`var:${v.name}`); if (val) appVariables[v.name] = String(val); });
     try {
-      await api('/v1/servers', { method: 'POST', idempotent: true, body: JSON.stringify({ name: f.get('name'), size, image, ...(app ? { appVariables } : {}) }) });
+      await api('/v1/servers', { method: 'POST', idempotent: true, body: JSON.stringify({ name: f.get('name'), size, image, managed, ...(app ? { appVariables } : {}) }) });
       router.push('/servers');
     } catch (err) {
       setError(err instanceof ApiError ? `${err.message}${err.code === 'spend_limit_reached' || err.code === 'verification_required' ? ' — see Billing' : ''}` : String(err));
@@ -102,6 +105,16 @@ function CreateServerForm() {
             <input className="input mt-1" name={`var:${v.name}`} type={v.type === 'password' ? 'password' : v.type === 'email' ? 'email' : 'text'} required={!!v.required && !v.generate} defaultValue={v.default ?? ''} placeholder={v.generate ? '(auto-generated)' : ''} />
           </label>
         ))}
+      </section>
+
+      <section className="card space-y-2">
+        <label className="flex items-start gap-3 text-sm">
+          <input type="checkbox" className="mt-1" checked={managed} onChange={(e) => setManaged(e.target.checked)} />
+          <span>
+            <span className="font-medium">{t(locale, 'managedTier')}</span>
+            <span className="block text-neutral-500">{tf(locale, 'managedNote')(`${priceOf('managed_pct')?.monthlyMinor ?? 30}%`)}</span>
+          </span>
+        </label>
       </section>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

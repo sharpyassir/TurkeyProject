@@ -14,6 +14,8 @@ import { MarketplaceService } from '../marketplace/marketplace.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import type { Approval } from '@prisma/client';
 import { CreateServerDto, ListServersQuery, ServerActionDto, UpdateServerDto } from './compute.dto';
+import { randomBytes } from 'node:crypto';
+import { hasManagedAgent, healthOf, renderManagedInstallScript, withManagedAgent, type ManagedReport } from './managed-agent';
 
 /** Transitions allowed from each state. Everything else is `invalid_state`. */
 const ALLOWED: Record<ActionType, ServerStatus[]> = {
@@ -125,7 +127,8 @@ export class ServersService {
     const planMonthly = await this.spend.monthlyPriceMinor('server', size.id, team.currency);
     const monthly =
       planMonthly +
-      (dto.backups ? Math.round((planMonthly * (await this.spend.monthlyPriceMinor('backup', 'backups_pct', team.currency))) / 100) : 0) +
+      (dto.backups || dto.managed ? Math.round((planMonthly * (await this.spend.monthlyPriceMinor('backup', 'backups_pct', team.currency))) / 100) : 0) +
+      (dto.managed ? Math.round((planMonthly * (await this.spend.monthlyPriceMinor('managed_server', 'managed_pct', team.currency))) / 100) : 0) +
       (await this.spend.monthlyPriceMinor('public_ip', 'public_ip', team.currency)) +
       (image.app?.priceMonthlyMinor ?? 0);
     await this.spend.assertCanSpend(actor, project.id, monthly);
@@ -141,7 +144,10 @@ export class ServersService {
       if (owned !== dto.firewalls.length) throw ApiError.invalid('One or more firewalls do not belong to this project');
     }
 
-    const userData = image.app ? this.marketplace.renderCloudInit(image.app, dto.appVariables ?? {}, dto.userData) : dto.userData;
+    // Managed tier: the care agent rides along as a second cloud-init part, and daily backups are on.
+    const managedToken = dto.managed ? randomBytes(24).toString('base64url') : null;
+    const baseUserData = image.app ? this.marketplace.renderCloudInit(image.app, dto.appVariables ?? {}, dto.userData) : dto.userData;
+    const userData = managedToken ? withManagedAgent(baseUserData, this.managedScript(managedToken)) : baseUserData;
 
     const server = await this.prisma.server.create({
       data: {
@@ -156,7 +162,10 @@ export class ServersService {
         userData,
         sshKeyIds,
         tags: dto.tags ?? [],
-        backupsEnabled: !!dto.backups,
+        backupsEnabled: !!dto.backups || !!dto.managed,
+        managed: !!dto.managed,
+        managedToken,
+        managedHealth: dto.managed ? 'pending' : null,
         firewalls: dto.firewalls?.length ? { create: dto.firewalls.map((firewallId) => ({ firewallId })) } : undefined,
         actions: { create: { type: 'create', params: { avoid: dto.avoid ?? [] }, requestedBy: actor.tokenId ?? actor.userId } },
       },
@@ -168,17 +177,62 @@ export class ServersService {
     return present(server);
   }
 
-  /** Name, tags and the backups switch. Turning backups on checks spend for the 20 percent add on. */
+  /** Managed care status for a server: tier, health, the last report and the install command while the agent is not reporting yet. */
+  async managedStatus(actor: Actor, id: string) {
+    const server = await this.mustOwn(actor, id);
+    const report = (server.managedReport ?? null) as ManagedReport | null;
+    const { health, issues } = server.managed ? healthOf(report, server.managedReportedAt) : { health: null, issues: [] as string[] };
+    return {
+      serverId: server.id,
+      managed: server.managed,
+      backupsEnabled: server.backupsEnabled,
+      health,
+      issues,
+      reportedAt: server.managedReportedAt,
+      report,
+      installCommand: server.managed && server.managedToken && (!server.managedReportedAt || health === 'stale') ? `curl -fsSL ${loadConfig().PUBLIC_API_URL}/v1/managed/install/${server.managedToken} | sudo sh` : null,
+    };
+  }
+
+  private managedScript(token: string) {
+    return renderManagedInstallScript({ apiUrl: loadConfig().PUBLIC_API_URL, token });
+  }
+
+  /**
+   * Name, tags, the backups switch and the managed switch. Turning either on checks spend for
+   * the percent add on. Turning managed on also turns backups on and, for a server that never
+   * had the agent, stores the agent in its user-data (used on rebuild) and returns an install
+   * command through `managedStatus`.
+   */
   async update(actor: Actor, id: string, dto: UpdateServerDto) {
     const server = await this.mustOwn(actor, id);
-    if (dto.backups === true && !server.backupsEnabled) {
+    if (server.managedBy && dto.managed !== undefined) throw ApiError.invalidState('Platform owned nodes cannot change tier');
+    const turningManagedOn = dto.managed === true && !server.managed;
+    const turningBackupsOn = (dto.backups === true || turningManagedOn) && !server.backupsEnabled;
+    if (dto.backups === false && (dto.managed ?? server.managed)) throw ApiError.invalid('Managed servers keep daily backups on; turn managed off first');
+    if (turningBackupsOn || turningManagedOn) {
       const team = await this.prisma.team.findUniqueOrThrow({ where: { id: actor.teamId } });
       const plan = await this.spend.monthlyPriceMinor('server', server.sizeId, team.currency);
-      await this.spend.assertCanSpend(actor, server.projectId, Math.round((plan * (await this.spend.monthlyPriceMinor('backup', 'backups_pct', team.currency))) / 100));
+      const pct = (turningBackupsOn ? await this.spend.monthlyPriceMinor('backup', 'backups_pct', team.currency) : 0) + (turningManagedOn ? await this.spend.monthlyPriceMinor('managed_server', 'managed_pct', team.currency) : 0);
+      await this.spend.assertCanSpend(actor, server.projectId, Math.round((plan * pct) / 100));
     }
     if (dto.name && dto.name !== server.name && (await this.prisma.server.findFirst({ where: { projectId: server.projectId, name: dto.name, deletedAt: null } }))) throw ApiError.conflict('name_taken', `A server named "${dto.name}" already exists in this project`);
-    const updated = await this.prisma.server.update({ where: { id }, data: { name: dto.name, tags: dto.tags, backupsEnabled: dto.backups }, include: serverInclude });
-    if (dto.backups !== undefined && dto.backups !== server.backupsEnabled) await this.events.emit(dto.backups ? 'server.backups_enabled' : 'server.backups_disabled', { serverId: id }, { actor, resource: `server:${id}` });
+    const managedToken = turningManagedOn ? server.managedToken ?? randomBytes(24).toString('base64url') : undefined;
+    const updated = await this.prisma.server.update({
+      where: { id },
+      data: {
+        name: dto.name,
+        tags: dto.tags,
+        backupsEnabled: turningManagedOn ? true : dto.backups,
+        managed: dto.managed,
+        managedToken,
+        managedHealth: turningManagedOn ? (server.managedReportedAt ? server.managedHealth : 'pending') : dto.managed === false ? null : undefined,
+        userData: managedToken && !hasManagedAgent(server.userData) ? withManagedAgent(server.userData, this.managedScript(managedToken)) : undefined,
+      },
+      include: serverInclude,
+    });
+    if (updated.backupsEnabled !== server.backupsEnabled) await this.events.emit(updated.backupsEnabled ? 'server.backups_enabled' : 'server.backups_disabled', { serverId: id }, { actor, resource: `server:${id}` });
+    if (dto.managed !== undefined && dto.managed !== server.managed) await this.events.emit(dto.managed ? 'server.managed_enabled' : 'server.managed_disabled', { serverId: id }, { actor, resource: `server:${id}` });
     if (dto.name && dto.name !== server.name) await this.events.emit('server.renamed', { serverId: id, from: server.name, to: dto.name }, { actor, resource: `server:${id}` });
     return present(updated);
   }
@@ -299,6 +353,46 @@ export class ServersService {
 
 type ServerRow = Prisma.ServerGetPayload<{ include: typeof serverInclude }>;
 
+/** Managed care endpoints that live outside the customer's bearer auth: the agent's report and the install script. */
+@Injectable()
+export class ManagedCareService {
+  private readonly log = new Logger(ManagedCareService.name);
+  constructor(private readonly prisma: PrismaService, private readonly events: EventsService) {}
+
+  /** The install script for a managed token, served as text so `curl | sh` works. */
+  async installScript(token: string) {
+    const server = await this.prisma.server.findFirst({ where: { managedToken: token, managed: true, deletedAt: null }, select: { id: true } });
+    if (!server) throw ApiError.unauthorized('Unknown managed token');
+    return renderManagedInstallScript({ apiUrl: loadConfig().PUBLIC_API_URL, token });
+  }
+
+  /** Store a report from the agent; emits a warning event when health goes bad and a recovery when it clears. */
+  async report(token: string | undefined, body: ManagedReport) {
+    if (!token) throw ApiError.unauthorized('Missing managed token');
+    const server = await this.prisma.server.findFirst({ where: { managedToken: token, managed: true, deletedAt: null }, select: { id: true, managedHealth: true, name: true, project: { select: { teamId: true } } } });
+    if (!server) throw ApiError.unauthorized('Unknown managed token');
+    const report: ManagedReport = {
+      agentVersion: num(body.agentVersion), hostname: str(body.hostname), kernel: str(body.kernel), uptimeSec: num(body.uptimeSec), load1: num(body.load1),
+      memTotalMb: num(body.memTotalMb), memUsedMb: num(body.memUsedMb), diskTotalGb: num(body.diskTotalGb), diskUsedGb: num(body.diskUsedGb), diskUsedPct: num(body.diskUsedPct),
+      pendingUpdates: num(body.pendingUpdates), securityUpdates: num(body.securityUpdates), rebootRequired: !!body.rebootRequired, lastUpgradeAt: str(body.lastUpgradeAt) ?? null,
+      failedUnits: Array.isArray(body.failedUnits) ? body.failedUnits.filter((u) => typeof u === 'string').slice(0, 20) : [], sshBanned: num(body.sshBanned), sshPasswordAuth: !!body.sshPasswordAuth,
+    };
+    const now = new Date();
+    const { health, issues } = healthOf(report, now, now);
+    await this.prisma.server.update({ where: { id: server.id }, data: { managedReport: report as object, managedReportedAt: now, managedHealth: health } });
+    if (health === 'warn' && server.managedHealth !== 'warn') await this.events.emit('server.managed_warning', { serverId: server.id, name: server.name, issues }, { resource: `server:${server.id}`, teamId: server.project.teamId });
+    if (health === 'ok' && server.managedHealth === 'warn') await this.events.emit('server.managed_recovered', { serverId: server.id, name: server.name }, { resource: `server:${server.id}`, teamId: server.project.teamId });
+    return { ok: true, health, issues };
+  }
+}
+
+function num(v: unknown) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
+function str(v: unknown) {
+  return typeof v === 'string' ? v.slice(0, 200) : undefined;
+}
+
 /** Public representation (no driver refs, no host ids). */
 export function present(s: ServerRow) {
   return {
@@ -316,6 +410,8 @@ export function present(s: ServerRow) {
     firewalls: s.firewalls.map((f) => f.firewallId),
     tags: s.tags,
     backupsEnabled: s.backupsEnabled,
+    managed: s.managed,
+    managedHealth: s.managed ? s.managedHealth : null,
     projectId: s.projectId,
     createdAt: s.createdAt,
   };

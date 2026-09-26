@@ -273,10 +273,36 @@ paths:
         "409": { description: Invalid state (`invalid_state`) }
     patch:
       tags: [servers]
-      summary: Rename, retag, or turn backups on or off
+      summary: Rename, retag, or turn backups or the managed tier on or off
+      description: Turning managed on also turns backups on. A server that never had the care agent gets it on its next rebuild, or right away with the install command from `GET /servers/{id}/managed`.
       parameters: [{ $ref: "#/components/parameters/id" }]
-      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string }, tags: { type: array, items: { type: string } }, backups: { type: boolean, description: Daily platform snapshot, last seven kept, 20 percent of the plan } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string }, tags: { type: array, items: { type: string } }, backups: { type: boolean, description: Daily platform snapshot, last seven kept, 20 percent of the plan }, managed: { type: boolean, description: Managed tier, 30 percent of the plan plus backups } } } } } }
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Server" } } } } }
+  /servers/{id}/managed:
+    get:
+      tags: [servers]
+      summary: Managed tier status
+      description: Health from the care agent's last report, the report itself, and the install command while the agent is not reporting.
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ManagedStatus" } } } }
+  /managed/install/{token}:
+    get:
+      tags: [servers]
+      summary: Care agent install script
+      description: Public, keyed by the server's managed token. Served as a shell script for `curl | sh`.
+      security: []
+      parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK, content: { text/plain: { schema: { type: string } } } }, "401": { description: Unknown token } }
+  /managed/report:
+    post:
+      tags: [servers]
+      summary: Care agent report
+      description: Posted by the agent inside a managed server every five minutes, authenticated by the `X-Pgcloud-Managed-Token` header.
+      security: []
+      parameters: [{ name: X-Pgcloud-Managed-Token, in: header, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ManagedReport" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, health: { type: string }, issues: { type: array, items: { type: string } } } } } } }, "401": { description: Unknown token } }
   /servers/{id}/actions:
     get:
       tags: [servers]
@@ -786,6 +812,7 @@ components:
         userData: { type: string, description: cloud-init user-data }
         tags: { type: array, items: { type: string } }
         backups: { type: boolean }
+        managed: { type: boolean, description: Managed tier, daily backups included }
         firewalls: { type: array, items: { type: string } }
         appVariables: { type: object, additionalProperties: { type: string }, description: Marketplace app variables }
         avoid: { type: array, items: { type: string }, description: Server ids to anti-affine from }
@@ -967,8 +994,41 @@ components:
         firewalls: { type: array, items: { type: string } }
         tags: { type: array, items: { type: string } }
         backupsEnabled: { type: boolean }
+        managed: { type: boolean }
+        managedHealth: { type: [string, "null"], enum: [ok, warn, stale, pending, null] }
         projectId: { type: string }
         createdAt: { type: string, format: date-time }
+    ManagedReport:
+      type: object
+      properties:
+        agentVersion: { type: integer }
+        hostname: { type: string }
+        kernel: { type: string }
+        uptimeSec: { type: integer }
+        load1: { type: number }
+        memTotalMb: { type: integer }
+        memUsedMb: { type: integer }
+        diskTotalGb: { type: number }
+        diskUsedGb: { type: number }
+        diskUsedPct: { type: integer }
+        pendingUpdates: { type: integer }
+        securityUpdates: { type: integer }
+        rebootRequired: { type: boolean }
+        lastUpgradeAt: { type: [string, "null"], format: date-time }
+        failedUnits: { type: array, items: { type: string } }
+        sshBanned: { type: integer }
+        sshPasswordAuth: { type: boolean }
+    ManagedStatus:
+      type: object
+      properties:
+        serverId: { type: string }
+        managed: { type: boolean }
+        backupsEnabled: { type: boolean }
+        health: { type: [string, "null"], enum: [ok, warn, stale, pending, null] }
+        issues: { type: array, items: { type: string } }
+        reportedAt: { type: [string, "null"], format: date-time }
+        report: { oneOf: [{ $ref: "#/components/schemas/ManagedReport" }, { type: "null" }] }
+        installCommand: { type: [string, "null"], description: Present while the agent is not reporting }
     ServerAction:
       type: object
       properties:

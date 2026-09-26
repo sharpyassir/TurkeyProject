@@ -48,7 +48,7 @@ export class RatingService {
       const quantity = g._sum.quantity ?? 0;
 
       // Per-GB and per-node resources are priced per unit-month; scale monthly price by the average quantity in the hour.
-      // Percent prices (backups) are a share of the server's own plan price.
+      // Percent prices (backups, managed tier) are a share of the server's own plan price.
       let monthlyMinor = 0;
       if (price && price.unit === 'percent') monthlyMinor = Math.round(((await this.planPriceFor(g.resourceId, hourEnd)) * fx * price.monthlyMinor) / 100);
       else if (price) monthlyMinor = Math.round((g.unit === 'gb_minute' || g.unit === 'node_minute' ? price.monthlyMinor * (quantity / Math.max(minutes, 1)) : price.monthlyMinor) * fx);
@@ -95,6 +95,8 @@ export class RatingService {
         return 'bandwidth_gb';
       case 'backup':
         return 'backups_pct';
+      case 'managed_server':
+        return 'managed_pct';
       default:
         return null;
     }

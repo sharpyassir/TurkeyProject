@@ -46,7 +46,7 @@ const en: Copy = {
     lead: 'One API behind the console, the CLI, Terraform and your agents. Every product is a workflow you can watch, not a spinner.',
     available: 'Available', roadmap: 'Roadmap',
     groups: [
-      { name: 'Core Cloud', desc: 'Servers, volumes, load balancers, DNS, object storage, public IPs, snapshots, firewalls and monitoring today. VPC is next.', items: ['Servers', 'Volumes', 'Load balancers', 'DNS', 'Object storage', 'Snapshots', 'Public IPs', 'Firewalls', 'Monitoring'], live: true },
+      { name: 'Core Cloud', desc: 'Servers, volumes, load balancers, DNS, object storage, public IPs, snapshots, firewalls and monitoring today. VPC is next.', items: ['Servers', 'Managed servers', 'Volumes', 'Load balancers', 'DNS', 'Object storage', 'Snapshots', 'Public IPs', 'Firewalls', 'Monitoring'], live: true },
       { name: 'Managed Agents', desc: 'Give Claude, Cursor or n8n a token with a monthly spending cap and approval rules instead of the keys to your account.', items: ['Agent tokens', 'MCP server', 'Approval queue'], live: true, highlight: true },
       { name: 'Marketplace', desc: '15 one click apps at launch, from WordPress to Odoo to an AI starter. Progrid apps as premium listings.', items: ['WordPress', 'n8n', 'Odoo', 'Coolify', 'Ollama + Open WebUI'], live: true },
       { name: 'Inference Engine', desc: 'One OpenAI compatible endpoint, billed per token. Partner models first, our own GPUs next.', items: ['Inference gateway', 'GPU servers'], live: false },
@@ -71,7 +71,7 @@ const en: Copy = {
     cols: ['vCPU', 'Memory', 'Storage', 'Transfer', 'Monthly', 'Hourly'],
     noteTry: (rate) => `Riyal prices are our dollar prices converted at ${rate} SAR per USD; the riyal is pegged to the dollar, so they do not move. `,
     noteUsd: 'Saudi customers can pay in riyals at the pegged rate. ',
-    noteTail: (snapshot) => `VAT (15%) is added for Saudi customers. A public IP is included with every server. Snapshots cost ${snapshot} per GB per month. Backups cost 20% of the plan.`,
+    noteTail: (snapshot) => `VAT (15%) is added for Saudi customers. A public IP is included with every server. Snapshots cost ${snapshot} per GB per month. Backups cost 20% of the plan, and the managed tier 30% more.`,
   },
   marketplace: { eyebrow: 'Marketplace', h2: 'One click from idea to running app.', lead: 'Every app is a hardened image plus a setup script. Built from Git, scanned for CVEs and test deployed before it ships. Bring your own through the vendor program and keep 70% of the revenue.' },
   compare: {
@@ -122,7 +122,7 @@ const tr: Copy = {
     lead: 'Konsolun, komut satırının, Terraform’un ve ajanlarınızın arkasında tek bir API. Her ürün izleyebileceğiniz bir iş akışıdır, dönen bir simge değil.',
     available: 'Kullanılabilir', roadmap: 'Yol haritası',
     groups: [
-      { name: 'Çekirdek Bulut', desc: 'Bugün sunucular, diskler, yük dengeleyiciler, DNS, nesne depolama, genel IP’ler, anlık görüntüler, güvenlik duvarları ve izleme. Sırada VPC var.', items: ['Sunucular', 'Diskler', 'Yük dengeleyiciler', 'DNS', 'Nesne depolama', 'Anlık görüntüler', 'Genel IP’ler', 'Güvenlik duvarları', 'İzleme'], live: true },
+      { name: 'Çekirdek Bulut', desc: 'Bugün sunucular, diskler, yük dengeleyiciler, DNS, nesne depolama, genel IP’ler, anlık görüntüler, güvenlik duvarları ve izleme. Sırada VPC var.', items: ['Sunucular', 'Yönetilen sunucular', 'Diskler', 'Yük dengeleyiciler', 'DNS', 'Nesne depolama', 'Anlık görüntüler', 'Genel IP’ler', 'Güvenlik duvarları', 'İzleme'], live: true },
       { name: 'Yönetilen Ajanlar', desc: 'Claude, Cursor veya n8n’e hesabınızın anahtarları yerine aylık harcama limiti ve onay kuralları olan bir token verin.', items: ['Ajan tokenları', 'MCP sunucusu', 'Onay kuyruğu'], live: true, highlight: true },
       { name: 'Uygulama Mağazası', desc: 'Açılışta WordPress’ten Odoo’ya ve bir yapay zeka başlangıç paketine kadar 15 tek tık uygulama. Progrid uygulamaları premium listeler olarak.', items: ['WordPress', 'n8n', 'Odoo', 'Coolify', 'Ollama + Open WebUI'], live: true },
       { name: 'Çıkarım Motoru', desc: 'OpenAI uyumlu tek uç nokta, token başına faturalama. Önce iş ortağı modeller, sonra kendi GPU’larımız.', items: ['Çıkarım geçidi', 'GPU sunucuları'], live: false },
@@ -147,7 +147,7 @@ const tr: Copy = {
     cols: ['vCPU', 'Bellek', 'Depolama', 'Trafik', 'Aylık', 'Saatlik'],
     noteTry: (rate) => `Riyal fiyatları, dolar fiyatlarımızın ${rate} SAR/USD kuruyla çevrilmiş halidir; riyal dolara sabitlendiği için değişmez. `,
     noteUsd: 'Suudi Arabistan’daki müşteriler sabit kurla riyal olarak ödeyebilir. ',
-    noteTail: (snapshot) => `Suudi Arabistan’daki müşteriler için %15 KDV eklenir. Her sunucuya bir genel IP dahildir. Anlık görüntüler GB başına aylık ${snapshot}. Yedekler plan fiyatının %20’si.`,
+    noteTail: (snapshot) => `Suudi Arabistan’daki müşteriler için %15 KDV eklenir. Her sunucuya bir genel IP dahildir. Anlık görüntüler GB başına aylık ${snapshot}. Yedekler plan fiyatının %20’si, yönetilen katman %30 daha.`,
   },
   marketplace: { eyebrow: 'Uygulama Mağazası', h2: 'Fikirden çalışan uygulamaya tek tık.', lead: 'Her uygulama sertleştirilmiş bir imaj ve bir kurulum betiğidir. Git’ten derlenir, CVE taramasından geçer ve yayınlanmadan önce deneme kurulumu yapılır. Kendi uygulamanızı satıcı programıyla getirin, gelirin %70’i sizde kalsın.' },
   compare: {
@@ -198,7 +198,7 @@ const ar: Copy = {
     lead: 'واجهة API واحدة خلف لوحة التحكم وسطر الأوامر وTerraform ووكلائك. كل منتج هو سير عمل يمكنك متابعته، لا مؤشر انتظار.',
     available: 'متاح', roadmap: 'خارطة الطريق',
     groups: [
-      { name: 'السحابة الأساسية', desc: 'الخوادم والأقراص وموازنات الحمل وDNS والتخزين الكائني وعناوين IP العامة واللقطات وجدران الحماية والمراقبة اليوم. الشبكات الخاصة لاحقًا.', items: ['الخوادم', 'الأقراص', 'موازنات الحمل', 'DNS', 'التخزين الكائني', 'اللقطات', 'عناوين IP العامة', 'جدران الحماية', 'المراقبة'], live: true },
+      { name: 'السحابة الأساسية', desc: 'الخوادم والأقراص وموازنات الحمل وDNS والتخزين الكائني وعناوين IP العامة واللقطات وجدران الحماية والمراقبة اليوم. الشبكات الخاصة لاحقًا.', items: ['الخوادم', 'الخوادم المُدارة', 'الأقراص', 'موازنات الحمل', 'DNS', 'التخزين الكائني', 'اللقطات', 'عناوين IP العامة', 'جدران الحماية', 'المراقبة'], live: true },
       { name: 'الوكلاء المُدارون', desc: 'امنح Claude أو Cursor أو n8n رمزًا بحد إنفاق شهري وقواعد موافقة بدلًا من مفاتيح حسابك.', items: ['رموز الوكلاء', 'خادم MCP', 'قائمة الموافقات'], live: true, highlight: true },
       { name: 'المتجر', desc: '15 تطبيقًا بنقرة واحدة عند الإطلاق، من WordPress إلى Odoo إلى حزمة بداية للذكاء الاصطناعي. تطبيقات Progrid كقوائم مميزة.', items: ['WordPress', 'n8n', 'Odoo', 'Coolify', 'Ollama + Open WebUI'], live: true },
       { name: 'محرك الاستدلال', desc: 'نقطة نهاية واحدة متوافقة مع OpenAI، تُفوتر لكل رمز. نماذج الشركاء أولًا، ثم وحدات GPU الخاصة بنا.', items: ['بوابة الاستدلال', 'خوادم GPU'], live: false },
@@ -223,7 +223,7 @@ const ar: Copy = {
     cols: ['vCPU', 'الذاكرة', 'التخزين', 'النقل', 'شهريًا', 'بالساعة'],
     noteTry: (rate) => `أسعار الريال هي أسعارنا بالدولار محولة بسعر اليوم ${rate} ريال للدولار. فاتورتك تستخدم سعر يوم إصدارها. `,
     noteUsd: 'يمكن للعملاء في السعودية الدفع بالريال بسعر صرف تاريخ الفاتورة. ',
-    noteTail: (snapshot) => `تُضاف ضريبة القيمة المضافة (15%) للعملاء في السعودية. عنوان IP عام مشمول مع كل خادم. اللقطات ${snapshot} لكل GB شهريًا. النسخ الاحتياطي 20% من سعر الخطة.`,
+    noteTail: (snapshot) => `تُضاف ضريبة القيمة المضافة (15%) للعملاء في السعودية. عنوان IP عام مشمول مع كل خادم. اللقطات ${snapshot} لكل GB شهريًا. النسخ الاحتياطي 20% من سعر الخطة، والمستوى المُدار 30% إضافية.`,
   },
   marketplace: { eyebrow: 'المتجر', h2: 'نقرة واحدة من الفكرة إلى تطبيق يعمل.', lead: 'كل تطبيق هو صورة محصّنة مع سكربت إعداد. يُبنى من Git ويُفحص للثغرات ويُنشر تجريبيًا قبل الإطلاق. أضف تطبيقك عبر برنامج الموردين واحتفظ بـ 70% من الإيرادات.' },
   compare: {

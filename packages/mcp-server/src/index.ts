@@ -157,6 +157,7 @@ server.registerTool('create_server', {
     appVariables: z.record(z.string()).optional().describe('Variables for a marketplace app, e.g. { admin_email: "..." }'),
     tags: z.array(z.string()).optional(),
     backups: z.boolean().optional().describe('Enable backups at 20% of the plan price'),
+    managed: z.boolean().optional().describe('Managed tier: patched, hardened and watched by the care agent, daily backups included, 30% of the plan price plus backups'),
     wait: z.boolean().default(true).describe('Wait up to 2 minutes for the server to become active'),
   },
 }, async ({ wait, ...body }) => run(async () => {

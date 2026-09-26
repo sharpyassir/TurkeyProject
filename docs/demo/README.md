@@ -21,3 +21,4 @@ partner conversations.
 | pgcloud-dns.png, pgcloud-dns-zone.png, pgcloud-public-ips-rdns.png | DNS zones, one zone with records and the zone file, reverse DNS on the public IPs page |
 | pgcloud-buckets.png, pgcloud-bucket-browser.png | Object storage buckets and keys, and the bucket browser |
 | pgcloud-databases.png, pgcloud-database-detail.png | Managed databases list and one cluster with connection details, users, trusted sources, nodes and backups |
+| pgcloud-managed-server.png | Managed server: the tier switch next to backups and the managed care card with the agent's last report (updates, reboot state, disk, memory, SSH bans, failed services) |

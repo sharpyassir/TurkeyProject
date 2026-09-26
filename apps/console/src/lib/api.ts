@@ -49,7 +49,7 @@ export interface Server {
   id: string; name: string; status: string; statusMessage: string | null;
   region: { id: string; name: string }; size: Size; image: Image;
   networks: { v4: { ipAddress: string; floating?: boolean; reverseDns?: string | null }[]; private: { ipAddress: string }[] };
-  firewalls: string[]; backupsEnabled: boolean; projectId: string;
+  firewalls: string[]; backupsEnabled: boolean; managed: boolean; managedHealth: 'ok' | 'warn' | 'stale' | 'pending' | null; projectId: string;
   tags: string[]; createdAt: string;
 }
 export interface ServerAction { id: string; type: string; status: string; params: Record<string, unknown> | null; error: string | null; startedAt: string; finishedAt: string | null }

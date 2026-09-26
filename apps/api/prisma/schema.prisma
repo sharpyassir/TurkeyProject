@@ -340,6 +340,12 @@ model Server {
   sshKeyIds String[]     @default([])
   tags      String[]     @default([])
   backupsEnabled Boolean @default(false)
+  /// Managed tier: the in VM care agent keeps the system patched, hardened and watched.
+  managed          Boolean   @default(false)
+  managedToken     String?   @unique
+  managedReport    Json?
+  managedReportedAt DateTime?
+  managedHealth    String? // ok | warn | stale | pending
   /// Set for platform owned VMs ("lb:<id>"): hidden from the server list, not deletable directly.
   managedBy String?
   meteredSince   DateTime? // billing starts here, never before VM is running
@@ -571,6 +577,7 @@ enum ResourceType {
   database
   app
   backup
+  managed_server
 }
 
 /// Raw per-minute usage from host agents (TimescaleDB hypertable on `at`, created in
