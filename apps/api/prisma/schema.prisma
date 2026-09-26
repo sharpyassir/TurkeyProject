@@ -83,6 +83,9 @@ model Team {
   // Trust & safety
   kycLevel   Int      @default(0) // 0 none, 1 phone, 2 ID, 3 business
   riskScore  Int      @default(0)
+  /// Support plan; billed monthly against the team's default project.
+  supportPlan      SupportPlan @default(free)
+  supportPlanSince DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -578,6 +581,7 @@ enum ResourceType {
   app
   backup
   managed_server
+  support
 }
 
 /// Raw per-minute usage from host agents (TimescaleDB hypertable on `at`, created in
@@ -1374,4 +1378,63 @@ model DbBackup {
   cluster DbCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
 
   @@index([clusterId])
+}
+
+/// ---------------------------------------------------------------------------
+/// Support plans and tickets
+/// ---------------------------------------------------------------------------
+enum SupportPlan {
+  free
+  developer
+  standard
+  premium
+}
+
+enum TicketStatus {
+  open // waiting on us
+  answered // waiting on the customer
+  closed
+}
+
+enum TicketPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+model Ticket {
+  id        String         @id @default(cuid())
+  teamId    String
+  number    Int            @default(autoincrement())
+  subject   String
+  status    TicketStatus   @default(open)
+  priority  TicketPriority @default(normal)
+  plan      SupportPlan // plan at the time it was opened; sets the response target
+  resource  String? // "server:<id>", "database:<id>" ...
+  createdById String?
+  firstResponseDueAt DateTime?
+  firstRespondedAt   DateTime?
+  lastCustomerAt     DateTime @default(now())
+  lastSupportAt      DateTime?
+  closedAt  DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  messages  TicketMessage[]
+
+  @@index([teamId, status])
+  @@index([status, priority, createdAt])
+}
+
+model TicketMessage {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromSupport Boolean @default(false)
+  authorId   String? // user id; null for system notes
+  authorName String
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId, createdAt])
 }

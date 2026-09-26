@@ -97,6 +97,10 @@ export class RatingService {
         return 'backups_pct';
       case 'managed_server':
         return 'managed_pct';
+      case 'support': {
+        const t = await this.prisma.team.findUnique({ where: { id: resourceId }, select: { supportPlan: true } });
+        return t && t.supportPlan !== 'free' ? `support-${t.supportPlan}` : null;
+      }
       default:
         return null;
     }

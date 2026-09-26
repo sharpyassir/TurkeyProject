@@ -39,6 +39,8 @@ const schema = z.object({
   CONSOLE_URL: z.string().url().default('http://localhost:3000'),
   MAIL_PROVIDER: z.enum(['log', 'postmark', 'resend']).default('log'),
   MAIL_FROM: z.string().default('pgcloud <no-reply@pgcloud.example>'),
+  /** Where new support tickets and customer replies are mailed for the on duty engineer. Empty disables. */
+  SUPPORT_INBOX: z.string().default(''),
   MAIL_API_KEY: z.string().optional(),
   /** When true, team owners must enable two factor sign in before using the console. */
   REQUIRE_TOTP_FOR_OWNERS: z.coerce.boolean().default(false),

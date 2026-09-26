@@ -53,9 +53,12 @@ export class MeteringService {
       this.prisma.bucket.findMany({ where: { status: 'active', meteredSince: { not: null }, sizeBytes: { gt: 0 } }, select: { id: true, projectId: true, sizeBytes: true } }),
       this.prisma.dbCluster.findMany({ where: { status: { in: ['active', 'updating'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, nodes: true } }),
     ]);
+    // Support plans are team level; the charge lands on the team's oldest project.
+    const planTeams = await this.prisma.team.findMany({ where: { supportPlan: { not: 'free' }, status: { not: 'suspended' } }, select: { id: true, projects: { select: { id: true }, orderBy: { createdAt: 'asc' }, take: 1 } } });
     const data: Prisma.UsageEventCreateManyInput[] = [
       ...servers.map((s) => ({ at, resourceType: 'server' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...servers.filter((s) => s.backupsEnabled).map((s) => ({ at, resourceType: 'backup' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
+      ...planTeams.filter((t) => t.projects.length).map((t) => ({ at, resourceType: 'support' as const, resourceId: t.id, projectId: t.projects[0].id, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...servers.filter((s) => s.managed).map((s) => ({ at, resourceType: 'managed_server' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...ips.map((ip) => ({ at, resourceType: 'public_ip' as const, resourceId: ip.id, projectId: ip.projectId!, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...snapshots.map((sn) => ({ at, resourceType: 'snapshot' as const, resourceId: sn.id, projectId: sn.projectId, quantity: sn.sizeGb, unit: 'gb_minute', meta: { source: 'fallback' } })),

@@ -71,7 +71,7 @@ const en: Copy = {
     cols: ['vCPU', 'Memory', 'Storage', 'Transfer', 'Monthly', 'Hourly'],
     noteTry: (rate) => `Riyal prices are our dollar prices converted at ${rate} SAR per USD; the riyal is pegged to the dollar, so they do not move. `,
     noteUsd: 'Saudi customers can pay in riyals at the pegged rate. ',
-    noteTail: (snapshot) => `VAT (15%) is added for Saudi customers. A public IP is included with every server. Snapshots cost ${snapshot} per GB per month. Backups cost 20% of the plan, and the managed tier 30% more.`,
+    noteTail: (snapshot) => `VAT (15%) is added for Saudi customers. A public IP is included with every server. Snapshots cost ${snapshot} per GB per month. Backups cost 20% of the plan, and the managed tier 30% more. Support plans start at 24 USD a month.`,
   },
   marketplace: { eyebrow: 'Marketplace', h2: 'One click from idea to running app.', lead: 'Every app is a hardened image plus a setup script. Built from Git, scanned for CVEs and test deployed before it ships. Bring your own through the vendor program and keep 70% of the revenue.' },
   compare: {
@@ -147,7 +147,7 @@ const tr: Copy = {
     cols: ['vCPU', 'Bellek', 'Depolama', 'Trafik', 'Aylık', 'Saatlik'],
     noteTry: (rate) => `Riyal fiyatları, dolar fiyatlarımızın ${rate} SAR/USD kuruyla çevrilmiş halidir; riyal dolara sabitlendiği için değişmez. `,
     noteUsd: 'Suudi Arabistan’daki müşteriler sabit kurla riyal olarak ödeyebilir. ',
-    noteTail: (snapshot) => `Suudi Arabistan’daki müşteriler için %15 KDV eklenir. Her sunucuya bir genel IP dahildir. Anlık görüntüler GB başına aylık ${snapshot}. Yedekler plan fiyatının %20’si, yönetilen katman %30 daha.`,
+    noteTail: (snapshot) => `Suudi Arabistan’daki müşteriler için %15 KDV eklenir. Her sunucuya bir genel IP dahildir. Anlık görüntüler GB başına aylık ${snapshot}. Yedekler plan fiyatının %20’si, yönetilen katman %30 daha. Destek planları aylık 24 USD’den başlar.`,
   },
   marketplace: { eyebrow: 'Uygulama Mağazası', h2: 'Fikirden çalışan uygulamaya tek tık.', lead: 'Her uygulama sertleştirilmiş bir imaj ve bir kurulum betiğidir. Git’ten derlenir, CVE taramasından geçer ve yayınlanmadan önce deneme kurulumu yapılır. Kendi uygulamanızı satıcı programıyla getirin, gelirin %70’i sizde kalsın.' },
   compare: {
@@ -223,7 +223,7 @@ const ar: Copy = {
     cols: ['vCPU', 'الذاكرة', 'التخزين', 'النقل', 'شهريًا', 'بالساعة'],
     noteTry: (rate) => `أسعار الريال هي أسعارنا بالدولار محولة بسعر اليوم ${rate} ريال للدولار. فاتورتك تستخدم سعر يوم إصدارها. `,
     noteUsd: 'يمكن للعملاء في السعودية الدفع بالريال بسعر صرف تاريخ الفاتورة. ',
-    noteTail: (snapshot) => `تُضاف ضريبة القيمة المضافة (15%) للعملاء في السعودية. عنوان IP عام مشمول مع كل خادم. اللقطات ${snapshot} لكل GB شهريًا. النسخ الاحتياطي 20% من سعر الخطة، والمستوى المُدار 30% إضافية.`,
+    noteTail: (snapshot) => `تُضاف ضريبة القيمة المضافة (15%) للعملاء في السعودية. عنوان IP عام مشمول مع كل خادم. اللقطات ${snapshot} لكل GB شهريًا. النسخ الاحتياطي 20% من سعر الخطة، والمستوى المُدار 30% إضافية. تبدأ خطط الدعم من 24 دولارًا شهريًا.`,
   },
   marketplace: { eyebrow: 'المتجر', h2: 'نقرة واحدة من الفكرة إلى تطبيق يعمل.', lead: 'كل تطبيق هو صورة محصّنة مع سكربت إعداد. يُبنى من Git ويُفحص للثغرات ويُنشر تجريبيًا قبل الإطلاق. أضف تطبيقك عبر برنامج الموردين واحتفظ بـ 70% من الإيرادات.' },
   compare: {

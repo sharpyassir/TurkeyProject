@@ -386,6 +386,20 @@ server.registerTool('create_storage_key', {
   inputSchema: { name: z.string(), project: z.string().optional() },
 }, async (input) => run(() => api('POST', '/v1/storage-keys', input)));
 
+server.registerTool('support_ticket', {
+  title: 'Open or read a support ticket',
+  description: 'Talk to pgcloud support on behalf of the user. action "open" creates a ticket (priority must be allowed on the team\'s support plan; free allows low and normal). "list" shows tickets, "get" returns one thread, "reply" adds a message, "close" closes it. Use this when something on the platform looks broken rather than retrying forever.',
+  inputSchema: { action: z.enum(['open', 'list', 'get', 'reply', 'close']), id: z.string().optional(), subject: z.string().optional(), body: z.string().optional(), priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(), resource: z.string().optional().describe('"server:<id>", "database:<id>", "load_balancer:<id>", "domain:<id>", "bucket:<id>" or "invoice:<id>"') },
+}, async ({ action, id, subject, body, priority, resource }) => run(async () => {
+  switch (action) {
+    case 'open': return api('POST', '/v1/support/tickets', { subject, body, priority, resource });
+    case 'list': return api('GET', '/v1/support/tickets');
+    case 'get': return api('GET', `/v1/support/tickets/${id}`);
+    case 'reply': return api('POST', `/v1/support/tickets/${id}/messages`, { body });
+    case 'close': return api('POST', `/v1/support/tickets/${id}/close`, {});
+  }
+}));
+
 server.registerTool('list_databases', {
   title: 'List managed databases',
   description: 'Managed database clusters in the project. Pass id to get one cluster with its connection string and passwords (hand those to the user, do not echo them needlessly).',

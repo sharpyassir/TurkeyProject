@@ -103,6 +103,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Storage: snapshots | ✅ (backups: phase 2) |
 | Managed databases: PostgreSQL (Patroni failover, pgBouncer, pgBackRest with WAL archiving), Valkey (Sentinel, ACL users, RDB backups) and MySQL (GTID replication, XtraBackup); 1 or 3 nodes, VIP that follows the primary, TLS, users and databases, trusted sources, nightly backups to object storage, per node pricing, console, CLI, SDKs, Terraform | ✅ |
 | Managed servers: opt in care tier with an in VM agent (unattended updates with reboot at 04:00, fail2ban, sshd and sysctl hardening, five minute health reports with warning and recovery events), daily backups included, 30 percent of the plan, console, CLI, SDKs, Terraform | ✅ |
+| Support plans: free, developer, standard and premium with first response targets per priority, ticket system with email to owners, back office queue sorted by due time, billed monthly through the meter, console, CLI, SDKs, MCP | ✅ |
 | Object storage: S3 compatible buckets on Ceph RGW (fake in dev), access keys, presigned upload and download, bucket browser in the console, per GB pricing, CLI, SDKs, Terraform | ✅ |
 | DNS: hosted zones with every record type, PowerDNS backend with a fake for dev, zone file export, reverse DNS for public IPs, CLI, SDKs, Terraform | ✅ |
 | Load balancers: managed HAProxy nodes with a shared IP (keepalived), forwarding rules, health checks, sticky sessions, Let's Encrypt and uploaded certificates, tag based targets, CLI, SDKs, Terraform | ✅ |

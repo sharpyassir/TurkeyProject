@@ -24,6 +24,8 @@ export interface Server {
   networks: { v4: { ipAddress: string; floating?: boolean; reverseDns?: string | null }[]; private: { ipAddress: string }[] };
   firewalls: string[]; backupsEnabled: boolean; managed: boolean; managedHealth: 'ok' | 'warn' | 'stale' | 'pending' | null; projectId: string; tags: string[]; createdAt: string;
 }
+export interface SupportPlan { id: string; name: string; summary: string; features: string[]; targets: Record<'low' | 'normal' | 'high' | 'urgent', number | null>; maxOpen: number; currency: string; monthlyMinor: number }
+export interface Ticket { id: string; number: number; subject: string; status: 'open' | 'answered' | 'closed'; priority: 'low' | 'normal' | 'high' | 'urgent'; plan: string; resource: string | null; firstResponseDueAt: string | null; firstRespondedAt: string | null; lastCustomerAt: string; lastSupportAt: string | null; closedAt: string | null; createdAt: string; updatedAt: string; messageCount: number; messages?: { id: string; fromSupport: boolean; author: string; body: string; createdAt: string }[] }
 export interface ManagedStatus { serverId: string; managed: boolean; backupsEnabled: boolean; health: 'ok' | 'warn' | 'stale' | 'pending' | null; issues: string[]; reportedAt: string | null; report: Record<string, unknown> | null; installCommand: string | null }
 export interface Deployment { id: string; name: string; repoUrl: string; repo: string | null; source: 'github_app' | 'url'; branch: string; port: number; status: string; url: string | null; serverId: string; serverStatus: string; lastCommit: string | null; lastDeployAt: string | null; createdAt: string }
 export interface Size { id: string; vcpu: number; memoryMb: number; diskGb: number; transferTb: number }
@@ -248,6 +250,19 @@ export class Pgcloud {
     list: () => this.request<{ data: StorageKey[]; endpoint: string; region: string }>('GET', '/v1/storage-keys', undefined, { project: this.opts.project }),
     create: (name: string) => this.request<StorageKey & { secretKey: string; endpoint: string; region: string }>('POST', '/v1/storage-keys', { name, project: this.opts.project }),
     revoke: (id: string) => this.request<{ id: string; revoked: boolean }>('DELETE', `/v1/storage-keys/${id}`),
+  };
+
+  readonly support = {
+    /** Plan catalog with prices in the given currency. */
+    plans: (currency: 'USD' | 'SAR' = 'USD') => this.request<List<SupportPlan>>('GET', '/v1/support/plans', undefined, { currency }),
+    plan: () => this.request<{ plan: string; since: string | null; openTickets: number; details?: SupportPlan }>('GET', '/v1/support/plan'),
+    setPlan: (plan: 'free' | 'developer' | 'standard' | 'premium') => this.request<{ plan: string; since: string | null; openTickets: number; details?: SupportPlan }>('PUT', '/v1/support/plan', { plan }),
+    tickets: (q?: { status?: 'open' | 'answered' | 'closed' | 'all' }) => this.request<List<Ticket>>('GET', '/v1/support/tickets', undefined, q),
+    ticket: (id: string) => this.request<Ticket>('GET', `/v1/support/tickets/${id}`),
+    /** Opens a ticket. Priority must be allowed on the team's plan; `resource` is "server:<id>", "database:<id>" and so on. */
+    open: (body: { subject: string; body: string; priority?: 'low' | 'normal' | 'high' | 'urgent'; resource?: string }) => this.request<Ticket>('POST', '/v1/support/tickets', body),
+    reply: (id: string, body: string) => this.request<Ticket>('POST', `/v1/support/tickets/${id}/messages`, { body }),
+    close: (id: string) => this.request<Ticket>('POST', `/v1/support/tickets/${id}/close`, {}),
   };
 
   readonly databases = {

@@ -40,6 +40,7 @@ tags:
   - name: databases
   - name: marketplace
   - name: billing
+  - name: support
   - name: webhooks
 
 paths:
@@ -585,6 +586,57 @@ paths:
   /storage-keys/{id}:
     delete: { tags: [object-storage], summary: Revoke an access key, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: Revoked } } }
 
+  /support/plans:
+    get:
+      tags: [support]
+      summary: Support plan catalog
+      description: Public. Plans with first response targets per priority (hours, null when the priority is not allowed on the plan) and the monthly price in the requested currency.
+      security: []
+      parameters: [{ name: currency, in: query, schema: { type: string, enum: [USD, SAR], default: USD } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/SupportPlan" } } } } } } } }
+  /support/plan:
+    get:
+      tags: [support]
+      summary: The team's support plan
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SupportPlanStatus" } } } } }
+    put:
+      tags: [support]
+      summary: Change the support plan
+      description: Needs `billing:write`. An upgrade checks the spend limit on the team's oldest project; a downgrade applies at once. Open tickets keep the targets of the plan they were opened under.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [plan], properties: { plan: { type: string, enum: [free, developer, standard, premium] } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SupportPlanStatus" } } } } }
+  /support/tickets:
+    get:
+      tags: [support]
+      summary: List tickets
+      parameters: [{ name: status, in: query, schema: { type: string, enum: [open, answered, closed, all], default: all } }, { $ref: "#/components/parameters/limit" }, { $ref: "#/components/parameters/cursor" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Ticket" } }, meta: { $ref: "#/components/schemas/PageMeta" } } } } } } }
+    post:
+      tags: [support]
+      summary: Open a ticket
+      description: Priority must be allowed on the team's plan (`400` with the allowed list otherwise). `resource` names what the ticket is about and must belong to the team. Owners and the opener get every answer by email.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [subject, body], properties: { subject: { type: string, minLength: 3, maxLength: 140 }, body: { type: string }, priority: { type: string, enum: [low, normal, high, urgent], default: normal }, resource: { type: string, description: '"server:<id>", "database:<id>", "load_balancer:<id>", "volume:<id>", "domain:<id>", "bucket:<id>" or "invoice:<id>"' } } } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "429": { description: Open ticket limit for the plan (`quota_exceeded`) } }
+  /support/tickets/{id}:
+    get:
+      tags: [support]
+      summary: Get a ticket with its messages
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+  /support/tickets/{id}/messages:
+    post:
+      tags: [support]
+      summary: Reply on a ticket
+      description: Reopens a closed ticket for up to 14 days after it was closed.
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [body], properties: { body: { type: string } } } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } } }
+  /support/tickets/{id}/close:
+    post:
+      tags: [support]
+      summary: Close a ticket
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } } }
   /databases:
     get: { tags: [databases], summary: List managed database clusters, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/DatabaseCluster" } } } } } } } } }
     post:
@@ -998,6 +1050,43 @@ components:
         managedHealth: { type: [string, "null"], enum: [ok, warn, stale, pending, null] }
         projectId: { type: string }
         createdAt: { type: string, format: date-time }
+    SupportPlan:
+      type: object
+      properties:
+        id: { type: string, enum: [free, developer, standard, premium] }
+        name: { type: string }
+        summary: { type: string }
+        features: { type: array, items: { type: string } }
+        targets: { type: object, description: First response target in hours per priority; null when not allowed, properties: { low: { type: [number, "null"] }, normal: { type: [number, "null"] }, high: { type: [number, "null"] }, urgent: { type: [number, "null"] } } }
+        maxOpen: { type: integer }
+        currency: { type: string }
+        monthlyMinor: { type: integer }
+    SupportPlanStatus:
+      type: object
+      properties:
+        plan: { type: string, enum: [free, developer, standard, premium] }
+        since: { type: [string, "null"], format: date-time }
+        openTickets: { type: integer }
+        details: { $ref: "#/components/schemas/SupportPlan" }
+    Ticket:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: integer }
+        subject: { type: string }
+        status: { type: string, enum: [open, answered, closed], description: open waits on us, answered waits on you }
+        priority: { type: string, enum: [low, normal, high, urgent] }
+        plan: { type: string, description: Plan the ticket was opened under }
+        resource: { type: [string, "null"] }
+        firstResponseDueAt: { type: [string, "null"], format: date-time }
+        firstRespondedAt: { type: [string, "null"], format: date-time }
+        lastCustomerAt: { type: string, format: date-time }
+        lastSupportAt: { type: [string, "null"], format: date-time }
+        closedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        messageCount: { type: integer }
+        messages: { type: array, description: Present on a single ticket, items: { type: object, properties: { id: { type: string }, fromSupport: { type: boolean }, author: { type: string }, body: { type: string }, createdAt: { type: string, format: date-time } } } }
     ManagedReport:
       type: object
       properties:

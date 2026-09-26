@@ -56,9 +56,13 @@ async function main() {
     ['backups_pct', 'backup', 20],
     // Managed tier: 30% of the server's monthly price, same percent mechanism.
     ['managed_pct', 'managed_server', 30],
+    // Support plans: flat monthly, billed against the team's default project.
+    ['support-developer', 'support', 2400],
+    ['support-standard', 'support', 9900],
+    ['support-premium', 'support', 49900],
   ] as const) {
     const exists = await prisma.price.findFirst({ where: { resourceType: type, sku, currency: 'USD', validTo: null } });
-    if (!exists) await prisma.price.create({ data: { resourceType: type, sku, currency: 'USD', monthlyMinor: usd, unit: sku.endsWith('_pct') ? 'percent' : 'hour', validFrom: PRICE_VALID_FROM } });
+    if (!exists) await prisma.price.create({ data: { resourceType: type, sku, currency: 'USD', monthlyMinor: usd, unit: sku.endsWith('_pct') ? 'percent' : sku.startsWith('support-') ? 'month' : 'hour', validFrom: PRICE_VALID_FROM } });
   }
 
   // Starting exchange rate; the hourly job replaces it with the provider's rate.
@@ -116,7 +120,7 @@ async function main() {
     await prisma.credit.create({ data: { teamId: team.id, kind: 'promo', currency: 'SAR', amountMinor: 37500, remainingMinor: 37500, reason: 'dev seed ($100 at 3.75)' } });
     const raw = 'pgc_' + randomBytes(32).toString('base64url');
     await prisma.apiToken.create({
-      data: { teamId: team.id, userId: user.id, name: 'dev', prefix: raw.slice(0, 12), hash: createHash('sha256').update(raw).digest('hex'), scopes: ['servers:read', 'servers:write', 'servers:delete', 'images:read', 'snapshots:read', 'snapshots:write', 'volumes:read', 'volumes:write', 'dns:read', 'dns:write', 'storage:read', 'storage:write', 'databases:read', 'databases:write', 'network:read', 'network:write', 'apps:read', 'billing:read', 'billing:write', 'iam:read', 'iam:write'] },
+      data: { teamId: team.id, userId: user.id, name: 'dev', prefix: raw.slice(0, 12), hash: createHash('sha256').update(raw).digest('hex'), scopes: ['servers:read', 'servers:write', 'servers:delete', 'images:read', 'snapshots:read', 'snapshots:write', 'volumes:read', 'volumes:write', 'dns:read', 'dns:write', 'storage:read', 'storage:write', 'databases:read', 'databases:write', 'network:read', 'network:write', 'apps:read', 'billing:read', 'billing:write', 'support:read', 'support:write', 'iam:read', 'iam:write'] },
     });
     const admin = 'pgc_' + randomBytes(32).toString('base64url');
     await prisma.apiToken.create({ data: { teamId: team.id, userId: user.id, name: 'staff-admin', prefix: admin.slice(0, 12), hash: createHash('sha256').update(admin).digest('hex'), scopes: ['admin'] } });

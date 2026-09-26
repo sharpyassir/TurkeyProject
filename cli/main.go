@@ -102,6 +102,8 @@ func main() {
 		err = cmdBuckets(rest)
 	case "databases", "db":
 		err = cmdDatabases(rest)
+	case "support":
+		err = cmdSupport(rest)
 	case "tokens":
 		err = cmdTokens(rest)
 	case "firewalls":
@@ -1831,4 +1833,127 @@ func cmdTokens(args []string) error {
 		return call(http.MethodDelete, "/v1/tokens/"+args[1], nil, nil)
 	}
 	return errors.New("usage: tokens ls | create NAME [--agent --cap 500 --scope S...] | revoke ID")
+}
+
+// cmdSupport: support plan and tickets.
+func cmdSupport(args []string) error {
+	usage := errors.New("usage: pgcloud support [plan [free|developer|standard|premium] | plans | tickets [--status open|closed|all] | new SUBJECT --body TEXT [--priority P] [--about server:ID] | show ID | reply ID TEXT | close ID]")
+	if len(args) == 0 {
+		args = []string{"plan"}
+	}
+	var out map[string]any
+	switch args[0] {
+	case "plans":
+		var r struct {
+			Data []map[string]any `json:"data"`
+		}
+		if err := call(http.MethodGet, "/v1/support/plans", nil, &r); err != nil {
+			return err
+		}
+		if jsonOut {
+			emit(r.Data)
+			return nil
+		}
+		for _, p := range r.Data {
+			fmt.Fprintf(stdout, "%-10s %8.2f %s/mo  %s\n", p["id"], toFloat(p["monthlyMinor"])/100, p["currency"], p["summary"])
+		}
+		return nil
+	case "plan":
+		if len(args) > 1 {
+			if err := call(http.MethodPut, "/v1/support/plan", map[string]any{"plan": args[1]}, &out); err != nil {
+				return err
+			}
+		} else if err := call(http.MethodGet, "/v1/support/plan", nil, &out); err != nil {
+			return err
+		}
+		if jsonOut {
+			emit(out)
+			return nil
+		}
+		d, _ := out["details"].(map[string]any)
+		fmt.Fprintf(stdout, "plan: %v  open tickets: %v", out["plan"], out["openTickets"])
+		if d != nil {
+			fmt.Fprintf(stdout, "  %.2f %s/mo", toFloat(d["monthlyMinor"])/100, d["currency"])
+		}
+		fmt.Fprintln(stdout)
+		return nil
+	case "tickets", "ls":
+		status, _ := flag(args[1:], "--status")
+		path := "/v1/support/tickets"
+		if status != "" {
+			path += "?status=" + status
+		}
+		return cmdList(path, nil, []string{"number", "status", "priority", "subject", "updatedAt", "id"})
+	case "new":
+		if len(args) < 2 {
+			return usage
+		}
+		body, rest := flag(args[2:], "--body")
+		prio, rest := flag(rest, "--priority")
+		about, _ := flag(rest, "--about")
+		if body == "" {
+			return errors.New("--body is required")
+		}
+		req := map[string]any{"subject": args[1], "body": body}
+		if prio != "" {
+			req["priority"] = prio
+		}
+		if about != "" {
+			req["resource"] = about
+		}
+		if err := call(http.MethodPost, "/v1/support/tickets", req, &out); err != nil {
+			return err
+		}
+		if jsonOut {
+			emit(out)
+			return nil
+		}
+		fmt.Fprintf(stdout, "✓ ticket #%v opened (%v); first response by %v\n", out["number"], out["id"], orEmpty(out["firstResponseDueAt"]))
+		return nil
+	case "show", "get":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodGet, "/v1/support/tickets/"+args[1], nil, &out); err != nil {
+			return err
+		}
+		if jsonOut {
+			emit(out)
+			return nil
+		}
+		fmt.Fprintf(stdout, "#%v %v  [%v, %v]\n", out["number"], out["subject"], out["status"], out["priority"])
+		for _, m := range toList(out["messages"]) {
+			mm, _ := m.(map[string]any)
+			who := "customer"
+			if b, _ := mm["fromSupport"].(bool); b {
+				who = "support"
+			}
+			fmt.Fprintf(stdout, "\n--- %v (%s) %v\n%v\n", mm["author"], who, mm["createdAt"], mm["body"])
+		}
+		return nil
+	case "reply":
+		if len(args) < 3 {
+			return usage
+		}
+		if err := call(http.MethodPost, "/v1/support/tickets/"+args[1]+"/messages", map[string]any{"body": strings.Join(args[2:], " ")}, &out); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ reply added to #%v\n", out["number"])
+		return nil
+	case "close":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodPost, "/v1/support/tickets/"+args[1]+"/close", nil, &out); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ ticket #%v closed\n", out["number"])
+		return nil
+	}
+	return usage
+}
+
+func toFloat(v any) float64 {
+	f, _ := v.(float64)
+	return f
 }

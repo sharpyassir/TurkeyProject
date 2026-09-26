@@ -25,6 +25,7 @@ export const ALL_SCOPES = [
   'network:read', 'network:write',
   'apps:read',
   'billing:read', 'billing:write',
+  'support:read', 'support:write',
   'iam:read', 'iam:write',
   'admin',
 ] as const;

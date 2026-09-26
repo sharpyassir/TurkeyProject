@@ -54,6 +54,7 @@ class Pgcloud:
         self.domains = _Domains(self)
         self.buckets = _Buckets(self)
         self.databases = _Databases(self)
+        self.support = _Support(self)
         self.storage_keys = _StorageKeys(self)
         self.certificates = _Certificates(self)
         self.billing = _Billing(self)
@@ -375,6 +376,38 @@ class _StorageKeys(_Res):
 
     def revoke(self, id: str):
         return self.c.request("DELETE", f"/v1/storage-keys/{id}")
+
+
+class _Support(_Res):
+    """Support plan and tickets."""
+
+    def plans(self, currency: str = "USD"):
+        return self.c.request("GET", "/v1/support/plans", query={"currency": currency})["data"]
+
+    def plan(self):
+        return self.c.request("GET", "/v1/support/plan")
+
+    def set_plan(self, plan: str):
+        return self.c.request("PUT", "/v1/support/plan", {"plan": plan})
+
+    def tickets(self, status: str = "all"):
+        return self.c.request("GET", "/v1/support/tickets", query={"status": status})["data"]
+
+    def ticket(self, id: str):
+        return self.c.request("GET", f"/v1/support/tickets/{id}")
+
+    def open(self, subject: str, body: str, priority: str = "normal", resource: str | None = None):
+        """Opens a ticket; resource is "server:<id>", "database:<id>" and so on."""
+        req = {"subject": subject, "body": body, "priority": priority}
+        if resource:
+            req["resource"] = resource
+        return self.c.request("POST", "/v1/support/tickets", req)
+
+    def reply(self, id: str, body: str):
+        return self.c.request("POST", f"/v1/support/tickets/{id}/messages", {"body": body})
+
+    def close(self, id: str):
+        return self.c.request("POST", f"/v1/support/tickets/{id}/close", {})
 
 
 class _Databases(_Res):

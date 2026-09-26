@@ -22,3 +22,4 @@ partner conversations.
 | pgcloud-buckets.png, pgcloud-bucket-browser.png | Object storage buckets and keys, and the bucket browser |
 | pgcloud-databases.png, pgcloud-database-detail.png | Managed databases list and one cluster with connection details, users, trusted sources, nodes and backups |
 | pgcloud-managed-server.png | Managed server: the tier switch next to backups and the managed care card with the agent's last report (updates, reboot state, disk, memory, SSH bans, failed services) |
+| pgcloud-support.png, pgcloud-admin-support.png | Support: plan cards with response targets and the ticket list; back office queue with the thread and answer box |

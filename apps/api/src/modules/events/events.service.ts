@@ -13,6 +13,7 @@ export const CUSTOMER_EVENTS = [
   'load_balancer.created', 'load_balancer.updated', 'load_balancer.deleted', 'load_balancer.target_unhealthy', 'load_balancer.target_healthy',
   'volume.created', 'volume.attached', 'volume.detached', 'volume.resized', 'volume.deleted',
   'server.created', 'server.active', 'server.failed', 'server.deleted', 'server.resized',
+  'ticket.opened', 'ticket.replied', 'ticket.answered', 'ticket.closed', 'support.plan_changed',
   'server.managed_enabled', 'server.managed_disabled', 'server.managed_warning', 'server.managed_recovered',
   'snapshot.completed', 'invoice.issued', 'invoice.paid', 'payment.failed',
   'spend.alert', 'spend.limit_reached', 'account.suspended',

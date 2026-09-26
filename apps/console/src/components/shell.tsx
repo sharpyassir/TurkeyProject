@@ -62,6 +62,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const account = (
     <div className="flex items-center gap-3 text-sm">
       {isStaff && <Link href="/admin" className={pathname.startsWith('/admin') ? 'font-medium text-amber-700' : 'text-amber-700 hover:text-amber-900'}>Back office</Link>}
+      <Link href="/support" className={pathname.startsWith('/support') ? 'font-medium' : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100'}>{t(locale, 'support')}</Link>
       <Link href="/billing" className={pathname.startsWith('/billing') ? 'font-medium' : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100'}>{t(locale, 'billing')}</Link>
       <select className="input w-auto py-1" value={locale} onChange={(e) => setLocale(e.target.value as Locale)} aria-label="Language">
         <option value="en">EN</option>
