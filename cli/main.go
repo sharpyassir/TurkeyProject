@@ -92,9 +92,7 @@ func main() {
 	case "firewalls":
 		err = cmdList("/v1/firewalls", nil, []string{"id", "name"})
 	case "billing":
-		err = cmdGet("/v1/billing/balance", func(v map[string]any) {
-			fmt.Fprintf(stdout, "currency: %s\ncredit: %s\nmonth to date: %s\nstatus: %s\n", v["currency"], money(v["creditMinor"], v["currency"]), money(v["monthToDateMinor"], v["currency"]), v["status"])
-		})
+		err = cmdBilling(rest)
 	case "version":
 		fmt.Fprintln(stdout, "pgcloud", version)
 	case "help", "-h", "--help":
@@ -114,7 +112,7 @@ func usage() {
 
 USAGE  pgcloud [--json] [--project SLUG] <command> [args]
 
-ACCOUNT   login · logout · whoami · billing · tokens create NAME [--agent --cap 500] · ssh-keys ls|add NAME FILE
+ACCOUNT   login · logout · whoami · billing [invoices|payments|topup AMOUNT|pay INVOICE_ID] · tokens create NAME [--agent --cap 500] · ssh-keys ls|add NAME FILE
 AGENTS    approvals [ls | approve ID | deny ID --reason TEXT]   (requests parked by agent tokens)
 SERVERS   servers ls | create NAME [--size s-2vcpu-4gb] [--image ubuntu-24-04|wordpress] [--key ID] [--wait]
                   | get ID | start|stop|reboot|delete ID | resize ID --size S | snapshot ID
@@ -839,6 +837,45 @@ func expand(p string) string {
 		return filepath.Join(h, p[2:])
 	}
 	return p
+}
+
+func cmdBilling(args []string) error {
+	if len(args) == 0 {
+		return cmdGet("/v1/billing/balance", func(v map[string]any) {
+			fmt.Fprintf(stdout, "currency: %s\ncredit: %s\nmonth to date: %s\nstatus: %s\n", v["currency"], money(v["creditMinor"], v["currency"]), money(v["monthToDateMinor"], v["currency"]), v["status"])
+		})
+	}
+	switch args[0] {
+	case "invoices":
+		return cmdList("/v1/billing/invoices", nil, []string{"number", "periodStart", "status", "totalMinor", "currency", "id"})
+	case "payments":
+		return cmdList("/v1/billing/payments", nil, []string{"createdAt", "status", "amountMinor", "currency", "provider", "id"})
+	case "topup", "pay":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: pgcloud billing %s AMOUNT|INVOICE_ID", args[0])
+		}
+		var r map[string]any
+		var err error
+		if args[0] == "topup" {
+			var f float64
+			if _, e := fmt.Sscanf(args[1], "%f", &f); e != nil || f <= 0 {
+				return errors.New("amount must be a number, e.g. 25")
+			}
+			err = call(http.MethodPost, "/v1/billing/topup", map[string]any{"amountMinor": int(f*100 + 0.5)}, &r)
+		} else {
+			err = call(http.MethodPost, "/v1/billing/invoices/"+args[1]+"/pay", map[string]any{}, &r)
+		}
+		if err != nil {
+			return err
+		}
+		if jsonOut {
+			emit(r)
+			return nil
+		}
+		fmt.Fprintf(stdout, "Open this page to pay %s %s:\n%s\n", money(r["amountMinor"], r["currency"]), r["currency"], r["redirectUrl"])
+		return nil
+	}
+	return errors.New("usage: pgcloud billing [invoices | payments | topup AMOUNT | pay INVOICE_ID]")
 }
 
 func cmdApprovals(args []string) error {

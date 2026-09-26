@@ -17,7 +17,22 @@ Prices are set in US dollars. If your team's currency is Turkish lira, every pri
 
 ## Credit and invoices
 
-New accounts start with credit. Usage is drawn from credit first. On the first of each month an invoice is issued for the previous month, with an e-Fatura for Turkish companies. Add credit or a card under **Billing** before the credit runs out; the console shows month to date spend and the projected total.
+New accounts start with credit. Usage is drawn from credit first. On the first of each month an invoice is issued for the previous month, with an e-Fatura for Turkish companies, and the team owners get an email. The console shows month to date spend, every invoice with a PDF, and every card payment.
+
+## Paying
+
+**Add credit** under **Billing**: pick an amount, pay by card on the hosted page, and come back with the credit on your balance. Lira teams pay through iyzico, dollar teams through Stripe. Card details never touch our servers.
+
+**Pay an invoice** the same way with the **Pay** button next to any open invoice, or from the terminal:
+
+```sh
+pgcloud billing                 # balance and month to date
+pgcloud billing invoices
+pgcloud billing topup 25        # prints the payment page to open
+pgcloud billing pay INVOICE_ID
+```
+
+An invoice that is not paid within 14 days pauses new server creation until it is settled; running servers keep running. Paying, or adding credit, lifts the pause at once.
 
 ## Spending caps
 

@@ -26,6 +26,18 @@ const schema = z.object({
   GITHUB_APP_SLUG: z.string().optional(),
   GITHUB_APP_PRIVATE_KEY: z.string().optional(),
   GITHUB_APP_WEBHOOK_SECRET: z.string().optional(),
+  /** Card payments. fake = built in test page (development and demos). */
+  PAYMENT_PROVIDER_USD: z.enum(['stripe', 'fake']).default('fake'),
+  PAYMENT_PROVIDER_TRY: z.enum(['iyzico', 'fake']).default('fake'),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  IYZICO_API_KEY: z.string().optional(),
+  IYZICO_SECRET_KEY: z.string().optional(),
+  IYZICO_BASE_URL: z.string().url().default('https://sandbox-api.iyzipay.com'),
+  /** Seller details printed on invoices. */
+  COMPANY_NAME: z.string().default('pgcloud'),
+  COMPANY_ADDRESS: z.string().default('Türkiye'),
+  COMPANY_TAX_ID: z.string().optional(),
   CONSOLE_URL: z.string().url().default('http://localhost:3000'),
   MAIL_PROVIDER: z.enum(['log', 'postmark', 'resend']).default('log'),
   MAIL_FROM: z.string().default('pgcloud <no-reply@pgcloud.example>'),

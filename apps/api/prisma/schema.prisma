@@ -684,10 +684,16 @@ model Payment {
   amountMinor Int
   status      PaymentStatus   @default(pending)
   failureReason String?
+  /// Return URLs and the adapter that created the checkout (fake in development).
+  metadata    Json            @default("{}")
+  paidAt      DateTime?
   createdAt   DateTime        @default(now())
 
   team    Team     @relation(fields: [teamId], references: [id])
   invoice Invoice? @relation(fields: [invoiceId], references: [id])
+
+  @@index([provider, providerRef])
+  @@index([teamId, createdAt])
 }
 
 // ───────────────────────── Trust & safety ─────────────────────────

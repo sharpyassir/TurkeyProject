@@ -110,6 +110,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Console: login, servers, one-click apps, billing; EN/TR/AR with RTL | ✅ minimal |
 | Account security: TOTP two factor (required for owners), email verification, password reset, rate limits | ✅ |
 | Hosting: Dockerfiles, production compose with Caddy TLS and backups, Ansible for the management host and Proxmox nodes, deploy workflow ([docs/hosting.md](docs/hosting.md)) | ✅ |
+| Payments: Stripe (USD) and iyzico (TRY) checkout, credit top up, invoice pay, invoice PDF, built in test page | ✅ |
 | Terraform, SDK generation | ⏳ |
 
 ### Local dev without Docker

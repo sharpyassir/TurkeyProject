@@ -11,6 +11,7 @@ export const CUSTOMER_EVENTS = [
   'snapshot.completed', 'invoice.issued', 'invoice.paid', 'payment.failed',
   'spend.alert', 'spend.limit_reached', 'account.suspended',
   'approval.requested', 'approval.decided',
+  'payment.started', 'payment.succeeded',
 ] as const;
 
 export type EventName = (typeof CUSTOMER_EVENTS)[number] | (string & {});

@@ -18,7 +18,7 @@ RUN pnpm --filter @pgcloud/api deploy --legacy /out && cp -r apps/api/dist /out/
     && cd /out && node node_modules/prisma/build/index.js generate
 
 FROM node:22-bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates curl && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates curl fonts-dejavu-core && rm -rf /var/lib/apt/lists/* \
     && useradd -r -u 10001 pgcloud
 WORKDIR /app
 COPY --from=build --chown=pgcloud:pgcloud /out /app

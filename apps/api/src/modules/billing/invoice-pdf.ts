@@ -1,0 +1,84 @@
+import PDFDocument from 'pdfkit';
+import { existsSync } from 'node:fs';
+import type { Invoice, Team, UsageRecord } from '@prisma/client';
+import { loadConfig } from '../../config/config';
+
+const FONT = ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', '/usr/share/fonts/dejavu/DejaVuSans.ttf'].find(existsSync);
+const FONT_BOLD = ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf'].find(existsSync);
+
+const LABEL: Record<string, string> = { server: 'Servers', public_ip: 'Public IP addresses', snapshot: 'Snapshots', backup: 'Backups', volume: 'Volumes', bandwidth: 'Bandwidth', app: 'Marketplace apps' };
+
+/** Renders an invoice as a one page PDF. DejaVu Sans covers Turkish letters; Helvetica is the fallback. */
+export function renderInvoicePdf(inv: Invoice & { team: Team; records: UsageRecord[] }): Promise<Buffer> {
+  return new Promise((resolve) => {
+    const c = loadConfig();
+    const doc = new PDFDocument({ size: 'A4', margin: 50, info: { Title: `Invoice ${inv.number}`, Author: c.COMPANY_NAME } });
+    const chunks: Buffer[] = [];
+    doc.on('data', (b: Buffer) => chunks.push(b));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    const regular = FONT ?? 'Helvetica', bold = FONT_BOLD ?? 'Helvetica-Bold';
+    const money = (m: number) => new Intl.NumberFormat(inv.currency === 'TRY' ? 'tr-TR' : 'en-US', { style: 'currency', currency: inv.currency }).format(m / 100);
+    const date = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
+
+    // Header
+    doc.font(bold).fontSize(20).text(c.COMPANY_NAME, 50, 50);
+    doc.font(regular).fontSize(9).fillColor('#555').text(c.COMPANY_ADDRESS, 50, 76, { width: 260 });
+    if (c.COMPANY_TAX_ID) doc.text(`Tax ID: ${c.COMPANY_TAX_ID}`);
+    doc.fillColor('#000').font(bold).fontSize(16).text('INVOICE', 350, 50, { align: 'right' });
+    doc.font(regular).fontSize(10)
+      .text(`Number: ${inv.number}`, 350, 76, { align: 'right' })
+      .text(`Issued: ${date(inv.createdAt)}`, { align: 'right' })
+      .text(`Due: ${date(inv.dueAt)}`, { align: 'right' })
+      .text(`Status: ${inv.status.toUpperCase()}${inv.paidAt ? ` (${date(inv.paidAt)})` : ''}`, { align: 'right' });
+    if (inv.eInvoiceType) doc.text(`${inv.eInvoiceType}${inv.eInvoiceId ? ` ${inv.eInvoiceId}` : ''}`, { align: 'right' });
+
+    // Bill to
+    doc.moveDown(2);
+    const y0 = 140;
+    doc.font(bold).fontSize(10).text('Bill to', 50, y0);
+    doc.font(regular).text(inv.team.name, 50, y0 + 14);
+    if (inv.team.taxId) doc.text(`Tax ID: ${inv.team.taxId}`);
+    doc.text(`Country: ${inv.team.country}`);
+    doc.font(bold).text('Period', 350, y0, { align: 'right' });
+    doc.font(regular).text(`${date(inv.periodStart)} to ${date(new Date(inv.periodEnd.getTime() - 1))}`, 350, y0 + 14, { align: 'right' });
+
+    // Lines
+    const groups = new Map<string, { qty: number; amount: number; unit: string }>();
+    for (const r of inv.records) {
+      const g = groups.get(r.resourceType) ?? { qty: 0, amount: 0, unit: r.unit };
+      g.qty += r.quantity; g.amount += r.amountMinor; groups.set(r.resourceType, g);
+    }
+    let y = 220;
+    const col = { desc: 50, qty: 330, amount: 545 };
+    doc.rect(50, y - 6, 495, 20).fill('#f1f5f9').fillColor('#000');
+    doc.font(bold).fontSize(9).text('Description', col.desc + 6, y).text('Usage', col.qty, y, { width: 120, align: 'right' }).text('Amount', 400, y, { width: 145, align: 'right' });
+    y += 22;
+    doc.font(regular).fontSize(10);
+    for (const [type, g] of groups) {
+      // Metering counts minutes; people read hours.
+      const usage = g.unit === 'minute' ? `${(g.qty / 60).toFixed(1)} hours` : g.unit === 'gb_minute' ? `${(g.qty / 60).toFixed(1)} GB hours` : `${Math.round(g.qty * 100) / 100} ${g.unit}`;
+      doc.text(LABEL[type] ?? type, col.desc + 6, y).text(usage, col.qty, y, { width: 120, align: 'right' }).text(money(g.amount), 400, y, { width: 145, align: 'right' });
+      y += 18;
+    }
+    if (groups.size === 0) { doc.fillColor('#555').text('No usage in this period', col.desc + 6, y).fillColor('#000'); y += 18; }
+
+    // Totals
+    y += 10;
+    doc.moveTo(300, y).lineTo(545, y).strokeColor('#cbd5e1').stroke();
+    y += 8;
+    const total = (label: string, v: string, strong = false) => { doc.font(strong ? bold : regular).text(label, 300, y, { width: 150 }).text(v, 450, y, { width: 95, align: 'right' }); y += 16; };
+    total('Subtotal', money(inv.subtotalMinor));
+    if (inv.taxMinor) total(inv.currency === 'TRY' ? 'KDV (20%)' : 'Tax', money(inv.taxMinor));
+    if (inv.creditMinor) total('Credit applied', `-${money(inv.creditMinor)}`);
+    total('Total due', money(inv.totalMinor), true);
+
+    // Footer
+    doc.fontSize(8).fillColor('#555').font(regular);
+    const note = inv.currency === 'TRY'
+      ? 'Prices are set in US dollars and converted to Turkish lira at the exchange rate stored for each hour of usage. Bu belge e-Fatura veya e-Arşiv fatura olarak ayrıca iletilir.'
+      : 'Billed by the hour of usage, capped at the monthly price of each resource.';
+    doc.text(note, 50, 760, { width: 495, align: 'center' });
+    doc.text(`${c.COMPANY_NAME} · ${c.PUBLIC_API_URL.replace(/^https?:\/\/(api\.)?/, '')}`, 50, 775, { width: 495, align: 'center' });
+    doc.end();
+  });
+}
