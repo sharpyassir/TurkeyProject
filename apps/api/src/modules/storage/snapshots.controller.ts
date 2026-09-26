@@ -10,7 +10,7 @@ import { EventsService } from '../events/events.service';
 
 /**
  * Snapshots are created through `POST /servers/:id/actions {type:"snapshot"}`; this
- * controller lists and deletes them. Block volumes and scheduled backups are phase 2.
+ * controller lists and deletes them. Daily backups are taken by BackupsService.
  */
 @ApiTags('snapshots')
 @ApiBearerAuth()
@@ -23,7 +23,7 @@ export class SnapshotsController {
     const p = await this.iam.resolveProject(actor, project);
     const data = await this.prisma.snapshot.findMany({
       where: { projectId: p.id, deletedAt: null },
-      select: { id: true, name: true, status: true, sizeGb: true, serverId: true, createdAt: true },
+      select: { id: true, name: true, kind: true, status: true, sizeGb: true, serverId: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
     return { data };

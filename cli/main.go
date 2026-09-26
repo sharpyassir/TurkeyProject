@@ -137,7 +137,7 @@ DNS       domains [ls | add NAME [--ip A.B.C.D] | get NAME | zone-file NAME | de
 VOLUMES   volumes [ls | create NAME --size GB [--server ID] | attach ID SERVER_ID | detach ID | resize ID --size GB | delete ID]
 MONITOR   servers metrics ID [--period 1h|6h|24h|7d|30d] · alerts [ls | incidents | create NAME --metric cpu --above 90 | mute ID | delete ID]
 SERVERS   servers ls | create NAME [--size s-2vcpu-4gb] [--image ubuntu-24-04|wordpress] [--key ID] [--wait]
-                  | get ID | start|stop|reboot|delete ID | resize ID --size S | snapshot ID
+                  | get ID | start|stop|reboot|delete ID | resize ID --size S | snapshot ID | backups ID on|off | rename ID NAME | backups ID on|off | rename ID NAME
           ssh NAME|ID [-- command]
 DEPLOY    deploy REPO_URL [--branch main] [--port 3000] [--size S] [--env K=V ...] [--name N] [--wait]
           deploys ls | get ID | redeploy ID | logs ID [--follow]
@@ -622,6 +622,22 @@ func cmdServers(args []string) error {
 			return err
 		}
 		return cmdGet("/v1/servers/"+id, func(s map[string]any) { table([]map[string]any{s}, serverCols) })
+	case "backups", "rename":
+		if len(rest) < 2 {
+			return errors.New("usage: pgcloud servers backups ID on|off | rename ID NAME")
+		}
+		body := map[string]any{}
+		if sub == "backups" {
+			body["backups"] = rest[1] == "on"
+		} else {
+			body["name"] = rest[1]
+		}
+		var s map[string]any
+		if err := call(http.MethodPatch, "/v1/servers/"+rest[0], body, &s); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ %v: backups=%v\n", s["name"], s["backupsEnabled"])
+		return nil
 	case "start", "stop", "reboot", "snapshot", "resize", "rebuild":
 		id, err := resolveServer(rest)
 		if err != nil {

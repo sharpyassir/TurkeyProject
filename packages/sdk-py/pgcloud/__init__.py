@@ -137,6 +137,9 @@ class _Servers(_Res):
     def actions(self, id: str):
         return self.c.request("GET", f"/v1/servers/{id}/actions")["data"]
 
+    def update(self, id: str, **fields):
+        return self.c.request("PATCH", f"/v1/servers/{id}", fields)
+
     def delete(self, id: str):
         return self.c.request("DELETE", f"/v1/servers/{id}")
 

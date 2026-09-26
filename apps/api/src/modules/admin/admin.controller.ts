@@ -8,6 +8,7 @@ import { TrustService } from '../trust/trust.service';
 import { EventsService } from '../events/events.service';
 import { RatingService } from '../billing/rating.service';
 import { InvoicesService } from '../billing/invoices.service';
+import { BackupsService } from '../storage/backups.service';
 import { FxService } from '../billing/fx.service';
 import { startOfMonth } from '../billing/pricing';
 import { ApiError } from '../../common/errors/api-error';
@@ -61,7 +62,14 @@ export class AdminController {
     private readonly rating: RatingService,
     private readonly invoices: InvoicesService,
     private readonly fx: FxService,
+    private readonly backups: BackupsService,
   ) {}
+
+  /** Runs the daily backup pass now (idempotent within the day). */
+  @Post('backups/run') @RequireScopes('admin') @HttpCode(200)
+  runBackups() {
+    return this.backups.runDaily();
+  }
 
   // ---- overview ----
 

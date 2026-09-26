@@ -270,6 +270,12 @@ paths:
       responses:
         "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/ServerAction" } } } }
         "409": { description: Invalid state (`invalid_state`) }
+    patch:
+      tags: [servers]
+      summary: Rename, retag, or turn backups on or off
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string }, tags: { type: array, items: { type: string } }, backups: { type: boolean, description: Daily platform snapshot, last seven kept, 20 percent of the plan } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Server" } } } } }
   /servers/{id}/actions:
     get:
       tags: [servers]

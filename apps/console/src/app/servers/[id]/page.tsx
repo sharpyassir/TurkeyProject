@@ -122,7 +122,7 @@ export default function ServerDetailPage() {
             <Row k={t(locale, 'size')}>{server.size.id}</Row>
             <Row k={t(locale, 'region')}>{server.region.name}</Row>
             <Row k={t(locale, 'privateIp')}>{server.networks.private[0]?.ipAddress ?? '—'}</Row>
-            <Row k={t(locale, 'backups')}>{t(locale, server.backupsEnabled ? 'on' : 'off')}</Row>
+            <Row k={t(locale, 'backups')}>{t(locale, server.backupsEnabled ? 'on' : 'off')} <button className="btn-ghost ms-2" disabled={busy} onClick={() => run(() => api(`/v1/servers/${id}`, { method: 'PATCH', body: JSON.stringify({ backups: !server.backupsEnabled }) }))}>{t(locale, server.backupsEnabled ? 'backupsOff' : 'backupsOn')}</button><div className="text-xs text-neutral-500">{tf(locale, 'backupsNote')(`${priceOf('backups_pct')?.monthlyMinor ?? 20}%`)}</div></Row>
             <Row k={t(locale, 'created')}>{new Date(server.createdAt).toLocaleString(locale)}</Row>
             {server.tags.length > 0 && <Row k={t(locale, 'tags')}>{server.tags.join(', ')}</Row>}
           </section>
@@ -219,7 +219,7 @@ export default function ServerDetailPage() {
             <table className="w-full"><tbody>
               {snapshots.map((s) => (
                 <tr key={s.id} className="border-t border-neutral-100 dark:border-neutral-800">
-                  <td className="py-2 font-medium">{s.name}</td><td className="py-2"><StatusBadge status={s.status} /></td><td className="py-2">{s.sizeGb} GB</td>
+                  <td className="py-2 font-medium">{s.name}{s.kind === 'backup' && <span className="badge ms-2 bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{t(locale, 'backupKind')}</span>}</td><td className="py-2"><StatusBadge status={s.status} /></td><td className="py-2">{s.sizeGb} GB</td>
                   <td className="py-2 text-neutral-500">{new Date(s.createdAt).toLocaleString(locale)}</td>
                   <td className="py-2 text-end"><button className="btn-danger" disabled={busy} onClick={() => confirm(t(locale, 'deleteSnapshotConfirm')) && run(() => api(`/v1/snapshots/${s.id}`, { method: 'DELETE' }).then(loadSide))}>{t(locale, 'delete')}</button></td>
                 </tr>

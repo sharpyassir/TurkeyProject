@@ -31,7 +31,7 @@ export interface Price { resourceType: string; sku: string; unit: string; monthl
 export interface Balance { currency: 'USD' | 'SAR'; creditMinor: number; monthToDateMinor: number; status: string }
 export interface Firewall { id: string; name: string; rules: FirewallRule[]; servers: { serverId: string }[] }
 export interface FirewallRule { id?: string; direction: 'inbound' | 'outbound'; protocol: 'tcp' | 'udp' | 'icmp' | 'any'; ports?: string | null; cidrs: string[]; description?: string }
-export interface Snapshot { id: string; name: string; status: string; sizeGb: number; serverId: string | null; createdAt: string }
+export interface Snapshot { id: string; name: string; kind: 'manual' | 'backup'; status: string; sizeGb: number; serverId: string | null; createdAt: string }
 export type VolumeStatus = 'creating' | 'available' | 'attaching' | 'attached' | 'detaching' | 'resizing' | 'deleting' | 'failed' | 'deleted';
 export interface Volume { id: string; name: string; sizeGb: number; status: VolumeStatus; statusMessage: string | null; serverId: string | null; device: string | null; regionId: string; projectId: string; createdAt: string; server: { id: string; name: string } | null }
 export interface ForwardingRule { entryProtocol: 'http' | 'https' | 'tcp'; entryPort: number; targetProtocol: 'http' | 'tcp'; targetPort: number; certificateId?: string }
@@ -127,6 +127,7 @@ export class Pgcloud {
     action: (id: string, body: { type: 'start' | 'stop' | 'reboot' | 'resize' | 'rebuild' | 'snapshot'; size?: string; image?: string; name?: string; force?: boolean }) =>
       this.request<{ id: string; type: string; status: string }>('POST', `/v1/servers/${id}/actions`, body),
     actions: (id: string) => this.request<List<{ id: string; type: string; status: string; startedAt: string; finishedAt: string | null; error: string | null }>>('GET', `/v1/servers/${id}/actions`),
+    update: (id: string, body: { name?: string; tags?: string[]; backups?: boolean }) => this.request<Server>('PATCH', `/v1/servers/${id}`, body),
     delete: (id: string) => this.request<{ id: string; status: string }>('DELETE', `/v1/servers/${id}`),
     /** CPU, memory, network and disk series. Minute resolution up to 24h, hourly for 7d and 30d. */
     metrics: (id: string, period: '1h' | '6h' | '24h' | '7d' | '30d' = '1h') => this.request<MetricSeries>('GET', `/v1/servers/${id}/metrics`, undefined, { period }),

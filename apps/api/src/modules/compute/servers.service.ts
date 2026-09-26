@@ -13,7 +13,7 @@ import { SpendService } from '../billing/spend.service';
 import { MarketplaceService } from '../marketplace/marketplace.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import type { Approval } from '@prisma/client';
-import { CreateServerDto, ListServersQuery, ServerActionDto } from './compute.dto';
+import { CreateServerDto, ListServersQuery, ServerActionDto, UpdateServerDto } from './compute.dto';
 
 /** Transitions allowed from each state. Everything else is `invalid_state`. */
 const ALLOWED: Record<ActionType, ServerStatus[]> = {
@@ -165,6 +165,21 @@ export class ServersService {
     await this.startWorkflow(server.actions[0].id, 'createServer', [{ serverId: server.id, actionId: server.actions[0].id, avoid: dto.avoid ?? [] }]);
     await this.events.emit('server.created', { serverId: server.id, name: server.name, size: size.id, image: image.id, region: region.id }, { actor, resource: `server:${server.id}` });
     return present(server);
+  }
+
+  /** Name, tags and the backups switch. Turning backups on checks spend for the 20 percent add on. */
+  async update(actor: Actor, id: string, dto: UpdateServerDto) {
+    const server = await this.mustOwn(actor, id);
+    if (dto.backups === true && !server.backupsEnabled) {
+      const team = await this.prisma.team.findUniqueOrThrow({ where: { id: actor.teamId } });
+      const plan = await this.spend.monthlyPriceMinor('server', server.sizeId, team.currency);
+      await this.spend.assertCanSpend(actor, server.projectId, Math.round((plan * (await this.spend.monthlyPriceMinor('backup', 'backups_pct', team.currency))) / 100));
+    }
+    if (dto.name && dto.name !== server.name && (await this.prisma.server.findFirst({ where: { projectId: server.projectId, name: dto.name, deletedAt: null } }))) throw ApiError.conflict('name_taken', `A server named "${dto.name}" already exists in this project`);
+    const updated = await this.prisma.server.update({ where: { id }, data: { name: dto.name, tags: dto.tags, backupsEnabled: dto.backups }, include: serverInclude });
+    if (dto.backups !== undefined && dto.backups !== server.backupsEnabled) await this.events.emit(dto.backups ? 'server.backups_enabled' : 'server.backups_disabled', { serverId: id }, { actor, resource: `server:${id}` });
+    if (dto.name && dto.name !== server.name) await this.events.emit('server.renamed', { serverId: id, from: server.name, to: dto.name }, { actor, resource: `server:${id}` });
+    return present(updated);
   }
 
   async action(actor: Actor, id: string, dto: ServerActionDto) {

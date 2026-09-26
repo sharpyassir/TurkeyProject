@@ -14,6 +14,7 @@ import { AlertsService } from '../modules/monitoring/alerts.service';
 import { LoadBalancersService } from '../modules/lb/lb.service';
 import { DnsService } from '../modules/dns/dns.service';
 import { ObjectsService } from '../modules/storage/objects/objects.service';
+import { BackupsService } from '../modules/storage/backups.service';
 
 /**
  * Periodic jobs. Each takes a Redis lock so only one API replica runs it.
@@ -38,7 +39,13 @@ export class JobsService {
     private readonly lbs: LoadBalancersService,
     private readonly dns: DnsService,
     private readonly objects: ObjectsService,
+    private readonly backups: BackupsService,
   ) {}
+
+  @Cron('0 10 2 * * *') // 02:10 UTC daily: platform backups for servers with backups on
+  dailyBackups() {
+    return this.locked('daily-backups', 30 * 60_000, () => this.backups.runDaily());
+  }
 
   @Cron('40 */10 * * * *') // every ten minutes: bucket sizes from the storage cluster, for billing
   refreshBucketUsage() {

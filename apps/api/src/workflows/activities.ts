@@ -33,7 +33,7 @@ export interface Activities {
   resizeVm(serverId: string, sizeId: string): Promise<void>;
   deleteVm(serverId: string): Promise<void>;
   finalizeDelete(serverId: string): Promise<void>;
-  createSnapshotRecord(serverId: string, name: string): Promise<string>;
+  createSnapshotRecord(serverId: string, name: string, kind?: 'manual' | 'backup'): Promise<string>;
   snapshotVm(serverId: string, snapshotId: string): Promise<void>;
   failSnapshot(snapshotId: string, message: string): Promise<void>;
   deleteSnapshotVm(snapshotId: string): Promise<void>;
@@ -221,11 +221,11 @@ export function createActivities(app: INestApplicationContext): Activities {
       await prisma.volume.updateMany({ where: { serverId }, data: { serverId: null, device: null, status: 'available' } });
     },
 
-    async createSnapshotRecord(serverId, name) {
+    async createSnapshotRecord(serverId, name, kind = 'manual') {
       const s = await load(serverId);
       const existing = await prisma.snapshot.findFirst({ where: { serverId, name, status: 'pending' } });
       if (existing) return existing.id;
-      return (await prisma.snapshot.create({ data: { projectId: s.projectId, serverId, name } })).id;
+      return (await prisma.snapshot.create({ data: { projectId: s.projectId, serverId, name, kind } })).id;
     },
 
     async snapshotVm(serverId, snapshotId) {

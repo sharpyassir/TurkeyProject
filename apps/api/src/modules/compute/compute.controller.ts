@@ -1,10 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CurrentActor, Public, RequireScopes } from '../../common/auth/decorators';
 import type { Actor } from '../../common/auth/actor';
 import { ServersService } from './servers.service';
-import { CreateServerDto, ListServersQuery, ServerActionDto } from './compute.dto';
+import { CreateServerDto, ListServersQuery, ServerActionDto, UpdateServerDto } from './compute.dto';
 
 @ApiTags('servers')
 @ApiBearerAuth()
@@ -26,6 +26,11 @@ export class ServersController {
   @Get(':id') @RequireScopes('servers:read')
   get(@CurrentActor() actor: Actor, @Param('id') id: string) {
     return this.servers.get(actor, id);
+  }
+
+  @Patch(':id') @RequireScopes('servers:write')
+  update(@CurrentActor() actor: Actor, @Param('id') id: string, @Body() dto: UpdateServerDto) {
+    return this.servers.update(actor, id, dto);
   }
 
   @Post(':id/actions') @RequireScopes('servers:write') @HttpCode(202)

@@ -129,11 +129,12 @@ export interface SnapshotInput {
   serverId: string;
   actionId: string;
   name: string;
+  kind?: 'manual' | 'backup';
 }
 
 export async function snapshotServer(input: SnapshotInput): Promise<void> {
-  const { serverId, actionId, name } = input;
-  const snapshotId = await act.createSnapshotRecord(serverId, name);
+  const { serverId, actionId, name, kind } = input;
+  const snapshotId = await act.createSnapshotRecord(serverId, name, kind);
   try {
     await slow.snapshotVm(serverId, snapshotId);
     await act.completeAction(actionId);

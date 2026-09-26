@@ -409,11 +409,18 @@ enum SnapshotStatus {
   deleted
 }
 
+enum SnapshotKind {
+  manual
+  backup
+}
+
 model Snapshot {
   id        String         @id @default(cuid())
   projectId String
   serverId  String?
   name      String
+  /// backup = taken daily by the platform, kept seven, covered by the backups price
+  kind      SnapshotKind   @default(manual)
   status    SnapshotStatus @default(pending)
   sizeGb    Float          @default(0)
   driverRef String?
@@ -422,6 +429,8 @@ model Snapshot {
 
   project Project @relation(fields: [projectId], references: [id])
   server  Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+
+  @@index([serverId, kind])
 }
 
 // ───────────────────────── Networking (MVP: public IPs + firewalls) ─────────────────────────

@@ -46,7 +46,7 @@ export class MeteringService {
       this.prisma.server.findMany({ where: { status: { in: ['active', 'off', 'rebooting', 'resizing', 'rebuilding'] }, meteredSince: { not: null }, managedBy: null }, select: { id: true, projectId: true, hostId: true, backupsEnabled: true } }),
       // IPs held by a load balancer (the VIP) or its nodes are part of the load balancer price.
       this.prisma.publicIp.findMany({ where: { status: { in: ['assigned', 'reserved'] }, projectId: { not: null }, loadBalancer: null, OR: [{ serverId: null }, { server: { managedBy: null } }] }, select: { id: true, projectId: true } }),
-      this.prisma.snapshot.findMany({ where: { status: 'available' }, select: { id: true, projectId: true, sizeGb: true } }),
+      this.prisma.snapshot.findMany({ where: { status: 'available', kind: 'manual' }, select: { id: true, projectId: true, sizeGb: true } }),
     
       this.prisma.volume.findMany({ where: { status: { in: ['available', 'attaching', 'attached', 'detaching', 'resizing'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, sizeGb: true } }),
       this.prisma.loadBalancer.findMany({ where: { status: { in: ['active', 'updating'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, nodes: true } }),

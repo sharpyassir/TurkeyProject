@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsIn, IsObject, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsObject, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
 import { PaginationQuery } from '../../common/pagination';
 
 export class CreateServerDto {
@@ -26,6 +26,12 @@ export class ServerActionDto {
   @IsOptional() @IsString() image?: string; // rebuild
   @IsOptional() @IsString() @Length(1, 60) name?: string; // snapshot
   @IsOptional() @IsBoolean() force?: boolean; // stop
+}
+
+export class UpdateServerDto {
+  @IsOptional() @IsString() @Length(1, 63) @Matches(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/) name?: string;
+  @IsOptional() @IsBoolean() backups?: boolean;
+  @IsOptional() @IsArray() @IsString({ each: true }) @ArrayMaxSize(20) tags?: string[];
 }
 
 export class ListServersQuery extends PaginationQuery {

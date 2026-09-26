@@ -88,9 +88,10 @@ export class FakeDriver implements HypervisorDriver {
     return { power: vm.power, cpuPercent: Math.random() * 10, memoryUsedMb: Math.floor(vm.spec.memoryMb * 0.3) };
   }
   async snapshotVm(_h: string, vmRef: string, snapshotId: string) {
-    const vm = this.mustGet(vmRef);
+    // A worker restart forgets in memory VMs; snapshots of unknown refs still succeed so daily backups keep working in dev.
+    const vm = this.vms.get(vmRef);
     await sleep(500);
-    return { snapshotRef: JSON.stringify({ fake: true, vmRef, snapshotId }), sizeGb: vm.spec.diskGb * 0.4 };
+    return { snapshotRef: JSON.stringify({ fake: true, vmRef, snapshotId }), sizeGb: (vm?.spec.diskGb ?? 25) * 0.4 };
   }
   async deleteSnapshot() {}
   // These three are called from the API process, which does not share memory with the

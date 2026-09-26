@@ -15,7 +15,7 @@ Create a new server from a snapshot by choosing it as the image. The new server 
 
 ## Backups
 
-Turn on backups when you create a server, or later from its page. We take a snapshot every day and keep the last seven. Backups cost 20 percent of the server price and count toward the same restore flow as snapshots.
+Turn on backups when you create a server, or later from its page, with `pgcloud servers backups ID on`, or `PATCH /v1/servers/{id}` with `backups: true`. We take a snapshot every night at 02:10 UTC and keep the last seven; they show in the snapshot list marked as daily backups and can be used like any snapshot. Backups cost 20 percent of the server price, and the backup snapshots themselves are not charged as snapshot storage.
 
 ## Retention
 
