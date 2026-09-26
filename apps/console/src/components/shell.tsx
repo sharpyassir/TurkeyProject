@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { getToken, setToken } from '@/lib/api';
+import { api, getToken, setToken } from '@/lib/api';
 import { getLocale, Locale, RTL, t } from '@/lib/i18n';
 import { DesktopNav, MobileNav } from './main-nav';
 
@@ -24,6 +24,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('en');
   const [authed, setAuthed] = useState(false);
   const [ready, setReady] = useState(false);
+  const [isStaff, setIsStaff] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -31,6 +32,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setLocaleState(getLocale());
     setAuthed(!!getToken());
     setReady(true);
+    if (getToken()) api<{ isStaff: boolean }>('/v1/account').then((m) => setIsStaff(!!m.isStaff)).catch(() => setIsStaff(false));
   }, [pathname]);
 
   useEffect(() => {
@@ -59,6 +61,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const account = (
     <div className="flex items-center gap-3 text-sm">
+      {isStaff && <Link href="/admin" className={pathname.startsWith('/admin') ? 'font-medium text-amber-700' : 'text-amber-700 hover:text-amber-900'}>Back office</Link>}
       <Link href="/billing" className={pathname.startsWith('/billing') ? 'font-medium' : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100'}>{t(locale, 'billing')}</Link>
       <select className="input w-auto py-1" value={locale} onChange={(e) => setLocale(e.target.value as Locale)} aria-label="Language">
         <option value="en">EN</option>

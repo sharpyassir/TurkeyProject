@@ -117,14 +117,16 @@ export class TokenService {
     if (!sub || !tid) return null;
     const membership = await this.prisma.teamMember.findUnique({
       where: { teamId_userId: { teamId: tid, userId: sub } },
-      include: { user: { select: { locale: true } }, team: { select: { status: true } } },
+      include: { user: { select: { locale: true, isStaff: true } }, team: { select: { status: true } } },
     });
     if (!membership || membership.team.status === 'closed') return null;
+    const scopes = scopesForRole(membership.role);
+    if (membership.user.isStaff) scopes.add('admin'); // back office pages in the console
     return {
       userId: sub,
       teamId: tid,
       role: membership.role,
-      scopes: scopesForRole(membership.role),
+      scopes,
       isAgent: false,
       requireApprovalFor: new Set(),
       locale: membership.user.locale,

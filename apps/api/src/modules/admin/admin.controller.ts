@@ -9,6 +9,8 @@ import { EventsService } from '../events/events.service';
 import { RatingService } from '../billing/rating.service';
 import { InvoicesService } from '../billing/invoices.service';
 import { FxService } from '../billing/fx.service';
+import { startOfMonth } from '../billing/pricing';
+import { ApiError } from '../../common/errors/api-error';
 
 class RegisterHostDto {
   @IsString() name: string;
@@ -34,6 +36,15 @@ class SuspendDto {
   @IsString() reason: string;
 }
 
+class PriceDto {
+  @IsString() sku: string;
+  @IsInt() @Min(0) monthlyMinor: number;
+}
+
+class ResolveDto {
+  @IsIn(['false_positive', 'warned', 'suspended']) resolution: 'false_positive' | 'warned' | 'suspended';
+}
+
 /**
  * Back-office API for support, capacity and finance. Requires the `admin` scope, which
  * only staff tokens carry (issued out-of-band; never via /v1/tokens).
@@ -51,6 +62,82 @@ export class AdminController {
     private readonly invoices: InvoicesService,
     private readonly fx: FxService,
   ) {}
+
+  // ---- overview ----
+
+  @Get('overview')
+  async overview() {
+    const month = startOfMonth(new Date());
+    const [teams, teamsNew, servers, hosts, pendingApprovals, abuse, openInvoices, mtd, payments, recentTeams] = await Promise.all([
+      this.prisma.team.groupBy({ by: ['status'], _count: true }),
+      this.prisma.team.count({ where: { createdAt: { gte: new Date(Date.now() - 7 * 86_400_000) } } }),
+      this.prisma.server.groupBy({ by: ['status'], where: { deletedAt: null }, _count: true }),
+      this.prisma.host.findMany({ select: { id: true, name: true, status: true, totalVcpu: true, totalMemoryMb: true, totalDiskGb: true, usedVcpu: true, usedMemoryMb: true, usedDiskGb: true, lastHeartbeatAt: true } }),
+      this.prisma.approval.count({ where: { status: 'pending' } }),
+      this.prisma.abuseFlag.count({ where: { resolvedAt: null } }),
+      this.prisma.invoice.aggregate({ where: { status: 'open' }, _count: true, _sum: { totalMinor: true } }),
+      this.prisma.usageRecord.groupBy({ by: ['currency'], where: { hourStart: { gte: month } }, _sum: { amountMinor: true } }),
+      this.prisma.payment.groupBy({ by: ['currency'], where: { status: 'succeeded', paidAt: { gte: month } }, _sum: { amountMinor: true } }),
+      this.prisma.team.findMany({ orderBy: { createdAt: 'desc' }, take: 8, select: { id: true, name: true, slug: true, country: true, currency: true, status: true, createdAt: true } }),
+    ]);
+    return {
+      teams: Object.fromEntries(teams.map((t) => [t.status, t._count])), teamsNewThisWeek: teamsNew,
+      servers: Object.fromEntries(servers.map((s) => [s.status, s._count])),
+      hosts,
+      pendingApprovals, openAbuseFlags: abuse,
+      openInvoices: { count: openInvoices._count, totalMinor: openInvoices._sum.totalMinor ?? 0 },
+      monthToDate: Object.fromEntries(mtd.map((m) => [m.currency, m._sum.amountMinor ?? 0])),
+      paymentsThisMonth: Object.fromEntries(payments.map((m) => [m.currency, m._sum.amountMinor ?? 0])),
+      recentTeams,
+    };
+  }
+
+  @Get('servers')
+  async servers(@Query('q') q?: string, @Query('status') status?: string) {
+    return {
+      data: await this.prisma.server.findMany({
+        where: { deletedAt: null, ...(status ? { status: status as never } : {}), ...(q ? { OR: [{ name: { contains: q, mode: 'insensitive' } }, { id: q }, { project: { team: { name: { contains: q, mode: 'insensitive' } } } }] } : {}) },
+        include: { project: { select: { name: true, team: { select: { id: true, name: true, slug: true } } } }, host: { select: { name: true } }, publicIps: { select: { address: true } }, size: { select: { id: true } } },
+        orderBy: { createdAt: 'desc' }, take: 100,
+      }),
+    };
+  }
+
+  @Get('invoices')
+  async listInvoices(@Query('status') status?: string) {
+    return { data: await this.prisma.invoice.findMany({ where: status ? { status: status as never } : {}, include: { team: { select: { id: true, name: true, slug: true, country: true } } }, orderBy: { createdAt: 'desc' }, take: 100 }) };
+  }
+
+  @Get('prices')
+  async prices() {
+    return { data: await this.prisma.price.findMany({ where: { currency: 'USD', validTo: null }, orderBy: [{ resourceType: 'asc' }, { monthlyMinor: 'asc' }] }) };
+  }
+
+  /** Changes a USD list price from now on: the old row is closed, a new one opens. Running hours keep the old rate. */
+  @Post('prices')
+  async setPrice(@CurrentActor() actor: Actor, @Body() dto: PriceDto) {
+    const cur = await this.prisma.price.findFirst({ where: { sku: dto.sku, currency: 'USD', validTo: null } });
+    if (!cur) throw ApiError.notFound('price', dto.sku);
+    const now = new Date();
+    const [, next] = await this.prisma.$transaction([
+      this.prisma.price.update({ where: { id: cur.id }, data: { validTo: now } }),
+      this.prisma.price.create({ data: { resourceType: cur.resourceType, sku: cur.sku, sizeId: cur.sizeId, currency: 'USD', monthlyMinor: dto.monthlyMinor, unit: cur.unit, validFrom: now } }),
+    ]);
+    await this.events.emit('admin.price_set', { sku: dto.sku, from: cur.monthlyMinor, to: dto.monthlyMinor }, { actor });
+    return next;
+  }
+
+  @Post('abuse/:id/resolve') @HttpCode(204)
+  async resolveAbuse(@CurrentActor() actor: Actor, @Param('id') id: string, @Body() dto: ResolveDto) {
+    const flag = await this.prisma.abuseFlag.update({ where: { id }, data: { resolvedAt: new Date(), resolution: dto.resolution } });
+    if (dto.resolution === 'suspended') await this.trust.suspend(flag.teamId, `abuse: ${flag.kind}`);
+    await this.events.emit('admin.abuse_resolved', { flagId: id, resolution: dto.resolution }, { actor });
+  }
+
+  @Get('audit')
+  async audit(@Query('limit') limit = '100') {
+    return { data: await this.prisma.auditLog.findMany({ orderBy: { at: 'desc' }, take: Math.min(Number(limit) || 100, 500), include: { user: { select: { email: true } } } }) };
+  }
 
   // ---- capacity ----
 

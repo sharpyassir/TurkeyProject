@@ -1,0 +1,79 @@
+'use client';
+
+import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { api, ApiError } from '@/lib/api';
+import { AdminShell, Stat, fmtDate, fmtMoney } from '@/components/admin-shell';
+import { StatusBadge } from '@/components/status-badge';
+
+interface Team {
+  id: string; name: string; slug: string; country: string; currency: string; status: string; kycLevel: number; taxId: string | null; createdAt: string;
+  members: { role: string; user: { id: string; email: string; name: string } }[];
+  projects: { id: string; name: string; slug: string; spendLimitMinor: number | null; _count: { servers: number } }[];
+  abuseFlags: { id: string; kind: string; score: number; source: string; createdAt: string }[];
+  credits: { id: string; kind: string; amountMinor: number; remainingMinor: number; reason: string | null; expiresAt: string | null; createdAt: string }[];
+  invoices: { id: string; number: string; status: string; totalMinor: number; currency: string; periodStart: string }[];
+}
+
+export default function AdminTeam() {
+  const { id } = useParams<{ id: string }>();
+  const [t, setT] = useState<Team | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = useCallback(() => api<Team>(`/admin/v1/teams/${id}`).then(setT), [id]);
+  useEffect(() => { load(); }, [load]);
+  async function run(fn: () => Promise<unknown>, ok: string) {
+    setMsg(null);
+    try { await fn(); setMsg(ok); await load(); } catch (err) { setMsg(err instanceof ApiError ? err.message : String(err)); }
+  }
+  async function credit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    await run(() => api(`/admin/v1/teams/${id}/credits`, { method: 'POST', body: JSON.stringify({ kind: f.get('kind'), amountMinor: Math.round(Number(f.get('amount')) * 100), reason: f.get('reason') || undefined }) }), 'Credit added.');
+    e.currentTarget.reset();
+  }
+  if (!t) return <AdminShell title="Team"><p className="text-sm text-neutral-500">Loading…</p></AdminShell>;
+  const credit_ = t.credits.reduce((s, c) => s + (!c.expiresAt || new Date(c.expiresAt) > new Date() ? c.remainingMinor : 0), 0);
+  return (
+    <AdminShell title={t.name} actions={<>
+      {t.status === 'suspended'
+        ? <button className="btn-primary" onClick={() => run(() => api(`/admin/v1/teams/${id}/reinstate`, { method: 'POST' }), 'Team reinstated.')}>Reinstate</button>
+        : <button className="btn-danger" onClick={() => { const reason = prompt('Reason for suspension:'); if (reason) run(() => api(`/admin/v1/teams/${id}/suspend`, { method: 'POST', body: JSON.stringify({ reason }) }), 'Team suspended.'); }}>Suspend</button>}
+      {t.kycLevel < 1 && <button className="btn-ghost" onClick={() => run(() => api(`/admin/v1/teams/${id}/verify`, { method: 'POST', body: JSON.stringify({ kycLevel: 1 }) }), 'Marked as verified.')}>Mark verified</button>}
+    </>}>
+      {msg && <p className="rounded border border-neutral-200 bg-neutral-50 p-2 text-sm dark:border-neutral-800 dark:bg-neutral-900">{msg}</p>}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="Status" value={t.status} sub={`KYC level ${t.kycLevel} · ${t.country} · ${t.currency}${t.taxId ? ` · tax id ${t.taxId}` : ''}`} tone={t.status === 'suspended' ? 'bad' : undefined} />
+        <Stat label="Credit balance" value={fmtMoney(credit_, t.currency)} />
+        <Stat label="Servers" value={t.projects.reduce((s, p) => s + p._count.servers, 0)} sub={`${t.projects.length} projects`} />
+        <Stat label="Open flags" value={t.abuseFlags.length} tone={t.abuseFlags.length ? 'bad' : undefined} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="card p-0">
+          <h2 className="border-b border-neutral-100 px-4 py-2 font-medium dark:border-neutral-800">Members</h2>
+          <table className="w-full text-sm"><tbody>{t.members.map((m) => <tr key={m.user.id} className="border-t border-neutral-100 dark:border-neutral-800"><td className="px-4 py-2">{m.user.name}</td><td className="px-4 py-2 text-neutral-500">{m.user.email}</td><td className="px-4 py-2"><span className="badge bg-neutral-100 dark:bg-neutral-800">{m.role}</span></td></tr>)}</tbody></table>
+        </section>
+        <section className="card p-0">
+          <h2 className="border-b border-neutral-100 px-4 py-2 font-medium dark:border-neutral-800">Projects</h2>
+          <table className="w-full text-sm"><tbody>{t.projects.map((p) => <tr key={p.id} className="border-t border-neutral-100 dark:border-neutral-800"><td className="px-4 py-2">{p.name} <span className="text-xs text-neutral-500">{p.slug}</span></td><td className="px-4 py-2">{p._count.servers} servers</td><td className="px-4 py-2 text-neutral-500">{p.spendLimitMinor != null ? `limit ${fmtMoney(p.spendLimitMinor, t.currency)}` : 'no limit'}</td></tr>)}</tbody></table>
+        </section>
+        <section className="card space-y-3">
+          <h2 className="font-medium">Add credit</h2>
+          <form onSubmit={credit} className="grid gap-2 sm:grid-cols-[8rem_8rem_1fr_auto]">
+            <select className="input" name="kind" defaultValue="goodwill"><option value="goodwill">goodwill</option><option value="promo">promo</option><option value="refund">refund</option><option value="prepaid">prepaid</option></select>
+            <input className="input" name="amount" type="number" min={1} step="0.01" placeholder={`Amount (${t.currency})`} required />
+            <input className="input" name="reason" placeholder="Reason (shown in the ledger)" />
+            <button className="btn-primary">Add</button>
+          </form>
+          <table className="w-full text-sm"><tbody>{t.credits.map((c) => <tr key={c.id} className="border-t border-neutral-100 dark:border-neutral-800"><td className="py-1 text-xs text-neutral-500">{fmtDate(c.createdAt)}</td><td className="py-1">{c.kind}</td><td className="py-1 text-neutral-500">{c.reason}</td><td className="py-1 text-end">{fmtMoney(c.remainingMinor, t.currency)} <span className="text-xs text-neutral-500">of {fmtMoney(c.amountMinor, t.currency)}</span></td></tr>)}</tbody></table>
+        </section>
+        <section className="card p-0">
+          <h2 className="border-b border-neutral-100 px-4 py-2 font-medium dark:border-neutral-800">Invoices</h2>
+          <table className="w-full text-sm"><tbody>
+            {t.invoices.length === 0 && <tr><td className="px-4 py-3 text-neutral-500">None yet.</td></tr>}
+            {t.invoices.map((i) => <tr key={i.id} className="border-t border-neutral-100 dark:border-neutral-800"><td className="px-4 py-2 font-mono">{i.number}</td><td className="px-4 py-2 text-neutral-500">{i.periodStart.slice(0, 7)}</td><td className="px-4 py-2"><StatusBadge status={i.status === 'paid' ? 'active' : i.status} /></td><td className="px-4 py-2 text-end">{fmtMoney(i.totalMinor, i.currency)}</td></tr>)}
+          </tbody></table>
+        </section>
+      </div>
+    </AdminShell>
+  );
+}

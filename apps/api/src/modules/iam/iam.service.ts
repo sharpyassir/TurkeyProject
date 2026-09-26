@@ -80,7 +80,7 @@ export class IamService {
       this.prisma.user.findUniqueOrThrow({ where: { id: actor.userId } }),
       this.prisma.team.findUniqueOrThrow({ where: { id: actor.teamId }, include: { projects: true } }),
     ]);
-    return { user: publicUser(user), team, role: actor.role, scopes: [...actor.scopes], isAgent: actor.isAgent };
+    return { user: publicUser(user), team, role: actor.role, scopes: [...actor.scopes], isAgent: actor.isAgent, isStaff: user.isStaff };
   }
 
   // ---- Projects ----
