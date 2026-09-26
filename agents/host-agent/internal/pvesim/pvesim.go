@@ -51,6 +51,9 @@ type Sim struct {
 	// TaskDelay is how long a UPID stays "running" before it finishes.
 	TaskDelay time.Duration
 
+	// Volumes are standalone images on the storage: name → size in GB.
+	Volumes map[string]int
+
 	mu     sync.Mutex
 	vms    map[int]*VM
 	tasks  map[string]task
@@ -67,7 +70,7 @@ func New(node string) *Sim {
 		Node: node, Storage: "vm-disks", TokenID: "pgcloud@pve!agent", TokenSecret: "secret",
 		BootDelay: 200 * time.Millisecond, TaskDelay: 50 * time.Millisecond,
 		vms:   map[int]*VM{9000: {VMID: 9000, Name: "ubuntu-24-04-template", Template: true, Status: "stopped", Cores: 1, MemoryMb: 1024, DiskGb: 10}},
-		tasks: map[string]task{}, nextID: 100, fail: map[string]int{},
+		tasks: map[string]task{}, nextID: 100, fail: map[string]int{}, Volumes: map[string]int{},
 	}
 	s.srv = httptest.NewServer(http.HandlerFunc(s.handle))
 	return s
@@ -161,6 +164,38 @@ func (s *Sim) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		ok(map[string]int64{"total": 4000 << 30, "used": used})
 		return
+	case path == "/nodes/"+s.Node+"/storage/"+s.Storage+"/content" && r.Method == http.MethodPost:
+		name := r.Form.Get("filename")
+		if !strings.HasPrefix(name, "vm-") {
+			fail(400, "illegal volume name")
+			return
+		}
+		if _, dup := s.Volumes[name]; dup {
+			fail(500, "volume '"+name+"' already exists")
+			return
+		}
+		gb, _ := strconv.Atoi(strings.TrimSuffix(r.Form.Get("size"), "G"))
+		s.Volumes[name] = gb
+		ok(s.Storage + ":" + name)
+		return
+	case strings.HasPrefix(path, "/nodes/"+s.Node+"/storage/"+s.Storage+"/content/") && r.Method == http.MethodDelete:
+		volid := strings.TrimPrefix(path, "/nodes/"+s.Node+"/storage/"+s.Storage+"/content/")
+		name := strings.TrimPrefix(volid, s.Storage+":")
+		if _, found := s.Volumes[name]; !found {
+			fail(500, "volume '"+name+"' does not exist")
+			return
+		}
+		for _, v := range s.vms {
+			for k, cv := range v.Config {
+				if strings.HasPrefix(k, "scsi") && strings.Contains(cv, name) {
+					fail(500, "volume '"+name+"' is still attached to vm "+strconv.Itoa(v.VMID))
+					return
+				}
+			}
+		}
+		delete(s.Volumes, name)
+		ok(s.newTask("OK"))
+		return
 	case path == "/nodes/"+s.Node+"/qemu" && r.Method == http.MethodGet:
 		out := []map[string]interface{}{}
 		for _, v := range s.vms {
@@ -221,6 +256,17 @@ func (s *Sim) handle(w http.ResponseWriter, r *http.Request) {
 		s.vms[newid] = &VM{VMID: newid, Name: r.Form.Get("name"), Status: "stopped", Cores: vm.Cores, MemoryMb: vm.MemoryMb, DiskGb: vm.DiskGb, Config: map[string]string{}, FWOpts: map[string]string{}}
 		ok(s.newTask("OK"))
 		return
+	case sub == "/config" && r.Method == http.MethodGet:
+		if vm == nil {
+			notExist()
+			return
+		}
+		out := map[string]interface{}{"cores": vm.Cores, "memory": vm.MemoryMb, "name": vm.Name, "scsi0": s.Storage + ":vm-" + strconv.Itoa(vm.VMID) + "-disk-0,size=" + strconv.Itoa(vm.DiskGb) + "G"}
+		for k, v := range vm.Config {
+			out[k] = v
+		}
+		ok(out)
+		return
 	case sub == "/config" && r.Method == http.MethodPost:
 		if vm == nil {
 			notExist()
@@ -233,7 +279,20 @@ func (s *Sim) handle(w http.ResponseWriter, r *http.Request) {
 		if vm.Config == nil {
 			vm.Config = map[string]string{}
 		}
+		if del := r.Form.Get("delete"); del != "" {
+			delete(vm.Config, del)
+			ok(nil)
+			return
+		}
 		for k, v := range r.Form {
+			if strings.HasPrefix(k, "scsi") && k != "scsi0" {
+				volid := strings.SplitN(v[0], ",", 2)[0]
+				name := strings.TrimPrefix(volid, s.Storage+":")
+				if _, found := s.Volumes[name]; !found {
+					fail(500, "volume '"+name+"' does not exist")
+					return
+				}
+			}
 			vm.Config[k] = v[0]
 		}
 		if c, err := strconv.Atoi(r.Form.Get("cores")); err == nil {
@@ -260,6 +319,21 @@ func (s *Sim) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		gb, _ := strconv.Atoi(strings.TrimSuffix(r.Form.Get("size"), "G"))
+		if disk := r.Form.Get("disk"); disk != "" && disk != "scsi0" {
+			cv, attached := vm.Config[disk]
+			if !attached {
+				fail(500, "disk '"+disk+"' does not exist")
+				return
+			}
+			name := strings.TrimPrefix(strings.SplitN(cv, ",", 2)[0], s.Storage+":")
+			if gb < s.Volumes[name] {
+				fail(500, "shrinking disks is not supported")
+				return
+			}
+			s.Volumes[name] = gb
+			ok(nil)
+			return
+		}
 		if gb < vm.DiskGb {
 			fail(500, "shrinking disks is not supported")
 			return

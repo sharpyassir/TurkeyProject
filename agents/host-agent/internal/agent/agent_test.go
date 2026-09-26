@@ -363,6 +363,70 @@ haveHeartbeat:
 	}
 }
 
+func TestVolumeLifecycle(t *testing.T) {
+	h := newHarness(t)
+	r := h.mustOK(h.job(protocol.JobCreate, map[string]interface{}{"spec": spec("srv_7")}))
+	vmid, vmRef := vmidOf(t, r)
+
+	r = h.mustOK(h.job(protocol.JobVolumeCreate, map[string]interface{}{"volumeId": "VOL1", "sizeGb": 100}))
+	volRef := r.Result.(map[string]interface{})["volumeRef"].(string)
+	if !strings.Contains(volRef, `"volume":"vm-900000-vol-vol1"`) {
+		t.Fatalf("unexpected volumeRef %s", volRef)
+	}
+	if h.sim.Volumes["vm-900000-vol-vol1"] != 100 {
+		t.Fatalf("image not allocated: %v", h.sim.Volumes)
+	}
+
+	r = h.mustOK(h.job(protocol.JobVolumeAttach, map[string]interface{}{"vmRef": vmRef, "volumeRef": volRef, "serial": "vol1serial"}))
+	res := r.Result.(map[string]interface{})
+	if res["slot"] != "scsi1" || res["device"] != "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_vol1serial" {
+		t.Fatalf("attach result wrong: %v", res)
+	}
+	if cfg := h.sim.VM(vmid).Config["scsi1"]; !strings.Contains(cfg, "vm-900000-vol-vol1") || !strings.Contains(cfg, "serial=vol1serial") || !strings.Contains(cfg, "backup=0") {
+		t.Fatalf("disk not plugged: %q", cfg)
+	}
+	// Attaching again is idempotent and keeps the slot.
+	r = h.mustOK(h.job(protocol.JobVolumeAttach, map[string]interface{}{"vmRef": vmRef, "volumeRef": volRef, "serial": "vol1serial"}))
+	if r.Result.(map[string]interface{})["slot"] != "scsi1" {
+		t.Fatal("second attach moved the disk")
+	}
+
+	// Grow while attached goes through the VM resize call.
+	h.mustOK(h.job(protocol.JobVolumeResize, map[string]interface{}{"vmRef": vmRef, "volumeRef": volRef, "sizeGb": 250}))
+	if h.sim.Volumes["vm-900000-vol-vol1"] != 250 {
+		t.Fatalf("attached resize not applied: %v", h.sim.Volumes)
+	}
+	// Proxmox refuses to free an attached image; the agent reports the error.
+	r = h.job(protocol.JobVolumeDelete, map[string]interface{}{"volumeRef": volRef})
+	if r.OK || !strings.Contains(r.Error.Message, "still attached") {
+		t.Fatalf("delete of attached volume must fail: %+v", r)
+	}
+
+	h.mustOK(h.job(protocol.JobVolumeDetach, map[string]interface{}{"vmRef": vmRef, "volumeRef": volRef}))
+	if _, still := h.sim.VM(vmid).Config["scsi1"]; still {
+		t.Fatal("disk not unplugged")
+	}
+	h.mustOK(h.job(protocol.JobVolumeDetach, map[string]interface{}{"vmRef": vmRef, "volumeRef": volRef})) // idempotent
+
+	// Detached resize uses the rbd tool; stub it here.
+	called := ""
+	old := agent.SetRbdResize(func(_ context.Context, pool, image string, sizeGb int) error {
+		called = pool + "/" + image + "=" + itoa(sizeGb)
+		return nil
+	})
+	defer agent.SetRbdResize(old)
+	h.mustOK(h.job(protocol.JobVolumeResize, map[string]interface{}{"volumeRef": volRef, "sizeGb": 300}))
+	if called != "vm-disks/vm-900000-vol-vol1=300" {
+		t.Fatalf("rbd resize not called as expected: %q", called)
+	}
+
+	h.mustOK(h.job(protocol.JobVolumeDelete, map[string]interface{}{"volumeRef": volRef}))
+	if _, exists := h.sim.Volumes["vm-900000-vol-vol1"]; exists {
+		t.Fatal("image not freed")
+	}
+	h.mustOK(h.job(protocol.JobVolumeDelete, map[string]interface{}{"volumeRef": volRef})) // idempotent
+}
+
 func TestRejectsWrongToken(t *testing.T) {
 	sim := pvesim.New("pve1")
 	defer sim.Close()

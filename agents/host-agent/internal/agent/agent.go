@@ -385,7 +385,11 @@ func (a *Agent) dispatch(ctx context.Context, job protocol.Job, log *slog.Logger
 				return nil, a.pve.ResizeAttachedDisk(ctx, ref.VMID, volid, p.SizeGb)
 			}
 			// Detached images have no Proxmox API for resize; use the rbd tool on the node.
-			return nil, rbdResize(ctx, a.cfg.Proxmox.CephPool, vol.Volume, p.SizeGb)
+			pool := a.cfg.Proxmox.CephPool
+			if pool == "" {
+				pool = vol.Storage
+			}
+			return nil, rbdResize(ctx, pool, vol.Volume, p.SizeGb)
 		default:
 			return nil, a.pve.FreeVolume(ctx, volid)
 		}
@@ -493,6 +497,13 @@ var rbdResize = func(ctx context.Context, pool, image string, sizeGb int) error 
 		return fmt.Errorf("rbd resize: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
+}
+
+// SetRbdResize swaps the detached resize implementation (tests). Returns the previous one.
+func SetRbdResize(f func(ctx context.Context, pool, image string, sizeGb int) error) func(ctx context.Context, pool, image string, sizeGb int) error {
+	old := rbdResize
+	rbdResize = f
+	return old
 }
 
 // ---- helpers ----
