@@ -44,6 +44,13 @@ const schema = z.object({
   MAIL_API_KEY: z.string().optional(),
   /** When true, team owners must enable two factor sign in before using the console. */
   REQUIRE_TOTP_FOR_OWNERS: z.coerce.boolean().default(false),
+  OBJECT_STORAGE_PROVIDER: z.enum(['fake', 'rgw']).default('fake'),
+  /** Public S3 endpoint customers use, e.g. https://s3.ist1.pgcloud.example */
+  S3_ENDPOINT: z.string().url().default('http://localhost:4000/_fake-s3'),
+  S3_REGION: z.string().default('ist1'),
+  RGW_ADMIN_URL: z.string().url().optional(),
+  RGW_ADMIN_ACCESS_KEY: z.string().optional(),
+  RGW_ADMIN_SECRET_KEY: z.string().optional(),
   DNS_PROVIDER: z.enum(['fake', 'powerdns']).default('fake'),
   PDNS_API_URL: z.string().url().default('http://localhost:8081'),
   PDNS_API_KEY: z.string().optional(),

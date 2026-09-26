@@ -52,6 +52,8 @@ class Pgcloud:
         self.volumes = _Volumes(self)
         self.load_balancers = _LoadBalancers(self)
         self.domains = _Domains(self)
+        self.buckets = _Buckets(self)
+        self.storage_keys = _StorageKeys(self)
         self.certificates = _Certificates(self)
         self.billing = _Billing(self)
         self.approvals = _Approvals(self)
@@ -316,6 +318,55 @@ class _Domains(_Res):
 
     def set_reverse_dns(self, public_ip_id: str, hostname: Optional[str]):
         return self.c.request("PUT", f"/v1/public-ips/{public_ip_id}/reverse-dns", {"name": hostname})
+
+
+class _Buckets(_Res):
+    def list(self):
+        return self.c.request("GET", "/v1/buckets", query={"project": self.c.project})
+
+    def get(self, name: str):
+        return self.c.request("GET", f"/v1/buckets/{name}")
+
+    def create(self, name: str, public: bool = False, region: Optional[str] = None):
+        body = {"name": name, "public": public, "project": self.c.project}
+        if region:
+            body["region"] = region
+        return self.c.request("POST", "/v1/buckets", body)
+
+    def set_public(self, name: str, public: bool):
+        return self.c.request("PATCH", f"/v1/buckets/{name}", {"public": public})
+
+    def delete(self, name: str):
+        return self.c.request("DELETE", f"/v1/buckets/{name}")
+
+    def list_objects(self, name: str, prefix: str = "", token: Optional[str] = None):
+        return self.c.request("GET", f"/v1/buckets/{name}/objects", query={"prefix": prefix, "token": token})
+
+    def delete_object(self, name: str, key: str):
+        return self.c.request("DELETE", f"/v1/buckets/{name}/objects", query={"key": key})
+
+    def presign(self, name: str, key: str, method: str = "GET", expires_seconds: int = 900, content_type: Optional[str] = None):
+        body = {"key": key, "method": method, "expiresSeconds": expires_seconds}
+        if content_type:
+            body["contentType"] = content_type
+        return self.c.request("POST", f"/v1/buckets/{name}/presign", body)
+
+    def upload(self, name: str, key: str, data: bytes, content_type: str = "application/octet-stream"):
+        url = self.presign(name, key, "PUT", content_type=content_type)["url"]
+        req = urllib.request.Request(url, data=data, method="PUT", headers={"Content-Type": content_type})
+        with self.c._open(req, timeout=self.c.timeout) as res:
+            return res.status
+
+
+class _StorageKeys(_Res):
+    def list(self):
+        return self.c.request("GET", "/v1/storage-keys", query={"project": self.c.project})
+
+    def create(self, name: str):
+        return self.c.request("POST", "/v1/storage-keys", {"name": name, "project": self.c.project})
+
+    def revoke(self, id: str):
+        return self.c.request("DELETE", f"/v1/storage-keys/{id}")
 
 
 class _Billing(_Res):

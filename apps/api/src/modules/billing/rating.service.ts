@@ -85,6 +85,8 @@ export class RatingService {
         return 'volume_gb';
       case 'load_balancer':
         return 'lb_node';
+      case 'object_storage':
+        return 'storage_gb';
       case 'bandwidth':
         return 'bandwidth_gb';
       case 'backup':

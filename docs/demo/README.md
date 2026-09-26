@@ -19,3 +19,4 @@ partner conversations.
 | pgcloud-volumes.png, pgcloud-server-volumes.png, pgcloud-volumes-tr.png | Volumes page, the server Volumes tab, Turkish version |
 | pgcloud-load-balancers.png, pgcloud-load-balancer-detail.png | Load balancers page with the rule editor and certificates, and one load balancer with nodes and targets |
 | pgcloud-dns.png, pgcloud-dns-zone.png, pgcloud-public-ips-rdns.png | DNS zones, one zone with records and the zone file, reverse DNS on the public IPs page |
+| pgcloud-buckets.png, pgcloud-bucket-browser.png | Object storage buckets and keys, and the bucket browser |

@@ -361,6 +361,30 @@ server.registerTool('dns_record', {
   return api('PATCH', `/v1/domains/${zone}/records/${recordId}`, body);
 }));
 
+server.registerTool('list_buckets', {
+  title: 'List object storage buckets',
+  description: 'S3 compatible buckets in the project with size, object count and the S3 endpoint. Pass name and an optional prefix to list objects in one bucket.',
+  inputSchema: { name: z.string().optional(), prefix: z.string().optional(), project: z.string().optional() },
+}, async ({ name, prefix, project }) => run(() => name ? api('GET', `/v1/buckets/${name}/objects?prefix=${encodeURIComponent(prefix ?? '')}`) : api('GET', `/v1/buckets${project ? `?project=${encodeURIComponent(project)}` : ''}`)));
+
+server.registerTool('create_bucket', {
+  title: 'Create a bucket',
+  description: 'Creates an S3 compatible bucket (name is global, 3 to 63 lowercase letters, digits and hyphens). Billed per GB per month. public makes objects readable by anyone.',
+  inputSchema: { name: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/), public: z.boolean().optional(), project: z.string().optional() },
+}, async (input) => run(() => api('POST', '/v1/buckets', input)));
+
+server.registerTool('bucket_presign', {
+  title: 'Presigned URL for an object',
+  description: 'Returns a short lived URL to GET, PUT or DELETE one object without S3 keys. Use PUT to upload a file, GET to hand a download link to the user.',
+  inputSchema: { bucket: z.string(), key: z.string(), method: z.enum(['GET', 'PUT', 'DELETE']).optional(), expiresSeconds: z.number().int().min(60).max(604800).optional(), contentType: z.string().optional() },
+}, async ({ bucket, ...body }) => run(() => api('POST', `/v1/buckets/${bucket}/presign`, body)));
+
+server.registerTool('create_storage_key', {
+  title: 'Create S3 access key',
+  description: 'Creates an access key pair for every bucket in the project. The secret is returned once; give it to the user, never store it in the conversation longer than needed.',
+  inputSchema: { name: z.string(), project: z.string().optional() },
+}, async (input) => run(() => api('POST', '/v1/storage-keys', input)));
+
 /* ───────────────────────── start ───────────────────────── */
 
 const transport = new StdioServerTransport();

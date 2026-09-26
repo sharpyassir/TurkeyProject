@@ -132,6 +132,8 @@ model Project {
   loadBalancers LoadBalancer[]
   certificates  Certificate[]
   dnsZones      DnsZone[]
+  buckets       Bucket[]
+  storageKeys   StorageKey[]
   apiTokens ApiToken[]
   usage     UsageRecord[]
   deployments Deployment[]
@@ -226,6 +228,7 @@ model Region {
   images    Image[]
   volumes   Volume[]
   loadBalancers LoadBalancer[]
+  buckets   Bucket[]
 }
 
 enum HostStatus {
@@ -550,6 +553,7 @@ enum ResourceType {
   bandwidth
   volume
   load_balancer
+  object_storage
   app
   backup
 }
@@ -1177,4 +1181,55 @@ model DnsRecord {
   zone DnsZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
 
   @@index([zoneId])
+}
+
+// ───────────────────────── Object storage ─────────────────────────
+
+enum BucketStatus {
+  creating
+  active
+  deleting
+  deleted
+  failed
+}
+
+/// An S3 bucket on the region's Ceph RADOS Gateway, owned by the project's RGW user.
+/// Names are global and DNS safe so virtual host addressing works.
+model Bucket {
+  id             String       @id @default(cuid())
+  projectId      String
+  regionId       String
+  name           String
+  status         BucketStatus @default(creating)
+  statusMessage  String?
+  /// Anyone can read objects (bucket policy s3:GetObject for *).
+  public         Boolean      @default(false)
+  sizeBytes      BigInt       @default(0)
+  objectCount    Int          @default(0)
+  usageUpdatedAt DateTime?
+  meteredSince   DateTime?
+  createdAt      DateTime     @default(now())
+  deletedAt      DateTime?
+
+  project Project @relation(fields: [projectId], references: [id])
+  region  Region  @relation(fields: [regionId], references: [id])
+
+  @@index([projectId])
+}
+
+/// An S3 access key pair on the project's RGW user. The secret is shown once at creation.
+model StorageKey {
+  id         String    @id @default(cuid())
+  projectId  String
+  name       String
+  accessKey  String    @unique
+  secretKey  String
+  createdBy  String?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
 }

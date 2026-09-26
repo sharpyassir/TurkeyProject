@@ -1,11 +1,12 @@
 import { MonitoringModule } from '../modules/monitoring/monitoring.module';
 import { LbModule } from '../modules/lb/lb.module';
 import { DnsModule } from '../modules/dns/dns.module';
+import { ObjectsModule } from '../modules/storage/objects/objects.module';
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BillingModule } from '../modules/billing/billing.module';
 import { EventsModule } from '../modules/events/events.module';
 import { JobsService } from './jobs.service';
 
-@Module({ imports: [MonitoringModule, LbModule, DnsModule, ScheduleModule.forRoot(), BillingModule, EventsModule], providers: [JobsService] })
+@Module({ imports: [MonitoringModule, LbModule, DnsModule, ObjectsModule, ScheduleModule.forRoot(), BillingModule, EventsModule], providers: [JobsService] })
 export class JobsModule {}

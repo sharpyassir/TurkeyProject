@@ -18,7 +18,7 @@ export class SpendService {
   constructor(private readonly prisma: PrismaService, private readonly events: EventsService, private readonly fx: FxService) {}
 
   /** Projected monthly cost of a resource in the team currency (USD book, converted at today's rate). */
-  async monthlyPriceMinor(resourceType: 'server' | 'public_ip' | 'snapshot' | 'backup' | 'volume' | 'load_balancer', sku: string, currency: 'USD' | 'TRY') {
+  async monthlyPriceMinor(resourceType: 'server' | 'public_ip' | 'snapshot' | 'backup' | 'volume' | 'load_balancer' | 'object_storage', sku: string, currency: 'USD' | 'TRY') {
     const price = await this.prisma.price.findFirst({
       where: { resourceType, sku, currency: 'USD', validTo: null },
       orderBy: { validFrom: 'desc' },

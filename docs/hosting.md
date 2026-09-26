@@ -96,6 +96,17 @@ holds in flight host agent jobs; the worker retries them. Temporal state lives i
 - **Adding a Proxmox node**: create the `Host` row through the admin API, put its id in the inventory, run
   the playbook with `--limit pve_nodes`. The agent starts sending heartbeats within a minute.
 
+## Object storage (Ceph RADOS Gateway)
+
+Buckets live on the same Ceph cluster as the VM disks, served by RADOS Gateway on two or
+more nodes behind Caddy or a load balancer at `S3_ENDPOINT`. Create an admin user once with
+`radosgw-admin user create --uid=pgcloud-admin --display-name="pgcloud control plane"
+--caps="users=*;buckets=*;usage=read"` and put its keys in the settings file as
+`RGW_ADMIN_ACCESS_KEY` and `RGW_ADMIN_SECRET_KEY`. The API creates one RGW user per project,
+issues keys on it, creates buckets and links them to the project user, and reads bucket
+stats every ten minutes for billing. Enable `rgw_dns_name` in the gateway config so virtual
+host style addressing (`bucket.s3.<region>...`) works, and point a wildcard DNS record at it.
+
 ## DNS (PowerDNS)
 
 Hosted zones and reverse DNS are served by PowerDNS Authoritative with the Postgres backend.

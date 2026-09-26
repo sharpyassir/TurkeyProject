@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -97,6 +98,8 @@ func main() {
 		err = cmdCertificates(rest)
 	case "domains", "dns":
 		err = cmdDomains(rest)
+	case "buckets", "storage":
+		err = cmdBuckets(rest)
 	case "tokens":
 		err = cmdTokens(rest)
 	case "firewalls":
@@ -126,6 +129,8 @@ ACCOUNT   login · logout · whoami · billing [invoices|payments|topup AMOUNT|p
 AGENTS    approvals [ls | approve ID | deny ID --reason TEXT]   (requests parked by agent tokens)
 LBS       load-balancers [ls | create NAME --rule http:80:80 [--rule https:443:80:CERT_ID] [--server ID ...] [--tag T] [--nodes 2] [--wait] | get ID | add ID SERVER_ID | remove ID SERVER_ID | delete ID]
           certificates [ls | add NAME --le example.com,www.example.com | add NAME --cert FILE --key FILE | delete ID]
+STORAGE   buckets [ls | create NAME [--public] | get NAME | ls NAME [--prefix P] | upload NAME FILE [--key K] | download NAME KEY [--out FILE] | rm NAME KEY | public NAME on|off | delete NAME]
+          buckets keys [ls | create NAME | revoke ID]
 DNS       domains [ls | add NAME [--ip A.B.C.D] | get NAME | zone-file NAME | delete NAME]
           domains records NAME [ls | add TYPE HOST CONTENT [--ttl 300] [--priority 10] | delete RECORD_ID]
           domains rdns PUBLIC_IP_ID HOSTNAME|--clear
@@ -1202,6 +1207,170 @@ func cmdCertificates(args []string) error {
 		return nil
 	}
 	return errors.New("usage: pgcloud certificates [ls | add ... | delete ID]")
+}
+
+func cmdBuckets(args []string) error {
+	if len(args) == 0 || (args[0] == "ls" && len(args) == 1) {
+		var out map[string]any
+		if err := call(http.MethodGet, "/v1/buckets", nil, &out); err != nil {
+			return err
+		}
+		if jsonOut {
+			return printJSON(out)
+		}
+		rows := []map[string]any{}
+		for _, b := range out["data"].([]any) {
+			rows = append(rows, b.(map[string]any))
+		}
+		table(rows, []string{"name", "status", "public", "sizeBytes", "objectCount", "id"})
+		fmt.Fprintf(stdout, "endpoint: %v  region: %v\n", out["endpoint"], out["region"])
+		return nil
+	}
+	usage := errors.New("usage: pgcloud buckets [ls | create NAME [--public] | get NAME | ls NAME [--prefix P] | upload NAME FILE [--key K] | download NAME KEY [--out FILE] | rm NAME KEY | public NAME on|off | delete NAME | keys ...]")
+	var b map[string]any
+	switch args[0] {
+	case "create":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodPost, "/v1/buckets", map[string]any{"name": args[1], "public": hasFlag(args[2:], "--public")}, &b); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ bucket %s created at %v\n", b["name"], b["url"])
+	case "get":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodGet, "/v1/buckets/"+args[1], nil, &b); err != nil {
+			return err
+		}
+		return printJSON(b)
+	case "ls":
+		prefix, _ := flag(args[2:], "--prefix")
+		var l map[string]any
+		if err := call(http.MethodGet, "/v1/buckets/"+args[1]+"/objects?prefix="+url.QueryEscape(prefix), nil, &l); err != nil {
+			return err
+		}
+		if jsonOut {
+			return printJSON(l)
+		}
+		for _, p := range l["prefixes"].([]any) {
+			fmt.Fprintf(stdout, "%-12s %s\n", "(prefix)", p)
+		}
+		for _, o := range l["objects"].([]any) {
+			m := o.(map[string]any)
+			fmt.Fprintf(stdout, "%12.0f %s  %s\n", m["size"], m["lastModified"], m["key"])
+		}
+	case "upload":
+		if len(args) < 3 {
+			return usage
+		}
+		key, _ := flag(args[3:], "--key")
+		if key == "" {
+			key = filepath.Base(args[2])
+		}
+		data, err := os.ReadFile(args[2])
+		if err != nil {
+			return err
+		}
+		var p map[string]any
+		if err := call(http.MethodPost, "/v1/buckets/"+args[1]+"/presign", map[string]any{"key": key, "method": "PUT", "contentType": "application/octet-stream"}, &p); err != nil {
+			return err
+		}
+		req, _ := http.NewRequest(http.MethodPut, p["url"].(string), bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/octet-stream")
+		res, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		res.Body.Close()
+		if res.StatusCode >= 300 {
+			return fmt.Errorf("upload failed: HTTP %d", res.StatusCode)
+		}
+		fmt.Fprintf(stdout, "✓ %s uploaded to %s/%s (%d bytes)\n", args[2], args[1], key, len(data))
+	case "download":
+		if len(args) < 3 {
+			return usage
+		}
+		out, _ := flag(args[3:], "--out")
+		if out == "" {
+			out = filepath.Base(args[2])
+		}
+		var p map[string]any
+		if err := call(http.MethodPost, "/v1/buckets/"+args[1]+"/presign", map[string]any{"key": args[2], "method": "GET"}, &p); err != nil {
+			return err
+		}
+		res, err := client.Get(p["url"].(string))
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+		if res.StatusCode >= 300 {
+			return fmt.Errorf("download failed: HTTP %d", res.StatusCode)
+		}
+		f, err := os.Create(out)
+		if err != nil {
+			return err
+		}
+		n, err := io.Copy(f, res.Body)
+		f.Close()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ %s/%s -> %s (%d bytes)\n", args[1], args[2], out, n)
+	case "rm":
+		if len(args) < 3 {
+			return usage
+		}
+		if err := call(http.MethodDelete, "/v1/buckets/"+args[1]+"/objects?key="+url.QueryEscape(args[2]), nil, nil); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "✓ deleted")
+	case "public":
+		if len(args) < 3 {
+			return usage
+		}
+		if err := call(http.MethodPatch, "/v1/buckets/"+args[1], map[string]any{"public": args[2] == "on"}, &b); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ %s public=%v\n", b["name"], b["public"])
+	case "delete":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodDelete, "/v1/buckets/"+args[1], nil, nil); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "✓ deleted")
+	case "keys":
+		if len(args) < 2 || args[1] == "ls" {
+			return cmdList("/v1/storage-keys", nil, []string{"name", "accessKey", "createdAt", "id"})
+		}
+		switch args[1] {
+		case "create":
+			if len(args) < 3 {
+				return errors.New("usage: pgcloud buckets keys create NAME")
+			}
+			var k map[string]any
+			if err := call(http.MethodPost, "/v1/storage-keys", map[string]any{"name": args[2]}, &k); err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "✓ key %s created. The secret is shown once:\nAWS_ACCESS_KEY_ID=%v\nAWS_SECRET_ACCESS_KEY=%v\nAWS_ENDPOINT_URL=%v\nAWS_DEFAULT_REGION=%v\n", k["name"], k["accessKey"], k["secretKey"], k["endpoint"], k["region"])
+		case "revoke", "rm":
+			if len(args) < 3 {
+				return errors.New("key id required")
+			}
+			if err := call(http.MethodDelete, "/v1/storage-keys/"+args[2], nil, nil); err != nil {
+				return err
+			}
+			fmt.Fprintln(stdout, "✓ revoked")
+		default:
+			return errors.New("usage: pgcloud buckets keys [ls | create NAME | revoke ID]")
+		}
+	default:
+		return usage
+	}
+	return nil
 }
 
 func cmdDomains(args []string) error {

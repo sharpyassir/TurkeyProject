@@ -36,6 +36,7 @@ tags:
   - name: volumes
   - name: load-balancers
   - name: dns
+  - name: object-storage
   - name: marketplace
   - name: billing
   - name: webhooks
@@ -528,6 +529,29 @@ paths:
   /public-ips/{id}/reverse-dns:
     put: { tags: [dns], summary: Set reverse DNS (PTR) for a public IP, parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string, nullable: true, description: Hostname, or null to clear } } } } } }, responses: { "200": { description: OK } } }
 
+  /buckets:
+    get: { tags: [object-storage], summary: List buckets, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Bucket" } }, endpoint: { type: string }, region: { type: string } } } } } } } }
+    post:
+      tags: [object-storage]
+      summary: Create a bucket
+      description: Names are global and DNS safe (3 to 63 lowercase letters, digits, hyphens). Billed per GB per month.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string }, region: { type: string }, project: { type: string }, public: { type: boolean, description: Anyone can read objects } } } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Bucket" } } } }, "409": { description: Name taken } }
+  /buckets/{name}:
+    get: { tags: [object-storage], summary: Get a bucket, parameters: [{ name: name, in: path, required: true, schema: { type: string } }], responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Bucket" } } } }, "404": { $ref: "#/components/responses/NotFound" } } }
+    patch: { tags: [object-storage], summary: Change public read, parameters: [{ name: name, in: path, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { public: { type: boolean } } } } } }, responses: { "200": { description: OK } } }
+    delete: { tags: [object-storage], summary: Delete an empty bucket, parameters: [{ name: name, in: path, required: true, schema: { type: string } }], responses: { "200": { description: Deleted }, "409": { description: Not empty } } }
+  /buckets/{name}/objects:
+    get: { tags: [object-storage], summary: List objects under a prefix, parameters: [{ name: name, in: path, required: true, schema: { type: string } }, { name: prefix, in: query, schema: { type: string } }, { name: token, in: query, schema: { type: string } }], responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { prefix: { type: string }, prefixes: { type: array, items: { type: string } }, objects: { type: array, items: { type: object, properties: { key: { type: string }, size: { type: integer }, lastModified: { type: string } } } }, nextToken: { type: string } } } } } } } }
+    delete: { tags: [object-storage], summary: Delete one object, parameters: [{ name: name, in: path, required: true, schema: { type: string } }, { name: key, in: query, required: true, schema: { type: string } }], responses: { "200": { description: Deleted } } }
+  /buckets/{name}/presign:
+    post: { tags: [object-storage], summary: Presigned URL for GET, PUT or DELETE of one key, parameters: [{ name: name, in: path, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [key], properties: { key: { type: string }, method: { type: string, enum: [GET, PUT, DELETE], default: GET }, expiresSeconds: { type: integer, minimum: 60, maximum: 604800, default: 900 }, contentType: { type: string } } } } } }, responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { url: { type: string }, method: { type: string }, key: { type: string }, expiresAt: { type: string, format: date-time } } } } } } } }
+  /storage-keys:
+    get: { tags: [object-storage], summary: List S3 access keys (no secrets), parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK } } }
+    post: { tags: [object-storage], summary: Create an access key; the secret is returned once, requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string }, project: { type: string } } } } } }, responses: { "201": { description: Created, content: { application/json: { schema: { type: object, properties: { id: { type: string }, name: { type: string }, accessKey: { type: string }, secretKey: { type: string }, endpoint: { type: string }, region: { type: string } } } } } } } }
+  /storage-keys/{id}:
+    delete: { tags: [object-storage], summary: Revoke an access key, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: Revoked } } }
+
   /apps:
     get: { tags: [marketplace], security: [], summary: List marketplace apps, parameters: [{ name: category, in: query, schema: { type: string } }], responses: { "200": { description: OK } } }
   /apps/categories:
@@ -700,7 +724,7 @@ components:
         expiresInDays: { type: integer }
     Scope:
       type: string
-      enum: [servers:read, servers:write, servers:delete, images:read, snapshots:read, snapshots:write, volumes:read, volumes:write, dns:read, dns:write, network:read, network:write, apps:read, billing:read, billing:write, iam:read, iam:write]
+      enum: [servers:read, servers:write, servers:delete, images:read, snapshots:read, snapshots:write, volumes:read, volumes:write, dns:read, dns:write, storage:read, storage:write, network:read, network:write, apps:read, billing:read, billing:write, iam:read, iam:write]
     Size:
       type: object
       properties:
@@ -753,6 +777,22 @@ components:
         region: { type: string, description: Defaults to the platform region }
         project: { type: string }
         serverId: { type: string, description: Attach right after creation }
+    Bucket:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [creating, active, deleting, deleted, failed] }
+        statusMessage: { type: string, nullable: true }
+        regionId: { type: string }
+        projectId: { type: string }
+        public: { type: boolean }
+        sizeBytes: { type: integer }
+        objectCount: { type: integer }
+        usageUpdatedAt: { type: string, format: date-time, nullable: true }
+        endpoint: { type: string, description: S3 endpoint for any client }
+        url: { type: string, description: Path style URL of the bucket }
+        createdAt: { type: string, format: date-time }
     Domain:
       type: object
       properties:

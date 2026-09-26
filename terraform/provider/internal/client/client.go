@@ -281,6 +281,16 @@ type Domain struct {
 	Records     []DnsRecord `json:"records"`
 }
 
+type Bucket struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	RegionID string `json:"regionId"`
+	Public   bool   `json:"public"`
+	Endpoint string `json:"endpoint"`
+	URL      string `json:"url"`
+}
+
 type FirewallRule struct {
 	Direction string   `json:"direction"`
 	Protocol  string   `json:"protocol"`

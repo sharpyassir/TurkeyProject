@@ -71,6 +71,15 @@ resource "pgcloud_dns_record" "www" {
   value  = "example.com"
 }
 
+resource "pgcloud_bucket" "assets" {
+  name   = "acme-assets"
+  public = true
+}
+
+resource "pgcloud_storage_key" "ci" {
+  name = "ci"
+}
+
 output "address" {
   value = pgcloud_server.web.ipv4_address
 }

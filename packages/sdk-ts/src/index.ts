@@ -44,6 +44,9 @@ export interface Certificate { id: string; name: string; type: 'custom' | 'letse
 export type DnsRecordType = 'A' | 'AAAA' | 'CNAME' | 'MX' | 'TXT' | 'NS' | 'SRV' | 'CAA';
 export interface DnsRecord { id: string; name: string; type: DnsRecordType; content: string; ttl: number; priority: number | null; updatedAt: string }
 export interface Domain { id: string; name: string; status: string; statusMessage: string | null; serial: number; synced: boolean; nameservers: string[]; recordCount: number; createdAt: string }
+export interface Bucket { id: string; name: string; status: string; statusMessage: string | null; regionId: string; projectId: string; public: boolean; sizeBytes: number; objectCount: number; usageUpdatedAt: string | null; endpoint: string; url: string; createdAt: string }
+export interface StorageObject { key: string; size: number; lastModified: string; etag?: string }
+export interface StorageKey { id: string; name: string; accessKey: string; createdAt: string; lastUsedAt: string | null }
 export interface SshKey { id: string; name: string; fingerprint: string; createdAt: string }
 export interface ApiToken { id: string; name: string; prefix: string; scopes: string[]; isAgent: boolean; spendCapMinor: number | null; spentThisMonthMinor: number; requireApprovalFor: string[]; expiresAt: string | null; lastUsedAt: string | null; createdAt: string }
 export interface MetricPoint { at: string; cpu: number; cpuMax?: number; memoryUsedMb: number; memoryTotalMb: number; netInBps: number; netOutBps: number; diskReadBps: number; diskWriteBps: number; diskUsedPercent?: number | null }
@@ -217,6 +220,29 @@ export class Pgcloud {
     updateRecord: (name: string, id: string, body: { name?: string; content?: string; ttl?: number; priority?: number }) => this.request<DnsRecord>('PATCH', `/v1/domains/${name}/records/${id}`, body),
     deleteRecord: (name: string, id: string) => this.request<{ id: string; deleted: boolean }>('DELETE', `/v1/domains/${name}/records/${id}`),
     setReverseDns: (publicIpId: string, hostname: string | null) => this.request<{ id: string; address: string; reverseDns: string | null; synced: boolean }>('PUT', `/v1/public-ips/${publicIpId}/reverse-dns`, { name: hostname }),
+  };
+
+  readonly buckets = {
+    list: () => this.request<{ data: Bucket[]; endpoint: string; region: string }>('GET', '/v1/buckets', undefined, { project: this.opts.project }),
+    get: (name: string) => this.request<Bucket>('GET', `/v1/buckets/${name}`),
+    create: (body: { name: string; region?: string; public?: boolean; project?: string }) => this.request<Bucket>('POST', '/v1/buckets', { project: this.opts.project, ...body }),
+    setPublic: (name: string, isPublic: boolean) => this.request<Bucket>('PATCH', `/v1/buckets/${name}`, { public: isPublic }),
+    delete: (name: string) => this.request<{ name: string; deleted: boolean }>('DELETE', `/v1/buckets/${name}`),
+    listObjects: (name: string, prefix = '', token?: string) => this.request<{ prefix: string; prefixes: string[]; objects: StorageObject[]; nextToken?: string }>('GET', `/v1/buckets/${name}/objects`, undefined, { prefix, token }),
+    deleteObject: (name: string, key: string) => this.request<{ key: string; deleted: boolean }>('DELETE', `/v1/buckets/${name}/objects`, undefined, { key }),
+    presign: (name: string, key: string, method: 'GET' | 'PUT' | 'DELETE' = 'GET', expiresSeconds = 900, contentType?: string) => this.request<{ url: string; method: string; key: string; expiresAt: string }>('POST', `/v1/buckets/${name}/presign`, { key, method, expiresSeconds, contentType }),
+    /** Uploads a body through a presigned PUT. */
+    upload: async (name: string, key: string, body: Blob | ArrayBuffer | Uint8Array | string, contentType = 'application/octet-stream') => {
+      const { url } = await this.buckets.presign(name, key, 'PUT', 900, contentType);
+      const r = await fetch(url, { method: 'PUT', body: body as BodyInit, headers: { 'content-type': contentType } });
+      if (!r.ok) throw new PgcloudError(r.status, 'upload_failed', `Upload of ${key} failed with ${r.status}`);
+    },
+  };
+
+  readonly storageKeys = {
+    list: () => this.request<{ data: StorageKey[]; endpoint: string; region: string }>('GET', '/v1/storage-keys', undefined, { project: this.opts.project }),
+    create: (name: string) => this.request<StorageKey & { secretKey: string; endpoint: string; region: string }>('POST', '/v1/storage-keys', { name, project: this.opts.project }),
+    revoke: (id: string) => this.request<{ id: string; revoked: boolean }>('DELETE', `/v1/storage-keys/${id}`),
   };
 
   readonly billing = {
