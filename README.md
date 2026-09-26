@@ -115,6 +115,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Monitoring: per minute metrics from the host agent, graphs on the server page, alert rules with email and webhook, incidents | ✅ |
 | SDKs: TypeScript (types generated from OpenAPI) and Python, both with tests | ✅ |
 | Terraform provider: server, volume, firewall, SSH key resources; sizes and images data sources | ✅ (registry publishing: to do) |
+| Mobile app: architecture and delivery plan ([docs/mobile-app.md](docs/mobile-app.md)) | planned after G5 |
 
 ### Local dev without Docker
 
