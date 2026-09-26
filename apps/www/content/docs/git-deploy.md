@@ -17,23 +17,32 @@ One of these, at the root:
 
 Environment variables you enter are written to the server and passed to the container. Secrets never leave the server.
 
+## Connect GitHub once
+
+Go to **Projects, Deploys** and choose **Connect GitHub**. GitHub asks which account or organization to install the pgcloud app on and which repositories it may see. You can change that list any time from GitHub. After that, every deploy is a matter of picking a repository from a list: private repositories work without any token, and every push to the chosen branch redeploys without touching repository settings.
+
+If you would rather not install the app, switch to **Repository URL** and paste the address. Private repositories then need a token with read access, which is stored on the server only.
+
 ## From the console
 
-Go to **Projects, Deploys** and choose **Deploy a repository**. Paste the repository URL, pick the branch, set the port and any variables, and confirm. Private repositories need a token with read access; it is stored on the server only.
+Pick the repository or paste the URL, choose the branch, set the port and any variables, and confirm.
 
-The deploy shows `provisioning`, then `building`, then `running` with the public address. Logs from the build are on the deploy page.
+The deploy shows `creating`, then `deploying`, then `live` with the public address. Choose **Logs** on any deployment to watch the build log, refreshed from the server every few seconds. A failed build shows the error right there.
 
 ## From the command line
 
 ```sh
 pgcloud deploy https://github.com/you/app --branch main --port 8080 --env DATABASE_URL=...
 pgcloud deploys ls
+pgcloud deploys logs dep_123 --follow
 pgcloud deploys redeploy dep_123
 ```
 
 ## Automatic redeploys
 
-Each deploy has a webhook address and a secret, shown on its page. Add it to the repository under **Settings, Webhooks** with content type `application/json` and the push event. Pushes to other branches are ignored. Every delivery is checked with the `X-Hub-Signature-256` header before anything runs.
+Deployments made through the GitHub App redeploy on every push to their branch. Nothing to configure.
+
+Deployments made from a URL get their own webhook address and secret, shown once when they are created. Add it to the repository under **Settings, Webhooks** with content type `application/json` and the push event. Pushes to other branches are ignored. Every delivery is checked with the `X-Hub-Signature-256` header before anything runs.
 
 If you would rather not touch repository settings, the CLI step in your CI works just as well: `pgcloud deploys redeploy ID` after your tests pass.
 

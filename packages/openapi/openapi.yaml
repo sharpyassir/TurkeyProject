@@ -29,6 +29,7 @@ tags:
   - name: servers
   - name: catalog
   - name: deploys
+  - name: github
   - name: network
   - name: snapshots
   - name: marketplace
@@ -268,10 +269,14 @@ paths:
     post:
       tags: [deploys]
       summary: Deploy a Git repository onto a new server
-      description: Creates a server whose cloud-init installs Docker, clones the repo, builds (Dockerfile or docker-compose) and serves it on :80. Returns the GitHub webhook URL and secret (shown once) that redeploys on push.
+      description: |
+        Creates a server whose cloud-init installs Docker, clones the repo, builds (Dockerfile or docker-compose) and serves it on :80.
+        Two ways to name the repository: `repoUrl` (public, or private with `gitToken`) returns a per deployment GitHub webhook URL and
+        secret (shown once) to add to the repository; `installationId` + `repo` ("owner/name") uses the team's GitHub App installation,
+        needs no token, and redeploys on every push through the app webhook (`webhook` is null).
       parameters: [{ $ref: "#/components/parameters/idempotencyKey" }]
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [repoUrl], properties: { repoUrl: { type: string, format: uri }, branch: { type: string, default: main }, name: { type: string }, port: { type: integer, default: 3000 }, size: { type: string }, project: { type: string }, sshKeys: { type: array, items: { type: string } }, env: { type: object, additionalProperties: { type: string } }, gitToken: { type: string, description: For private repos; stored only in the server's cloud-init } } } } } }
-      responses: { "202": { description: Accepted — includes `webhook.url` and `webhook.secret` } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { repoUrl: { type: string, format: uri }, installationId: { type: string }, repo: { type: string, example: acme/app }, branch: { type: string, default: main }, name: { type: string }, port: { type: integer, default: 3000 }, size: { type: string }, project: { type: string }, sshKeys: { type: array, items: { type: string } }, env: { type: object, additionalProperties: { type: string } }, gitToken: { type: string, description: For private repos; stored only in the server's cloud-init } } } } } }
+      responses: { "202": { description: Accepted; includes `webhook` (url and secret) for URL based deployments, null for app based ones } }
   /deploys/{id}:
     get: { tags: [deploys], summary: Get a deployment (refreshes status from the server), parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK } } }
   /deploys/{id}/redeploy:
@@ -317,6 +322,40 @@ paths:
       requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string, maxLength: 500 } } } } } }
       responses:
         "201": { description: Denied, content: { application/json: { schema: { $ref: "#/components/schemas/Approval" } } } }
+  /deploys/{id}/logs:
+    get:
+      tags: [deploys]
+      summary: Tail of the last build log
+      description: Fetched live from the server when it is reachable, otherwise the last cached copy. Capped at 32 KB.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { id: { type: string }, status: { type: string }, commit: { type: string, nullable: true }, log: { type: string }, updatedAt: { type: string, format: date-time, nullable: true }, live: { type: boolean, description: true when read from the server just now } } } } } }
+  /github/app:
+    get: { tags: [github], summary: Whether the GitHub App integration is configured, responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { enabled: { type: boolean } } } } } } } }
+  /github/connect:
+    get:
+      tags: [github]
+      summary: URL to install the GitHub App for this team
+      description: Send the user there. GitHub returns them to the console callback with installation_id and the signed state, which the console posts to /github/installations.
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { url: { type: string } } } } } }, "503": { description: Not configured (`github_app_unavailable`) } }
+  /github/installations:
+    get: { tags: [github], summary: GitHub App installations linked to the team, responses: { "200": { description: OK } } }
+    post:
+      tags: [github]
+      summary: Link an installation after the GitHub redirect
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [installationId, state], properties: { installationId: { type: integer }, state: { type: string } } } } } }
+      responses: { "201": { description: Linked }, "401": { description: State invalid or expired } }
+  /github/installations/{id}:
+    delete: { tags: [github], summary: Unlink and uninstall, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "204": { description: Removed } } }
+  /github/installations/{id}/repos:
+    get: { tags: [github], summary: Repositories the installation can reach, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: OK } } }
+  /github/webhook:
+    post:
+      tags: [github]
+      security: []
+      summary: GitHub App webhook (push, installation)
+      description: One URL for every installation, verified with X-Hub-Signature-256 and the app webhook secret. A push redeploys every deployment on that repository and branch.
+      responses: { "200": { description: OK } }
   /firewalls:
     get: { tags: [network], summary: List firewalls, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK } } }
     post:

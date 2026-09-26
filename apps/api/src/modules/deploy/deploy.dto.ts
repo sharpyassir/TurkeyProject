@@ -1,7 +1,10 @@
 import { IsArray, IsInt, IsObject, IsOptional, IsString, IsUrl, Matches, Max, Min } from 'class-validator';
 
 export class CreateDeployDto {
-  @IsUrl({ protocols: ['https'], require_protocol: true }) repoUrl: string;
+  /** Either repoUrl (any public repo, or private with gitToken) or installationId + repo (GitHub App). */
+  @IsOptional() @IsUrl({ protocols: ['https'], require_protocol: true }) repoUrl?: string;
+  @IsOptional() @IsString() installationId?: string;
+  @IsOptional() @IsString() @Matches(/^[\w.-]+\/[\w.-]+$/) repo?: string;
   @IsOptional() @IsString() @Matches(/^[\w./-]{1,100}$/) branch?: string;
   @IsOptional() @IsString() @Matches(/^[a-z0-9]([a-z0-9-]{0,40}[a-z0-9])?$/) name?: string;
   @IsOptional() @IsInt() @Min(1) @Max(65535) port?: number;

@@ -10,12 +10,13 @@ export interface DeployInit {
   port: number;
   vmSecret: string;
   envVars: Record<string, string>;
-  /** Optional token for private repos (GitHub fine-grained PAT or deploy token). */
+  /** Initial token for private repos: a customer PAT, or a one hour GitHub App installation token that redeploys refresh. */
   gitToken?: string;
 }
 
 export function renderDeployCloudInit(d: DeployInit): string {
-  const cloneUrl = d.gitToken ? d.repoUrl.replace('https://', `https://x-access-token:${d.gitToken}@`) : d.repoUrl;
+  // The clone URL never carries credentials. deploy.sh reads /opt/pgcloud/git.token at run time, which the
+  // control plane refreshes on every redeploy (GitHub App tokens live one hour) or a customer PAT fills once.
   const envFile = Object.entries(d.envVars).map(([k, v]) => `${k}=${v.replace(/\n/g, '')}`).join('\n');
   return `#cloud-config
 package_update: true
@@ -31,7 +32,9 @@ ${indent(envFile || '# no env vars', 6)}
       #!/usr/bin/env bash
       # Clone or update the repo, then build and run it. Idempotent; safe to re-run on every push.
       set -euo pipefail
-      REPO='${cloneUrl}'
+      REPO='${d.repoUrl}'
+      TOKEN=$(cat /opt/pgcloud/git.token 2>/dev/null || true)
+      if [ -n "$TOKEN" ]; then REPO="https://x-access-token:$TOKEN@${'${REPO#https://}'}"; fi
       BRANCH='${d.branch}'
       PORT='${d.port}'
       DIR=/srv/app
@@ -39,6 +42,7 @@ ${indent(envFile || '# no env vars', 6)}
       exec >>"$LOG" 2>&1
       echo "=== deploy $(date -Is) ==="
       if [ -d "$DIR/.git" ]; then
+        git -C "$DIR" remote set-url origin "$REPO"
         git -C "$DIR" fetch --depth 1 origin "$BRANCH" && git -C "$DIR" reset --hard "origin/$BRANCH"
       else
         git clone --depth 1 --branch "$BRANCH" "$REPO" "$DIR"
@@ -70,13 +74,25 @@ ${indent(envFile || '# no env vars', 6)}
       class H(http.server.BaseHTTPRequestHandler):
           def log_message(self, *a): pass
           def do_GET(self):
-              if self.path != '/status': return self._send(404, {})
               st = open('/opt/pgcloud/status').read().strip() if os.path.exists('/opt/pgcloud/status') else 'deploying'
               commit = open('/opt/pgcloud/last-commit').read().strip() if os.path.exists('/opt/pgcloud/last-commit') else None
-              self._send(200, {'status': st, 'commit': commit})
+              if self.path == '/status': return self._send(200, {'status': st, 'commit': commit})
+              if self.path.startswith('/logs'):
+                  if self.headers.get('X-Pgcloud-Secret') != SECRET: return self._send(401, {'error': 'unauthorized'})
+                  log = ''
+                  if os.path.exists('/var/log/pgcloud-deploy.log'):
+                      with open('/var/log/pgcloud-deploy.log', 'rb') as f:
+                          f.seek(0, 2); size = f.tell(); f.seek(max(0, size - 65536)); log = f.read().decode('utf-8', 'replace')
+                  return self._send(200, {'status': st, 'commit': commit, 'log': log})
+              self._send(404, {})
           def do_POST(self):
               if self.headers.get('X-Pgcloud-Secret') != SECRET: return self._send(401, {'error': 'unauthorized'})
               if self.path != '/redeploy': return self._send(404, {})
+              n = int(self.headers.get('Content-Length') or 0)
+              body = json.loads(self.rfile.read(n) or b'{}') if n else {}
+              if body.get('token'):
+                  with open('/opt/pgcloud/git.token', 'w') as f: f.write(body['token'])
+                  os.chmod('/opt/pgcloud/git.token', 0o600)
               open('/opt/pgcloud/status', 'w').write('deploying')
               subprocess.Popen(['/opt/pgcloud/deploy.sh'])
               self._send(202, {'status': 'deploying'})
@@ -86,7 +102,10 @@ ${indent(envFile || '# no env vars', 6)}
   - path: /opt/pgcloud/vm.secret
     permissions: '0600'
     content: '${d.vmSecret}'
-  - path: /etc/systemd/system/pgcloud-deployd.service
+${d.gitToken ? `  - path: /opt/pgcloud/git.token
+    permissions: '0600'
+    content: '${d.gitToken}'
+` : ''}  - path: /etc/systemd/system/pgcloud-deployd.service
     content: |
       [Unit]
       Description=pgcloud redeploy hook

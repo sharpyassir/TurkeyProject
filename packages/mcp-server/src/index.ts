@@ -192,9 +192,11 @@ server.registerTool('delete_server', {
 
 server.registerTool('deploy_repository', {
   title: 'Deploy a Git repository',
-  description: 'Create a server that clones a public GitHub repository, builds it (Dockerfile or docker-compose.yml) and serves it on port 80. Returns the URL and a GitHub webhook to set up so pushes redeploy.',
+  description: 'Create a server that clones a repository, builds it (Dockerfile or docker-compose.yml) and serves it on port 80. Give repoUrl for a public repository, or installationId plus repo ("owner/name") from list_github_repos for any repository the GitHub App can see; app deployments redeploy on every push with no webhook setup.',
   inputSchema: {
-    repoUrl: z.string().url(),
+    repoUrl: z.string().url().optional().describe('Public https repository URL'),
+    installationId: z.string().optional().describe('From list_github_repos'),
+    repo: z.string().optional().describe('"owner/name", with installationId'),
     branch: z.string().default('main'),
     port: z.number().int().min(1).max(65535).default(3000).describe('Port the app listens on inside the container'),
     size: z.string().optional(),
@@ -215,6 +217,29 @@ server.registerTool('redeploy', {
   description: 'Pull the latest commit and rebuild a deployment now.',
   inputSchema: { id: z.string() },
 }, async ({ id }) => run(() => api('POST', `/v1/deploys/${id}/redeploy`, {})));
+
+server.registerTool('deploy_logs', {
+  title: 'Deployment build log',
+  description: 'Tail of the last build log of a deployment plus its status and commit. Use it to see why a build failed.',
+  inputSchema: { id: z.string() },
+}, async ({ id }) => run(async () => {
+  const l = await api<{ status: string; commit: string | null; log: string; live: boolean }>('GET', `/v1/deploys/${id}/logs`);
+  return `status: ${l.status}${l.commit ? ` commit: ${l.commit.slice(0, 7)}` : ''}${l.live ? '' : ' (cached)'}\n\n${l.log || '(no build log yet)'}`;
+}));
+
+server.registerTool('list_github_repos', {
+  title: 'List GitHub repositories',
+  description: 'Repositories reachable through the team\'s GitHub App installations, for deploy_repository with installationId and repo. Empty when the team has not connected GitHub.',
+  inputSchema: {},
+}, async () => run(async () => {
+  const inst = await api<{ data: { id: string; accountLogin: string }[] }>('GET', '/v1/github/installations');
+  const out: unknown[] = [];
+  for (const i of inst.data) {
+    const r = await api<{ data: { fullName: string; private: boolean; defaultBranch: string }[] }>('GET', `/v1/github/installations/${i.id}/repos`);
+    out.push({ installationId: i.id, account: i.accountLogin, repos: r.data.map((x) => ({ repo: x.fullName, private: x.private, defaultBranch: x.defaultBranch })) });
+  }
+  return out;
+}));
 
 server.registerTool('get_billing', {
   title: 'Billing balance',

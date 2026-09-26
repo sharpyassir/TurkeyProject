@@ -95,7 +95,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | IAM: signup/login, teams, projects, RBAC scopes, API tokens, **agent-safe tokens** (spend cap, approval rules), SSH keys | ✅ |
 | Approval queue: parked agent requests, owner email and webhook, approve or deny in console, CLI or API | ✅ |
 | Compute: servers, sizes, images, lifecycle actions as Temporal workflows, quotas | ✅ |
-| **Git Deploy**: repo → server → build → GitHub push redeploys (`POST /v1/deploys`) | ✅ |
+| **Git Deploy**: repo → server → build → GitHub push redeploys (`POST /v1/deploys`); GitHub App installations, repo picker, build logs | ✅ |
 | **CLI** `pgcloud`: login, servers create/ssh/actions, deploy, tokens, `--json` | ✅ |
 | **MCP server** `pgcloud-mcp`: 12 tools for Claude Code, Cursor and other agents, behind a capped agent token | ✅ |
 | Scheduler: least-loaded placement, anti-affinity, capacity from heartbeats | ✅ |
@@ -110,7 +110,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Console: login, servers, one-click apps, billing; EN/TR/AR with RTL | ✅ minimal |
 | Account security: TOTP two factor (required for owners), email verification, password reset, rate limits | ✅ |
 | Hosting: Dockerfiles, production compose with Caddy TLS and backups, Ansible for the management host and Proxmox nodes, deploy workflow ([docs/hosting.md](docs/hosting.md)) | ✅ |
-| GitHub App, Terraform, SDK generation | ⏳ |
+| Terraform, SDK generation | ⏳ |
 
 ### Local dev without Docker
 

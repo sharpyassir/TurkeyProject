@@ -20,6 +20,12 @@ const schema = z.object({
   /** Fallback USD→TRY rate when no FxRate row exists yet. */
   FX_USD_TRY: z.coerce.number().positive().default(41),
   /** JSON endpoint returning { rates: { TRY: number } } for USD. */
+  PUBLIC_API_URL: z.string().url().default('http://localhost:4000'),
+  /** GitHub App for Git Deploy (optional; without it customers paste a repository URL and token). */
+  GITHUB_APP_ID: z.coerce.number().optional(),
+  GITHUB_APP_SLUG: z.string().optional(),
+  GITHUB_APP_PRIVATE_KEY: z.string().optional(),
+  GITHUB_APP_WEBHOOK_SECRET: z.string().optional(),
   CONSOLE_URL: z.string().url().default('http://localhost:3000'),
   MAIL_PROVIDER: z.enum(['log', 'postmark', 'resend']).default('log'),
   MAIL_FROM: z.string().default('pgcloud <no-reply@pgcloud.example>'),

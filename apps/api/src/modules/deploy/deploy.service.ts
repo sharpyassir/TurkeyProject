@@ -10,6 +10,9 @@ import { ServersService } from '../compute/servers.service';
 import { FirewallsService } from '../network/firewalls.service';
 import { renderDeployCloudInit } from './cloud-init';
 import { CreateDeployDto } from './deploy.dto';
+import { loadConfig } from '../../config/config';
+import { GithubService } from '../github/github.service';
+import { Inject, forwardRef } from '@nestjs/common';
 
 /**
  * Git Deploy: "link a repo, get a URL, push to redeploy". Built on a normal server so it
@@ -25,6 +28,7 @@ export class DeployService {
     private readonly events: EventsService,
     private readonly servers: ServersService,
     private readonly firewalls: FirewallsService,
+    @Inject(forwardRef(() => GithubService)) private readonly github: GithubService,
   ) {}
 
   async list(actor: Actor, project?: string) {
@@ -40,13 +44,23 @@ export class DeployService {
   }
 
   async create(actor: Actor, dto: CreateDeployDto) {
-    if (!/^https:\/\/(github\.com|gitlab\.com|bitbucket\.org)\/[\w.-]+\/[\w.-]+?(\.git)?$/.test(dto.repoUrl)) {
-      throw ApiError.invalid('repoUrl must be an https GitHub, GitLab or Bitbucket repository URL');
+    // GitHub App path: the installation clones the repo with a token we mint and refresh; no PAT needed.
+    let installation: { id: string; installationId: number } | null = null;
+    let gitToken = dto.gitToken;
+    let repoUrl = dto.repoUrl;
+    if (dto.installationId && dto.repo) {
+      installation = await this.prisma.githubInstallation.findFirst({ where: { id: dto.installationId, teamId: actor.teamId }, select: { id: true, installationId: true } });
+      if (!installation) throw ApiError.notFound('github_installation', dto.installationId);
+      repoUrl = `https://github.com/${dto.repo}`;
+      gitToken = await this.github.installationToken(installation.installationId);
+    }
+    if (!repoUrl || !/^https:\/\/(github\.com|gitlab\.com|bitbucket\.org)\/[\w.-]+\/[\w.-]+?(\.git)?$/.test(repoUrl)) {
+      throw ApiError.invalid('Give repoUrl (an https GitHub, GitLab or Bitbucket repository URL) or installationId with repo ("owner/name")');
     }
     const project = await this.iam.resolveProject(actor, dto.project);
     const webhookSecret = 'whsec_' + randomBytes(24).toString('base64url');
     const vmSecret = randomBytes(24).toString('base64url');
-    const name = dto.name ?? dto.repoUrl.split('/').pop()!.replace(/\.git$/, '').toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const name = dto.name ?? repoUrl.split('/').pop()!.replace(/\.git$/, '').toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
     // A firewall that also opens the redeploy hook port for the control plane.
     const fw = await this.firewalls.create(actor, project.id, {
@@ -70,16 +84,17 @@ export class DeployService {
       sshKeys: dto.sshKeys,
       firewalls: [fw.id],
       tags: ['git-deploy'],
-      userData: renderDeployCloudInit({ repoUrl: dto.repoUrl, branch: dto.branch ?? 'main', port: dto.port ?? 3000, vmSecret, envVars: dto.env ?? {}, gitToken: dto.gitToken }),
+      userData: renderDeployCloudInit({ repoUrl, branch: dto.branch ?? 'main', port: dto.port ?? 3000, vmSecret, envVars: dto.env ?? {}, gitToken }),
     });
 
     const d = await this.prisma.deployment.create({
-      data: { projectId: project.id, serverId: server.id, name, repoUrl: dto.repoUrl, branch: dto.branch ?? 'main', port: dto.port ?? 3000, webhookSecret, vmSecret, envVars: (dto.env ?? {}) as Prisma.InputJsonValue },
+      data: { projectId: project.id, serverId: server.id, name, repoUrl, branch: dto.branch ?? 'main', port: dto.port ?? 3000, webhookSecret, vmSecret, envVars: (dto.env ?? {}) as Prisma.InputJsonValue, installationId: installation?.id, repoFullName: installation ? dto.repo : repoUrl.replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '') },
       include: { server: { include: { publicIps: true } } },
     });
-    await this.events.emit('deploy.created', { deploymentId: d.id, repoUrl: dto.repoUrl }, { actor, resource: `deployment:${d.id}` });
-    // The webhook secret is shown once, with the URL to paste into GitHub → Settings → Webhooks.
-    return { ...present(d), webhook: { url: `${process.env.PUBLIC_API_URL ?? 'http://localhost:4000'}/v1/deploys/${d.id}/hook`, secret: webhookSecret, contentType: 'application/json', events: ['push'] } };
+    await this.events.emit('deploy.created', { deploymentId: d.id, repoUrl }, { actor, resource: `deployment:${d.id}` });
+    // App based deployments redeploy through the app webhook; URL based ones get a per deployment webhook (secret shown once).
+    if (installation) return { ...present(d), webhook: null };
+    return { ...present(d), webhook: { url: `${loadConfig().PUBLIC_API_URL}/v1/deploys/${d.id}/hook`, secret: webhookSecret, contentType: 'application/json', events: ['push'] } };
   }
 
   /** Manual redeploy from the console / CLI. */
@@ -108,6 +123,44 @@ export class DeployService {
     return { ok: true, deploying: true };
   }
 
+  /** App webhook: a push to a repository the app is installed on. Redeploys every matching deployment. */
+  async onAppPush(installationId: number, repoFullName: string, branch: string, commit?: string) {
+    const rows = await this.prisma.deployment.findMany({
+      where: { repoFullName, branch, installation: { installationId } },
+      include: { server: { include: { publicIps: true } }, installation: true, project: { select: { teamId: true } } },
+    });
+    let n = 0;
+    for (const d of rows) {
+      try {
+        await this.trigger(d, commit);
+        await this.events.emit('deploy.triggered', { deploymentId: d.id, source: 'github_app', commit }, { teamId: d.project.teamId, resource: `deployment:${d.id}` });
+        n++;
+      } catch (err) {
+        this.log.warn(`push for ${repoFullName}@${branch}: deployment ${d.id} skipped: ${(err as Error).message}`);
+      }
+    }
+    return n;
+  }
+
+  /** Last build log from the server (tail of /var/log/pgcloud-deploy.log), cached on the row. */
+  async logs(actor: Actor, id: string) {
+    const d = await this.prisma.deployment.findFirst({ where: { id, project: { teamId: actor.teamId } }, include: { server: { include: { publicIps: true } } } });
+    if (!d) throw ApiError.notFound('deployment', id);
+    const ip = d.server.publicIps[0]?.address;
+    if (ip && d.server.status === 'active') {
+      try {
+        const r = await fetch(`http://${ip}:9009/logs`, { headers: { 'X-Pgcloud-Secret': d.vmSecret }, signal: AbortSignal.timeout(5000) }).then((r) => r.json() as Promise<{ status: string; commit: string | null; log: string }>);
+        const status = r.status === 'live' ? 'live' : r.status === 'failed' ? 'failed' : 'deploying';
+        const log = r.log.slice(-32_000);
+        await this.prisma.deployment.update({ where: { id }, data: { status, lastCommit: r.commit ?? undefined, buildLog: log, logUpdatedAt: new Date() } });
+        return { id, status, commit: r.commit, log, updatedAt: new Date(), live: true };
+      } catch {
+        /* fall through to the cached copy */
+      }
+    }
+    return { id, status: d.status, commit: d.lastCommit, log: d.buildLog ?? '', updatedAt: d.logUpdatedAt, live: false };
+  }
+
   /** Polls the VM's status endpoint and mirrors it into the row. */
   async refreshStatus(id: string) {
     const d = await this.prisma.deployment.findUnique({ where: { id }, include: { server: { include: { publicIps: true } } } });
@@ -123,12 +176,18 @@ export class DeployService {
     }
   }
 
-  private async trigger(d: { id: string; vmSecret: string; server: { status: string; publicIps: { address: string }[] } }, commit?: string) {
+  private async trigger(d: { id: string; vmSecret: string; installationId?: string | null; server: { status: string; publicIps: { address: string }[] } }, commit?: string) {
     const ip = d.server.publicIps[0]?.address;
     if (!ip || d.server.status !== 'active') throw ApiError.invalidState('Server is not active yet');
     await this.prisma.deployment.update({ where: { id: d.id }, data: { status: 'deploying', lastCommit: commit } });
+    // App deployments get a fresh one hour token with every redeploy so the clone keeps working.
+    let token: string | undefined;
+    if (d.installationId) {
+      const inst = await this.prisma.githubInstallation.findUnique({ where: { id: d.installationId } });
+      if (inst && !inst.suspendedAt) token = await this.github.installationToken(inst.installationId).catch(() => undefined);
+    }
     try {
-      await fetch(`http://${ip}:9009/redeploy`, { method: 'POST', headers: { 'X-Pgcloud-Secret': d.vmSecret }, signal: AbortSignal.timeout(5000) });
+      await fetch(`http://${ip}:9009/redeploy`, { method: 'POST', headers: { 'X-Pgcloud-Secret': d.vmSecret, 'content-type': 'application/json' }, body: JSON.stringify(token ? { token, commit } : { commit }), signal: AbortSignal.timeout(5000) });
     } catch (err) {
       // With the fake driver there is no VM to call; the status poller will keep it 'deploying'.
       this.log.warn(`redeploy hook unreachable for ${d.id}: ${(err as Error).message}`);
@@ -146,6 +205,8 @@ function present(d: Prisma.DeploymentGetPayload<{ include: { server: { include: 
     port: d.port,
     status: d.server.status === 'active' ? d.status : d.server.status === 'failed' ? 'failed' : 'creating',
     url: ip ? `http://${ip}` : null,
+    repo: d.repoFullName,
+    source: d.installationId ? 'github_app' : 'url',
     serverId: d.serverId,
     serverStatus: d.server.status,
     lastCommit: d.lastCommit,

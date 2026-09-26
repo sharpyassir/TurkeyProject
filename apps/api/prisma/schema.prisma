@@ -90,6 +90,7 @@ model Team {
   projects  Project[]
   apiTokens ApiToken[]
   approvals Approval[]
+  githubInstallations GithubInstallation[]
   invoices  Invoice[]
   credits   Credit[]
   payments  Payment[]
@@ -791,12 +792,36 @@ model Deployment {
   status        DeployStatus @default(creating)
   lastCommit    String?
   lastDeployAt  DateTime?
+  /// GitHub App based deployments: which installation clones the repo, and "owner/name" for push matching.
+  installationId String?
+  repoFullName   String?
+  /// Tail of the last build log pulled from the server (capped), for the console and CLI.
+  buildLog       String?
+  logUpdatedAt   DateTime?
   createdAt     DateTime     @default(now())
 
-  server  Server  @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  project Project @relation(fields: [projectId], references: [id])
+  server       Server              @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  project      Project             @relation(fields: [projectId], references: [id])
+  installation GithubInstallation? @relation(fields: [installationId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
+  @@index([repoFullName, branch])
+}
+
+/// A GitHub App installation on a customer account or organization, linked to one team.
+model GithubInstallation {
+  id             String    @id @default(cuid())
+  teamId         String
+  installationId Int       @unique
+  accountLogin   String
+  accountType    String // User | Organization
+  suspendedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  team        Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  deployments Deployment[]
+
+  @@index([teamId])
 }
 
 /// "Notify me" clicks on roadmap products in the console — feeds prioritisation.

@@ -95,3 +95,20 @@ holds in flight host agent jobs; the worker retries them. Temporal state lives i
 - **Firewall**: ufw allows 22, 80, 443 to the world and 4222 only from the management network.
 - **Adding a Proxmox node**: create the `Host` row through the admin API, put its id in the inventory, run
   the playbook with `--limit pve_nodes`. The agent starts sending heartbeats within a minute.
+
+## GitHub App (Git Deploy)
+
+Create one app per environment at github.com/settings/apps (or under the organization):
+
+| Setting | Value |
+|---|---|
+| Webhook URL | `https://api.<domain>/v1/github/webhook` |
+| Webhook secret | a random string, also set as `GITHUB_APP_WEBHOOK_SECRET` |
+| Setup URL | `https://console.<domain>/github/callback`, with "Redirect on update" on |
+| Repository permissions | Contents: read, Metadata: read |
+| Subscribe to events | Push, Installation |
+| Where can it be installed | Any account |
+
+Then put the app id, slug and the generated private key (PEM, newlines as `\n`) into `pgcloud.env` as
+`GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`. Without these the console falls back to
+repository URLs with an optional token, and the API answers `github_app_unavailable` on the connect endpoint.

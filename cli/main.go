@@ -120,7 +120,7 @@ SERVERS   servers ls | create NAME [--size s-2vcpu-4gb] [--image ubuntu-24-04|wo
                   | get ID | start|stop|reboot|delete ID | resize ID --size S | snapshot ID
           ssh NAME|ID [-- command]
 DEPLOY    deploy REPO_URL [--branch main] [--port 3000] [--size S] [--env K=V ...] [--name N] [--wait]
-          deploys ls | get ID | redeploy ID
+          deploys ls | get ID | redeploy ID | logs ID [--follow]
 CATALOG   apps · sizes · images · regions · pricing [--currency TRY|USD] · firewalls
 
 FLAGS     --json           machine-readable output
@@ -749,6 +749,39 @@ func cmdDeploys(args []string) error {
 		}
 		fmt.Fprintln(stdout, "✓ redeploy triggered")
 		return nil
+	case "logs":
+		if len(args) < 2 {
+			return errors.New("deploy id required")
+		}
+		follow, _ := has(args[2:], "--follow")
+		last := ""
+		for {
+			var l struct {
+				Status string `json:"status"`
+				Commit string `json:"commit"`
+				Log    string `json:"log"`
+			}
+			if err := call(http.MethodGet, "/v1/deploys/"+args[1]+"/logs", nil, &l); err != nil {
+				return err
+			}
+			if jsonOut {
+				emit(l)
+				return nil
+			}
+			if l.Log != last {
+				fmt.Fprint(stdout, strings.TrimPrefix(l.Log, last))
+				last = l.Log
+			}
+			if !follow || l.Status == "live" || l.Status == "failed" {
+				if l.Log == "" {
+					fmt.Fprintln(stdout, "(no build log yet)")
+				}
+				fmt.Fprintf(stdout, "\nstatus: %s\n", l.Status)
+				return nil
+			}
+			stdout.Flush()
+			time.Sleep(3 * time.Second)
+		}
 	}
 	return fmt.Errorf("unknown deploys subcommand %q", args[0])
 }

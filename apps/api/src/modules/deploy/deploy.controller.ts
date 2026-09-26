@@ -29,6 +29,12 @@ export class DeployController {
     return this.deploys.get(actor, id);
   }
 
+  /** Tail of the last build log, refreshed from the server when it is reachable. */
+  @Get(':id/logs') @RequireScopes('servers:read')
+  logs(@CurrentActor() actor: Actor, @Param('id') id: string) {
+    return this.deploys.logs(actor, id);
+  }
+
   @Post(':id/redeploy') @RequireScopes('servers:write') @HttpCode(202)
   redeploy(@CurrentActor() actor: Actor, @Param('id') id: string) {
     return this.deploys.redeploy(actor, id);
