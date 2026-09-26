@@ -5,7 +5,7 @@ section: Start here
 order: 1
 ---
 
-pgcloud is a developer cloud built for Türkiye. You get servers by the hour, one click apps, and API tokens that AI agents can use safely. Everything you can do in the console you can also do from the command line, the API, or an AI agent.
+pgcloud is a developer cloud built for Saudi Arabia. You get servers by the hour, one click apps, and API tokens that AI agents can use safely. Everything you can do in the console you can also do from the command line, the API, or an AI agent.
 
 ## 1. Create an account
 
@@ -29,7 +29,7 @@ ssh-keygen -t ed25519 -C "you@example.com"
 
 ## 3. Create a server
 
-Go to **Core Cloud, Servers** and choose **Create server**. Pick a size, an image such as Ubuntu 24.04 or a one click app, give it a name, and confirm. The price is shown before you create it, in dollars or lira.
+Go to **Core Cloud, Servers** and choose **Create server**. Pick a size, an image such as Ubuntu 24.04 or a one click app, give it a name, and confirm. The price is shown before you create it, in dollars or riyals.
 
 The server appears with status `new`, then `provisioning`, then `active`. It takes about a minute. Click the server name to open its page, where the connect command is ready to copy:
 
@@ -46,4 +46,4 @@ Under **Security, Two Factor Sign In**, scan the code with any authenticator app
 - [Use the command line](/docs/cli) to create and manage servers from your terminal.
 - [Deploy from GitHub](/docs/git-deploy) so a push to your branch deploys your app.
 - [Give an AI agent access](/docs/agents) with a spending cap and approval rules.
-- [Understand billing](/docs/billing): hourly, capped at the monthly price, in USD or TRY.
+- [Understand billing](/docs/billing): hourly, capped at the monthly price, in USD or SAR.

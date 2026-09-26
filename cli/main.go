@@ -121,7 +121,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(stdout, `pgcloud — the developer cloud for Türkiye, from your terminal
+	fmt.Fprint(stdout, `pgcloud — the developer cloud for Saudi Arabia, from your terminal
 
 USAGE  pgcloud [--json] [--project SLUG] <command> [args]
 
@@ -141,7 +141,7 @@ SERVERS   servers ls | create NAME [--size s-2vcpu-4gb] [--image ubuntu-24-04|wo
           ssh NAME|ID [-- command]
 DEPLOY    deploy REPO_URL [--branch main] [--port 3000] [--size S] [--env K=V ...] [--name N] [--wait]
           deploys ls | get ID | redeploy ID | logs ID [--follow]
-CATALOG   apps · sizes · images · regions · pricing [--currency TRY|USD] · firewalls
+CATALOG   apps · sizes · images · regions · pricing [--currency SAR|USD] · firewalls
 
 FLAGS     --json           machine-readable output
           --project SLUG   project (default "default")
@@ -360,7 +360,7 @@ func cell(v any) string {
 
 func money(minor any, currency any) string {
 	f, _ := minor.(float64)
-	sym := map[string]string{"TRY": "₺", "USD": "$"}[fmt.Sprint(currency)]
+	sym := map[string]string{"SAR": "SAR ", "USD": "$"}[fmt.Sprint(currency)]
 	return fmt.Sprintf("%s%.2f", sym, f/100)
 }
 
@@ -894,7 +894,7 @@ func cmdPricing(args []string) error {
 		Currency string           `json:"currency"`
 		Data     []map[string]any `json:"data"`
 	}
-	if err := call(http.MethodGet, "/v1/pricing?currency="+or(cur, "TRY"), nil, &res); err != nil {
+	if err := call(http.MethodGet, "/v1/pricing?currency="+or(cur, "SAR"), nil, &res); err != nil {
 		return err
 	}
 	if jsonOut {

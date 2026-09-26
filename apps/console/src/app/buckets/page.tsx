@@ -5,12 +5,12 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api, ApiError, money, Price } from '@/lib/api';
 import { useShell } from '@/components/shell';
 import { StatusBadge } from '@/components/status-badge';
+import { fmtBytes } from '@/lib/format';
 
 export interface Bucket { id: string; name: string; status: string; statusMessage: string | null; regionId: string; public: boolean; sizeBytes: number; objectCount: number; usageUpdatedAt: string | null; endpoint: string; url: string; createdAt: string }
 interface Key { id: string; name: string; accessKey: string; createdAt: string; lastUsedAt: string | null }
 interface NewKey extends Key { secretKey: string; endpoint: string; region: string }
 
-export const fmtBytes = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : n >= 1e3 ? `${(n / 1e3).toFixed(0)} KB` : `${n} B`);
 
 /** Object storage: S3 compatible buckets and access keys. */
 export default function BucketsPage() {
@@ -20,7 +20,7 @@ export default function BucketsPage() {
   const [meta, setMeta] = useState<{ endpoint: string; region: string }>({ endpoint: '', region: '' });
   const [created, setCreated] = useState<NewKey | null>(null);
   const [prices, setPrices] = useState<Price[]>([]);
-  const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'SAR'>('USD');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -30,7 +30,7 @@ export default function BucketsPage() {
   }, []);
   useEffect(() => {
     load();
-    api<{ currency: 'USD' | 'TRY' }>('/v1/billing/balance').then(async (b) => { setCurrency(b.currency); setPrices((await api<{ data: Price[] }>(`/v1/pricing?currency=${b.currency}`)).data); }).catch(() => undefined);
+    api<{ currency: 'USD' | 'SAR' }>('/v1/billing/balance').then(async (b) => { setCurrency(b.currency); setPrices((await api<{ data: Price[] }>(`/v1/pricing?currency=${b.currency}`)).data); }).catch(() => undefined);
   }, [load]);
 
   async function run(fn: () => Promise<unknown>) {

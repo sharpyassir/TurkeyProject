@@ -20,9 +20,9 @@ describe('rateHour', () => {
 });
 
 describe('taxRateFor', () => {
-  it('charges 20% KDV for Turkey', () => {
-    expect(taxRateFor('TRY', 'TR')).toBe(0.2);
-    expect(taxRateFor('USD', 'TR')).toBe(0.2);
+  it('charges 15% VAT for Saudi Arabia', () => {
+    expect(taxRateFor('SAR', 'SA')).toBe(0.15);
+    expect(taxRateFor('USD', 'SA')).toBe(0.15);
   });
   it('charges no tax for international USD', () => {
     expect(taxRateFor('USD', 'DE')).toBe(0);

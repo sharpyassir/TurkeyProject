@@ -12,7 +12,7 @@ info:
     - Lists are cursor-paginated: `?limit=50&cursor=<id>` → `meta.next_cursor`
     - Mutations accept `Idempotency-Key` (replayed for 24h; same key + different body → 409)
     - Long operations return `202 Accepted` and a resource in a transitional status; poll or use webhooks
-    - Money is integer minor units (`amountMinor`) with an explicit `currency` (`USD` | `TRY`)
+    - Money is integer minor units (`amountMinor`) with an explicit `currency` (`USD` | `SAR`)
     - Errors: `{ "error": { "code", "message", "details?" } }`
     - Rate limits: 600 requests per minute per token or session, 120 per minute per IP when anonymous,
       10 sign in attempts per minute per IP. Over the limit: `429 rate_limited` with `Retry-After`
@@ -183,8 +183,8 @@ paths:
     post:
       tags: [billing]
       summary: Start a card payment that becomes prepaid credit
-      description: Returns the hosted payment page (Stripe for USD teams, iyzico for TRY teams) to send the person to. Agents cannot call this.
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [amountMinor], properties: { amountMinor: { type: integer, description: "USD 5 to 5000, TRY 200 to 200000" } } } } } }
+      description: Returns the hosted Moyasar payment page (mada, Visa, Mastercard, Apple Pay) to send the person to. Agents cannot call this.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [amountMinor], properties: { amountMinor: { type: integer, description: "USD 5 to 5000, SAR 200 to 200000" } } } } } }
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Checkout" } } } }
   /billing/invoices/{id}/pay:
@@ -203,16 +203,16 @@ paths:
       responses: { "200": { description: PDF, content: { application/pdf: { schema: { type: string, format: binary } } } } }
   /billing/payments:
     get: { tags: [billing], summary: Card payments of the team, responses: { "200": { description: OK } } }
-  /billing/payments/stripe/webhook:
-    post: { tags: [billing], security: [], summary: Stripe webhook (checkout.session events, verified with Stripe-Signature), responses: { "200": { description: OK } } }
-  /billing/payments/iyzico/callback:
-    post: { tags: [billing], security: [], summary: iyzico callback after the hosted page (result verified by retrieving the payment), responses: { "302": { description: Redirect to the console } } }
+  /billing/payments/moyasar/webhook:
+    post: { tags: [billing], security: [], summary: Moyasar webhook (payment events, verified with the shared token and an invoice fetch), responses: { "200": { description: OK } } }
+  /billing/payments/moyasar/callback:
+    get: { tags: [billing], security: [], summary: Moyasar callback after the hosted page (result verified by retrieving the invoice), responses: { "302": { description: Redirect to the console } } }
   /pricing:
     get:
       tags: [catalog]
       security: []
-      summary: Public price list (USD base; TRY converted at the current exchange rate)
-      parameters: [{ name: currency, in: query, schema: { type: string, enum: [USD, TRY], default: USD } }]
+      summary: Public price list (USD base; SAR converted at the current exchange rate)
+      parameters: [{ name: currency, in: query, schema: { type: string, enum: [USD, SAR], default: USD } }]
       responses:
         "200":
           description: OK
@@ -644,9 +644,9 @@ components:
       type: object
       properties:
         paymentId: { type: string }
-        provider: { type: string, enum: [stripe, iyzico, fake] }
+        provider: { type: string, enum: [moyasar, fake] }
         amountMinor: { type: integer }
-        currency: { type: string, enum: [USD, TRY] }
+        currency: { type: string, enum: [USD, SAR] }
         redirectUrl: { type: string, description: Hosted payment page }
     MetricPoint:
       type: object
@@ -703,7 +703,7 @@ components:
         password: { type: string, minLength: 10 }
         name: { type: string }
         teamName: { type: string }
-        country: { type: string, default: TR }
+        country: { type: string, default: SA }
         locale: { type: string, enum: [en, tr, ar] }
     Session:
       type: object
@@ -744,7 +744,7 @@ components:
         name: { type: string, pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$" }
         size: { type: string, example: s-2vcpu-4gb }
         image: { type: string, description: Image id or marketplace app slug, example: ubuntu-24-04 }
-        region: { type: string, default: ist1 }
+        region: { type: string, default: sa1 }
         project: { type: string, default: default }
         sshKeys: { type: array, items: { type: string } }
         userData: { type: string, description: cloud-init user-data }

@@ -9,11 +9,11 @@ interface Project { id: string; slug: string; name: string; quotaServers: number
 export default function ProjectsPage() {
   const { locale } = useShell();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'SAR'>('USD');
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [p, b] = await Promise.all([api<{ data: Project[] }>('/v1/projects'), api<{ currency: 'USD' | 'TRY' }>('/v1/billing/balance')]);
+    const [p, b] = await Promise.all([api<{ data: Project[] }>('/v1/projects'), api<{ currency: 'USD' | 'SAR' }>('/v1/billing/balance')]);
     setProjects(p.data); setCurrency(b.currency);
   }, []);
   useEffect(() => { load(); }, [load]);

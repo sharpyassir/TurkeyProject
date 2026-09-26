@@ -39,7 +39,7 @@ docker compose -f infra/dev/docker-compose.yml up -d
 pnpm install
 cp .env.example .env
 pnpm --filter @pgcloud/api prisma:migrate   # creates schema + Timescale hypertable
-pnpm --filter @pgcloud/api seed             # region ist1, sizes, images, price book, dev user
+pnpm --filter @pgcloud/api seed             # region sa1, sizes, images, price book, dev user
 pnpm --filter @pgcloud/api dev              # API on http://localhost:4000  (Swagger at /docs)
 pnpm --filter @pgcloud/api worker           # Temporal worker (provisioning workflows)
 
@@ -61,7 +61,7 @@ curl -X POST localhost:4000/v1/servers \
   -H "Authorization: Bearer $PGCLOUD_TOKEN" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
-  -d '{"name":"web-1","size":"s-2vcpu-4gb","image":"ubuntu-24-04","region":"ist1","project":"default"}'
+  -d '{"name":"web-1","size":"s-2vcpu-4gb","image":"ubuntu-24-04","region":"sa1","project":"default"}'
 ```
 
 ## Design principles (from the architecture doc)
@@ -74,13 +74,13 @@ curl -X POST localhost:4000/v1/servers \
    workflows; never fire-and-forget.
 5. **AI-native** — agents are first-class API clients with scoped tokens and spend caps.
 6. **Metered from day one** — every resource emits usage events for hourly billing.
-7. **Multi-region ready** — `ist1` is region one; the data model has regions from day one.
+7. **Multi-region ready** — `sa1` is region one; the data model has regions from day one.
 
 ## Build phases
 
 | Phase | Months | Scope |
 |---|---|---|
-| MVP | 1–3 | accounts, teams, SSH keys; servers (create/resize/reboot/delete); images + snapshots; public IPs + firewalls; 15 marketplace apps; hourly billing, TRY/USD invoices; API v1 + console; back-office; abuse checks |
+| MVP | 1–3 | accounts, teams, SSH keys; servers (create/resize/reboot/delete); images + snapshots; public IPs + firewalls; 15 marketplace apps; hourly billing, SAR/USD invoices; API v1 + console; back-office; abuse checks |
 | 2 | 4–9 | VPCs, volumes, backups, LBs, DNS; CLI, SDKs, Terraform; MCP server, agent-safe tokens, console assistant; webhooks; status page |
 | 3 | 10–18 | managed DBs, object storage, Kubernetes; vendor marketplace; inference gateway; GPU servers; second region |
 
@@ -106,7 +106,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Load balancers: managed HAProxy nodes with a shared IP (keepalived), forwarding rules, health checks, sticky sessions, Let's Encrypt and uploaded certificates, tag based targets, CLI, SDKs, Terraform | ✅ |
 | Volumes: Ceph RBD block storage 10 GB to 16 TB, hot attach and detach, live grow, per GB pricing, CLI, SDKs, Terraform | ✅ |
 | Marketplace: 15 launch apps as image + cloud-init + variables | ✅ (vendor portal: phase 3) |
-| Billing: per-minute metering, hourly rating with monthly cap, USD price book converted to TRY at a stored exchange rate (hourly refresh, admin override), invoices, credits, spend limits | ✅ (payment gateways, e-Fatura provider: integration points only) |
+| Billing: per-minute metering, hourly rating with monthly cap, USD price book converted to SAR at a stored exchange rate (hourly refresh, admin override), invoices, credits, spend limits | ✅ (payment gateways, ZATCA e-invoicing provider: integration points only) |
 | Trust & safety: verification gate, abuse flags, suspension | ✅ (AI detection: phase 2) |
 | Events: audit log, signed webhooks | ✅ |
 | Back-office admin API | ✅ (admin UI: to do) |
@@ -114,7 +114,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Console: login, servers, one-click apps, billing; EN/TR/AR with RTL | ✅ minimal |
 | Account security: TOTP two factor (required for owners), email verification, password reset, rate limits | ✅ |
 | Hosting: Dockerfiles, production compose with Caddy TLS and backups, Ansible for the management host and Proxmox nodes, deploy workflow ([docs/hosting.md](docs/hosting.md)) | ✅ |
-| Payments: Stripe (USD) and iyzico (TRY) checkout, credit top up, invoice pay, invoice PDF, built in test page | ✅ |
+| Payments: Moyasar checkout (mada, Visa, Mastercard, Apple Pay) in SAR or USD, credit top up, invoice pay, invoice PDF, built in test page | ✅ |
 | Monitoring: per minute metrics from the host agent, graphs on the server page, alert rules with email and webhook, incidents | ✅ |
 | SDKs: TypeScript (types generated from OpenAPI) and Python, both with tests | ✅ |
 | Terraform provider: server, volume, load balancer, domain, DNS record, bucket, storage key, firewall, SSH key resources; sizes and images data sources | ✅ (registry publishing: to do) |

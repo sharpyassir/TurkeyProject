@@ -20,7 +20,7 @@ SDKs and AI agents.
 5. **AI-native by design**: AI agents are first-class API clients with scoped permissions
    and spending limits, not a chatbot bolted on.
 6. **Metered from day one**: every resource emits usage events for hourly billing.
-7. **Multi-region ready**: Istanbul is region one; the data model supports more regions
+7. **Multi-region ready**: the Saudi region is region one; the data model supports more regions
    from the start.
 
 ## System overview
@@ -138,7 +138,7 @@ creating a normal server from that image with the app already installed.
 | MCP server | Exposes the platform API as tools for Claude, Cursor or any agent | 2 |
 | Agent-safe tokens | Scoped API tokens with spend caps, allowed actions and required human approval for destructive steps | 2 |
 | Console assistant | Plain-language requests turned into a plan the user confirms | 2 |
-| AI docs and support | Chat over docs in Turkish, Arabic, English; drafts first-line support replies | 1–2 |
+| AI docs and support | Chat over docs in Saudi, Arabic, English; drafts first-line support replies | 1–2 |
 | AI ops | Detects abuse (crypto-mining, spam), predicts capacity, flags failing disks | 2 |
 | AI app templates | Ollama, vLLM, LangGraph, n8n with AI nodes | 1 |
 | Inference gateway | OpenAI-compatible endpoint routing to our GPUs or partner APIs, billed per token | 3 |
@@ -162,14 +162,14 @@ the MVP so phase 2 is additive.
 ## Billing and metering
 
 Customers pay hourly, capped at the monthly plan price. Billing is built in-house
-(TRY, USD, Turkish e-invoices).
+(SAR, USD, ZATCA e-invoices).
 
 1. **Metering**: host agents emit a usage event every minute per resource.
 2. **Aggregation**: events roll up hourly into usage records (TimescaleDB hypertable).
 3. **Rating**: a price book converts usage into charges; hourly price = monthly ÷ 672,
    capped at the monthly price.
-4. **Invoicing**: monthly, TRY (e-Fatura / e-Arşiv via a licensed provider) or USD.
-5. **Payments**: iyzico or PayTR for Turkish cards, Stripe for international, prepaid credits.
+4. **Invoicing**: monthly, SAR (ZATCA Fatoora via a licensed e-invoicing provider) or USD.
+5. **Payments**: Moyasar for Saudi cards (mada), Moyasar for international cards too, prepaid credits.
 6. **Controls**: spend alerts, hard spend limits for agent tokens, promo credits,
    automatic suspension after failed payment + grace period.
 
@@ -179,8 +179,8 @@ Customers pay hourly, capped at the monthly plan price. Billing is built in-hous
 - **Access**: RBAC per team and project, mandatory 2FA for owners, short-lived tokens,
   full audit log of every API call.
 - **Secrets**: HashiCorp Vault / OpenBao; no passwords in code or images.
-- **Data protection**: disks encrypted at rest, encrypted off-site backups, Turkish
-  customer data kept in Turkey (KVKK).
+- **Data protection**: disks encrypted at rest, encrypted off-site backups, Saudi
+  customer data kept in Saudi Arabia (PDPL).
 - **Abuse prevention**: phone/ID verification, payment checks, outbound limits for new
   accounts, mining/spam detection.
 - **Platform hardening**: separate management network, admin via VPN only, pen tests.
@@ -208,7 +208,7 @@ Customers pay hourly, capped at the monthly plan price. Billing is built in-hous
 
 | Phase | Months | Scope |
 |---|---|---|
-| MVP | 1–3 | Accounts, teams, SSH keys; servers (create, resize, reboot, delete); images and snapshots; public IPs and firewalls; 15 marketplace apps; hourly billing, TRY/USD invoices, payments; API v1 and console; admin back-office; abuse checks |
+| MVP | 1–3 | Accounts, teams, SSH keys; servers (create, resize, reboot, delete); images and snapshots; public IPs and firewalls; 15 marketplace apps; hourly billing, SAR/USD invoices, payments; API v1 and console; admin back-office; abuse checks |
 | Phase 2 | 4–9 | VPCs, block volumes, automatic backups, load balancers, DNS; CLI, SDKs, Terraform provider; MCP server, agent-safe tokens, console assistant; webhooks; status page |
 | Phase 3 | 10–18 | Managed databases, object storage, managed Kubernetes; vendor marketplace with revenue share; inference gateway; GPU servers; second region |
 
@@ -218,9 +218,9 @@ Code (control plane, console, billing), founder as product owner.
 ## Open decisions before coding
 
 - Brand and domain name for the cloud (CLI name, API domain) — **`pgcloud` used as placeholder**
-- Data center and server provider in Istanbul; own IP blocks and nested networking allowed?
+- Data center and server provider in the Saudi region; own IP blocks and nested networking allowed?
 - Proxmox VE vs Apache CloudStack as first engine — **repo assumes Proxmox behind a driver interface**
 - Own IP block (RIPE membership) or leased IPs for year 1
-- e-Fatura provider and Turkish payment gateway
+- ZATCA e-invoice provider and Saudi payment gateway
 - Which 15 marketplace apps launch first
 - Whether the MCP server and console assistant move into the MVP

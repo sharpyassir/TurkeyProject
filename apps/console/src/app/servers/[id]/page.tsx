@@ -28,7 +28,7 @@ export default function ServerDetailPage() {
   const [sizes, setSizes] = useState<Size[]>([]);
   const [images, setImages] = useState<Image[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
-  const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'SAR'>('USD');
   const [spent, setSpent] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export default function ServerDetailPage() {
   }, [id, router]);
 
   const loadSide = useCallback(async () => {
-    const bal = await api<{ currency: 'USD' | 'TRY' }>('/v1/billing/balance').catch(() => ({ currency: 'USD' as const }));
+    const bal = await api<{ currency: 'USD' | 'SAR' }>('/v1/billing/balance').catch(() => ({ currency: 'USD' as const }));
     setCurrency(bal.currency);
     const [sn, fw, sz, im, pr, us, vo] = await Promise.all([
       api<{ data: Snapshot[] }>('/v1/snapshots').catch(() => ({ data: [] })),

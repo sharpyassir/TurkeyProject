@@ -26,7 +26,7 @@ export default function AdminOverview() {
         <Stat label="Teams" value={sum(o.teams)} sub={`${o.teamsNewThisWeek} new this week · ${o.teams.suspended ?? 0} suspended`} />
         <Stat label="Servers" value={sum(o.servers)} sub={`${o.servers.active ?? 0} active · ${o.servers.failed ?? 0} failed`} tone={(o.servers.failed ?? 0) > 0 ? 'warn' : undefined} />
         <Stat label="Usage this month" value={money(o.monthToDate)} sub={`payments received ${money(o.paymentsThisMonth)}`} />
-        <Stat label="Open invoices" value={o.openInvoices.count} sub={o.openInvoices.count ? `${fmtMoney(o.openInvoices.totalMinor, 'TRY')} outstanding` : 'nothing outstanding'} tone={o.openInvoices.count ? 'warn' : undefined} />
+        <Stat label="Open invoices" value={o.openInvoices.count} sub={o.openInvoices.count ? `${fmtMoney(o.openInvoices.totalMinor, 'SAR')} outstanding` : 'nothing outstanding'} tone={o.openInvoices.count ? 'warn' : undefined} />
         <Stat label="Pending approvals" value={o.pendingApprovals} sub="agent requests waiting on customers" />
         <Stat label="Open abuse flags" value={o.openAbuseFlags} tone={o.openAbuseFlags ? 'bad' : undefined} sub={o.openAbuseFlags ? 'review under Abuse' : 'all clear'} />
         <Stat label="Hosts" value={o.hosts.length} sub={`${o.hosts.filter((h) => h.status === 'active').length} active`} />

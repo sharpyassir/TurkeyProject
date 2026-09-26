@@ -50,7 +50,7 @@ export default function AdminHosts() {
         <h2 className="font-medium">Register a host</h2>
         <p className="text-sm text-neutral-500">Creates the row the host agent needs. Put the returned id in the agent config on the Proxmox node and run the Ansible playbook.</p>
         <div className="grid gap-2 sm:grid-cols-6">
-          <input className="input" name="name" placeholder="pve3" required /><input className="input" name="regionId" placeholder="ist1" defaultValue="ist1" required />
+          <input className="input" name="name" placeholder="pve3" required /><input className="input" name="regionId" placeholder="sa1" defaultValue="sa1" required />
           <select className="input" name="driver" defaultValue="proxmox"><option>proxmox</option><option>fake</option></select>
           <input className="input" name="vcpu" type="number" placeholder="vCPU" required /><input className="input" name="memoryGb" type="number" placeholder="Memory GB" required /><input className="input" name="diskGb" type="number" placeholder="Disk GB" required />
         </div>

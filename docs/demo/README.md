@@ -8,7 +8,7 @@ partner conversations.
 |---|---|
 | pgcloud-console-demo.pdf | First console walk through |
 | pgcloud-homepage.pdf, pgcloud-homepage-vertical.pdf, pgcloud-homepage-desktop.jpg, pgcloud-homepage-mobile-*.jpg | Home page, desktop and phone |
-| pgcloud-home-tr.png, pgcloud-home-ar.png, pgcloud-console-tr.png | Turkish and Arabic versions |
+| pgcloud-home-tr.png, pgcloud-home-ar.png, pgcloud-console-tr.png | Saudi and Arabic versions |
 | pgcloud-docs.png, pgcloud-docs-api.png | Docs site and generated API reference |
 | pgcloud-server-detail.png, pgcloud-server-power.png | Server detail page |
 | pgcloud-approvals.png | Approval queue for agent requests |
@@ -16,7 +16,7 @@ partner conversations.
 | pgcloud-billing.png, pgcloud-invoice.png | Billing page and an invoice PDF |
 | pgcloud-admin-ui.pdf | All back office screens |
 | pgcloud-monitoring.png | Monitoring page with alert rules and incidents |
-| pgcloud-volumes.png, pgcloud-server-volumes.png, pgcloud-volumes-tr.png | Volumes page, the server Volumes tab, Turkish version |
+| pgcloud-volumes.png, pgcloud-server-volumes.png, pgcloud-volumes-tr.png | Volumes page, the server Volumes tab, Saudi version |
 | pgcloud-load-balancers.png, pgcloud-load-balancer-detail.png | Load balancers page with the rule editor and certificates, and one load balancer with nodes and targets |
 | pgcloud-dns.png, pgcloud-dns-zone.png, pgcloud-public-ips-rdns.png | DNS zones, one zone with records and the zone file, reverse DNS on the public IPs page |
 | pgcloud-buckets.png, pgcloud-bucket-browser.png | Object storage buckets and keys, and the bucket browser |

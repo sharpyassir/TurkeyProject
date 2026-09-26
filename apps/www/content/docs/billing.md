@@ -1,6 +1,6 @@
 ---
 title: Billing and pricing
-description: Hourly billing, monthly caps, dollars or lira, and what happens when credit runs out.
+description: Hourly billing, monthly caps, dollars or riyals, and what happens when credit runs out.
 section: Guides
 order: 11
 ---
@@ -11,17 +11,17 @@ Every resource is metered by the hour it exists and capped at its monthly price.
 
 The monthly price divided by 672 gives the hourly rate. There is no minimum term.
 
-## Dollars or lira
+## Dollars or riyals
 
-Prices are set in US dollars. If your team's currency is Turkish lira, every price you see and every invoice is converted at the exchange rate stored at that hour, and the rate is shown next to the price. Dollar prices stay stable; the lira figures move with the rate.
+Prices are set in US dollars. If your team's currency is Saudi riyals, every price you see and every invoice is converted at the exchange rate stored at that hour, and the rate is shown next to the price. Dollar prices stay stable; the riyals figures move with the rate.
 
 ## Credit and invoices
 
-New accounts start with credit. Usage is drawn from credit first. On the first of each month an invoice is issued for the previous month, with an e-Fatura for Turkish companies, and the team owners get an email. The console shows month to date spend, every invoice with a PDF, and every card payment.
+New accounts start with credit. Usage is drawn from credit first. On the first of each month an invoice is issued for the previous month, with an ZATCA e-invoice for Saudi companies, and the team owners get an email. The console shows month to date spend, every invoice with a PDF, and every card payment.
 
 ## Paying
 
-**Add credit** under **Billing**: pick an amount, pay by card on the hosted page, and come back with the credit on your balance. Lira teams pay through iyzico, dollar teams through Stripe. Card details never touch our servers.
+**Add credit** under **Billing**: pick an amount, pay by card on the hosted page, and come back with the credit on your balance. Riyal teams pay through Moyasar, dollar teams through Moyasar. Card details never touch our servers.
 
 **Pay an invoice** the same way with the **Pay** button next to any open invoice, or from the terminal:
 

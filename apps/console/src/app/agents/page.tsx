@@ -17,12 +17,12 @@ const APPROVALS = ['servers:delete', 'servers:resize-down', 'servers:rebuild'];
 export default function AgentsPage() {
   const { locale } = useShell();
   const [tokens, setTokens] = useState<Token[]>([]);
-  const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'SAR'>('USD');
   const [issued, setIssued] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [tk, bal] = await Promise.all([api<{ data: Token[] }>('/v1/tokens'), api<{ currency: 'USD' | 'TRY' }>('/v1/billing/balance')]);
+    const [tk, bal] = await Promise.all([api<{ data: Token[] }>('/v1/tokens'), api<{ currency: 'USD' | 'SAR' }>('/v1/billing/balance')]);
     setTokens(tk.data.filter((x) => x.isAgent));
     setCurrency(bal.currency);
   }, []);

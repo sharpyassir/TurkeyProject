@@ -26,9 +26,9 @@ export function displayPrice(monthlyMinor: number, hoursPerMonth: number) {
   return { monthlyMinor, hourlyMinor: Math.round(monthlyMinor / hoursPerMonth) };
 }
 
-/** Turkish KDV applies to TRY invoices. */
-export function taxRateFor(currency: 'USD' | 'TRY', country: string): number {
-  return currency === 'TRY' || country === 'TR' ? 0.2 : 0;
+/** Saudi VAT (15%) applies to riyal invoices and to teams in Saudi Arabia. */
+export function taxRateFor(currency: 'USD' | 'SAR', country: string): number {
+  return currency === 'SAR' || country === 'SA' ? 0.15 : 0;
 }
 
 export function startOfHour(d: Date) {

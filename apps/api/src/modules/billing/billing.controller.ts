@@ -51,7 +51,7 @@ export class BillingController {
 }
 
 /**
- * Public price list (no auth). Prices are kept in USD; asking for TRY returns the same
+ * Public price list (no auth). Prices are kept in USD; asking for SAR returns the same
  * list converted at the current exchange rate, plus the rate used.
  */
 @ApiTags('pricing')
@@ -60,7 +60,7 @@ export class PricingController {
   constructor(private readonly prisma: PrismaService, private readonly fx: FxService) {}
 
   @Public() @Get()
-  async prices(@Query('currency') currency: 'USD' | 'TRY' = loadConfig().DEFAULT_CURRENCY) {
+  async prices(@Query('currency') currency: 'USD' | 'SAR' = loadConfig().DEFAULT_CURRENCY) {
     const prices = await this.prisma.price.findMany({ where: { currency: 'USD', validTo: null }, include: { size: true } });
     const h = loadConfig().BILLING_HOURS_PER_MONTH;
     const rate = await this.fx.rate(currency);

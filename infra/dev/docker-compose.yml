@@ -1,5 +1,5 @@
 # Local development data plane substitutes. Nothing here runs customer workloads;
-# the real data plane is Proxmox VE + Ceph on the Istanbul nodes.
+# the real data plane is Proxmox VE + Ceph on the Saudi region nodes.
 name: pgcloud-dev
 
 services:

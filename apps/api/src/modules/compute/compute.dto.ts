@@ -7,7 +7,7 @@ export class CreateServerDto {
 
   @IsString() size: string; // "s-2vcpu-4gb"
   @IsString() image: string; // "ubuntu-24-04" or marketplace "app-wordpress"
-  @IsOptional() @IsString() region?: string; // default ist1
+  @IsOptional() @IsString() region?: string; // default sa1
   @IsOptional() @IsString() project?: string; // id or slug, default "default"
   @IsOptional() @IsArray() @IsString({ each: true }) sshKeys?: string[]; // SshKey ids
   @IsOptional() @IsString() @MaxLength(65536) userData?: string;

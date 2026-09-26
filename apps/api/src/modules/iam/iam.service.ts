@@ -24,14 +24,14 @@ export class IamService {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
     if (existing) throw ApiError.conflict('email_taken', 'An account with this email already exists');
 
-    const country = dto.country ?? 'TR';
+    const country = dto.country ?? 'SA';
     const slug = await this.uniqueSlug(dto.teamName);
     const user = await this.prisma.user.create({
       data: {
         email: dto.email.toLowerCase(),
         passwordHash: await argon2.hash(dto.password),
         name: dto.name,
-        locale: dto.locale ?? (country === 'TR' ? 'tr' : 'en'),
+        locale: dto.locale ?? (country === 'SA' ? 'ar' : country === 'TR' ? 'tr' : 'en'),
         memberships: {
           create: {
             role: 'owner',
@@ -40,7 +40,7 @@ export class IamService {
                 name: dto.teamName,
                 slug,
                 country,
-                currency: country === 'TR' ? 'TRY' : 'USD',
+                currency: country === 'SA' ? 'SAR' : 'USD',
                 projects: { create: { name: 'Default', slug: 'default' } },
               },
             },

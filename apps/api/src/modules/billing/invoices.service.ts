@@ -6,7 +6,7 @@ import { MailService } from '../../common/mail/mail.service';
 import { loadConfig } from '../../config/config';
 
 /**
- * Monthly invoicing. TRY invoices for Turkish teams (e-Fatura / e-Arşiv handed off to a
+ * Monthly invoicing. SAR invoices for Saudi teams (ZATCA Fatoora e-invoicing handed off to a
  * licensed provider — integration point: `EInvoiceProvider`), USD for the rest.
  */
 @Injectable()
@@ -47,7 +47,7 @@ export class InvoicesService {
           creditMinor: credit,
           totalMinor: total,
           status: total === 0 ? 'paid' : 'open',
-          eInvoiceType: team.country === 'TR' ? (team.taxId ? 'e-fatura' : 'e-arsiv') : null,
+          eInvoiceType: team.country === 'SA' ? 'zatca' : null,
           dueAt: new Date(periodEnd.getTime() + 14 * 86_400_000),
           paidAt: total === 0 ? new Date() : null,
           records: { connect: records.map((r) => ({ id: r.id })) },
@@ -92,7 +92,7 @@ export class InvoicesService {
 
   private async notify(teamId: string, number: string, totalMinor: number, currency: string, paid: boolean) {
     const owners = await this.prisma.teamMember.findMany({ where: { teamId, role: { in: ['owner', 'billing'] } }, include: { user: { select: { email: true, name: true } } } });
-    const amount = new Intl.NumberFormat(currency === 'TRY' ? 'tr-TR' : 'en-US', { style: 'currency', currency }).format(totalMinor / 100);
+    const amount = new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(totalMinor / 100);
     const url = `${loadConfig().CONSOLE_URL}/billing`;
     await Promise.all(owners.map((m) => this.mail.send({
       to: m.user.email,

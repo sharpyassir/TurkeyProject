@@ -15,7 +15,7 @@ export default function VolumesPage() {
   const [volumes, setVolumes] = useState<Volume[]>([]);
   const [servers, setServers] = useState<Server[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
-  const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'SAR'>('USD');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,7 +27,7 @@ export default function VolumesPage() {
   }, []);
   useEffect(() => {
     load();
-    api<{ currency: 'USD' | 'TRY' }>('/v1/billing/balance').then(async (b) => { setCurrency(b.currency); setPrices((await api<{ data: Price[] }>(`/v1/pricing?currency=${b.currency}`)).data); }).catch(() => undefined);
+    api<{ currency: 'USD' | 'SAR' }>('/v1/billing/balance').then(async (b) => { setCurrency(b.currency); setPrices((await api<{ data: Price[] }>(`/v1/pricing?currency=${b.currency}`)).data); }).catch(() => undefined);
   }, [load]);
   useEffect(() => {
     if (!volumes.some((v) => !SETTLED.includes(v.status))) return;

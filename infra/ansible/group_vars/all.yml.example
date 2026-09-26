@@ -12,7 +12,7 @@ proxmox_vxlan_zone: customers
 mail_provider: postmark
 mail_from: "pgcloud <no-reply@pgcloud.example>"
 require_totp_for_owners: true
-fx_usd_try: 41
+fx_usd_sar: 3.75
 backup_keep_days: 14
 backup_s3_url: ""
 ssh_allow_from: []                  # CIDRs allowed to reach 22; empty means anywhere

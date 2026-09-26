@@ -196,7 +196,7 @@ export function Agents() {
 /* ───────────────────────── Pricing ───────────────────────── */
 
 interface Price { sku: string; monthlyMinor: number; hourlyMinor: number; size?: { vcpu: number; memoryMb: number; diskGb: number; transferTb: number } | null }
-interface PriceList { currency: 'USD' | 'TRY'; baseCurrency: 'USD'; fxRate: number; data: Price[] }
+interface PriceList { currency: 'USD' | 'SAR'; baseCurrency: 'USD'; fxRate: number; data: Price[] }
 const FALLBACK: Price[] = [
   { sku: 's-1vcpu-512mb', monthlyMinor: 400, hourlyMinor: 1, size: { vcpu: 1, memoryMb: 512, diskGb: 10, transferTb: 0.5 } },
   { sku: 's-1vcpu-1gb', monthlyMinor: 600, hourlyMinor: 1, size: { vcpu: 1, memoryMb: 1024, diskGb: 25, transferTb: 1 } },
@@ -208,7 +208,7 @@ const FALLBACK: Price[] = [
 
 export function Pricing() {
   const c = useCopy(); const lang = useLang();
-  const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'SAR'>('USD');
   const [list, setList] = useState<PriceList>({ currency: 'USD', baseCurrency: 'USD', fxRate: 1, data: FALLBACK });
   useEffect(() => {
     fetch(`${API}/v1/pricing?currency=${currency}`)
@@ -217,7 +217,7 @@ export function Pricing() {
       .catch(() => setList({ currency: 'USD', baseCurrency: 'USD', fxRate: 1, data: FALLBACK }));
   }, [currency]);
   const cur = list.currency;
-  const fmt = (m: number, digits = 2) => new Intl.NumberFormat(cur === 'TRY' ? 'tr-TR' : lang === 'ar' ? 'ar-EG' : 'en-US', { style: 'currency', currency: cur, maximumFractionDigits: digits }).format(m / 100);
+  const fmt = (m: number, digits = 2) => new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-US', { style: 'currency', currency: cur, maximumFractionDigits: digits }).format(m / 100);
   return (
     <section id="pricing" className="py-20">
       <div className="container-x">
@@ -228,7 +228,7 @@ export function Pricing() {
             <p className="lead">{c.pricing.lead}<code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm" dir="ltr">{c.pricing.leadCode}</code>.</p>
           </div>
           <div className="flex rounded-lg border border-slate-300 p-1 text-sm">
-            {(['USD', 'TRY'] as const).map((c) => <button key={c} onClick={() => setCurrency(c)} className={`rounded-md px-4 py-1.5 ${currency === c ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>{c}</button>)}
+            {(['USD', 'SAR'] as const).map((c) => <button key={c} onClick={() => setCurrency(c)} className={`rounded-md px-4 py-1.5 ${currency === c ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>{c}</button>)}
           </div>
         </div>
         <div className="mt-10 overflow-hidden rounded-2xl border border-slate-200">
@@ -251,8 +251,8 @@ export function Pricing() {
           </table>
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          {cur === 'TRY' ? c.pricing.noteTry(list.fxRate.toFixed(2)) : c.pricing.noteUsd}
-          {c.pricing.noteTail(cur === 'TRY' ? fmt(Math.round(6 * list.fxRate)) : '$0.06')}
+          {cur === 'SAR' ? c.pricing.noteTry(list.fxRate.toFixed(2)) : c.pricing.noteUsd}
+          {c.pricing.noteTail(cur === 'SAR' ? fmt(Math.round(6 * list.fxRate)) : '$0.06')}
         </p>
       </div>
     </section>

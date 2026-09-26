@@ -8,7 +8,7 @@ const FONT_BOLD = ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', '/usr
 
 const LABEL: Record<string, string> = { server: 'Servers', public_ip: 'Public IP addresses', snapshot: 'Snapshots', backup: 'Backups', volume: 'Volumes', bandwidth: 'Bandwidth', app: 'Marketplace apps' };
 
-/** Renders an invoice as a one page PDF. DejaVu Sans covers Turkish letters; Helvetica is the fallback. */
+/** Renders an invoice as a one page PDF. DejaVu Sans covers Latin letters with accents; Helvetica is the fallback. */
 export function renderInvoicePdf(inv: Invoice & { team: Team; records: UsageRecord[] }): Promise<Buffer> {
   return new Promise((resolve) => {
     const c = loadConfig();
@@ -17,7 +17,7 @@ export function renderInvoicePdf(inv: Invoice & { team: Team; records: UsageReco
     doc.on('data', (b: Buffer) => chunks.push(b));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     const regular = FONT ?? 'Helvetica', bold = FONT_BOLD ?? 'Helvetica-Bold';
-    const money = (m: number) => new Intl.NumberFormat(inv.currency === 'TRY' ? 'tr-TR' : 'en-US', { style: 'currency', currency: inv.currency }).format(m / 100);
+    const money = (m: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: inv.currency }).format(m / 100);
     const date = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '');
 
     // Header
@@ -68,15 +68,15 @@ export function renderInvoicePdf(inv: Invoice & { team: Team; records: UsageReco
     y += 8;
     const total = (label: string, v: string, strong = false) => { doc.font(strong ? bold : regular).text(label, 300, y, { width: 150 }).text(v, 450, y, { width: 95, align: 'right' }); y += 16; };
     total('Subtotal', money(inv.subtotalMinor));
-    if (inv.taxMinor) total(inv.currency === 'TRY' ? 'KDV (20%)' : 'Tax', money(inv.taxMinor));
+    if (inv.taxMinor) total(inv.currency === 'SAR' ? 'VAT (15%)' : 'Tax', money(inv.taxMinor));
     if (inv.creditMinor) total('Credit applied', `-${money(inv.creditMinor)}`);
     total('Total due', money(inv.totalMinor), true);
 
     // Footer
     doc.fontSize(8).fillColor('#555').font(regular);
-    const note = inv.currency === 'TRY'
-      ? 'Prices are set in US dollars and converted to Turkish lira at the exchange rate stored for each hour of usage. Bu belge e-Fatura veya e-Arşiv fatura olarak ayrıca iletilir.'
-      : 'Billed by the hour of usage, capped at the monthly price of each resource.';
+    const note = inv.currency === 'SAR'
+      ? 'Prices are set in US dollars and converted to Saudi riyals at the exchange rate stored for each hour of usage. This is a tax invoice under the ZATCA e-invoicing regulation; the QR code and clearance are attached by our e-invoicing provider.'
+      : 'Prices are in US dollars. No VAT is charged on this invoice.';
     doc.text(note, 50, 760, { width: 495, align: 'center' });
     doc.text(`${c.COMPANY_NAME} · ${c.PUBLIC_API_URL.replace(/^https?:\/\/(api\.)?/, '')}`, 50, 775, { width: 495, align: 'center' });
     doc.end();

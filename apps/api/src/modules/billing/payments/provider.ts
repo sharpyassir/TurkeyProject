@@ -9,7 +9,7 @@ export interface CheckoutInput {
   /** Where the provider sends the person afterwards. */
   successUrl: string;
   cancelUrl: string;
-  /** Where the provider posts server side confirmation (iyzico callback). */
+  /** Where the provider sends the person and posts confirmation (Moyasar callback). */
   callbackUrl: string;
 }
 
@@ -19,7 +19,7 @@ export interface PaymentEvent { providerRef: string; status: 'succeeded' | 'fail
 
 /** One card payment provider. Adapters do HTTP only; the service owns the database. */
 export interface PaymentProvider {
-  readonly name: 'stripe' | 'iyzico' | 'fake';
+  readonly name: 'moyasar' | 'fake';
   createCheckout(input: CheckoutInput): Promise<CheckoutResult>;
   /** Verifies a webhook or callback and turns it into normalized events. Throws on a bad signature. */
   parseEvent(rawBody: Buffer, headers: Record<string, string | undefined>, query?: Record<string, string>): Promise<PaymentEvent[]>;

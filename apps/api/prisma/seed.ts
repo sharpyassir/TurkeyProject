@@ -11,7 +11,7 @@ const PRICE_VALID_FROM = new Date(Date.UTC(2026, 0, 1));
 
 /**
  * Prices in USD cents. The ladder mirrors DigitalOcean's Basic Droplets (docs/competitors.md).
- * Lira prices are never stored: FxService converts at the current USD→TRY rate.
+ * Riyal prices are never stored: FxService converts at the current USD→SAR rate.
  */
 const SIZES = [
   { id: 's-1vcpu-512mb', vcpu: 1, memoryMb: 512, diskGb: 10, transferTb: 0.5, usd: 400 },
@@ -31,7 +31,7 @@ const DISTROS = [
 ];
 
 async function main() {
-  await prisma.region.upsert({ where: { id: 'ist1' }, update: {}, create: { id: 'ist1', name: 'Istanbul 1', country: 'TR' } });
+  await prisma.region.upsert({ where: { id: 'sa1' }, update: {}, create: { id: 'sa1', name: 'Saudi Arabia 1', country: 'SA' } });
 
   for (const [i, s] of SIZES.entries()) {
     await prisma.size.upsert({ where: { id: s.id }, update: {}, create: { id: s.id, vcpu: s.vcpu, memoryMb: s.memoryMb, diskGb: s.diskGb, transferTb: s.transferTb, sortOrder: i } });
@@ -54,8 +54,8 @@ async function main() {
   }
 
   // Starting exchange rate; the hourly job replaces it with the provider's rate.
-  if (!(await prisma.fxRate.findFirst({ where: { quote: 'TRY' } }))) {
-    await prisma.fxRate.create({ data: { base: 'USD', quote: 'TRY', rate: 41, source: 'seed' } });
+  if (!(await prisma.fxRate.findFirst({ where: { quote: 'SAR' } }))) {
+    await prisma.fxRate.create({ data: { base: 'USD', quote: 'SAR', rate: 3.75, source: 'seed' } });
   }
 
   for (const d of DISTROS) {
@@ -80,14 +80,14 @@ async function main() {
   const host = await prisma.host.upsert({
     where: { name: 'fake1' },
     update: {},
-    create: { name: 'fake1', regionId: 'ist1', driver: 'fake', driverRef: '{"node":"fake1"}', totalVcpu: 64, totalMemoryMb: 262144, totalDiskGb: 4000, overcommitCpu: 4 },
+    create: { name: 'fake1', regionId: 'sa1', driver: 'fake', driverRef: '{"node":"fake1"}', totalVcpu: 64, totalMemoryMb: 262144, totalDiskGb: 4000, overcommitCpu: 4 },
   });
   await prisma.host.update({ where: { id: host.id }, data: { driverRef: JSON.stringify({ node: 'fake1', hostId: host.id }) } });
 
-  const block = await prisma.ipBlock.upsert({ where: { cidr: '203.0.113.0/28' }, update: {}, create: { regionId: 'ist1', cidr: '203.0.113.0/28', gateway: '203.0.113.1' } });
+  const block = await prisma.ipBlock.upsert({ where: { cidr: '203.0.113.0/28' }, update: {}, create: { regionId: 'sa1', cidr: '203.0.113.0/28', gateway: '203.0.113.1' } });
   for (let i = 2; i < 15; i++) {
     const address = `203.0.113.${i}`;
-    await prisma.publicIp.upsert({ where: { address }, update: {}, create: { regionId: 'ist1', blockId: block.id, address } });
+    await prisma.publicIp.upsert({ where: { address }, update: {}, create: { regionId: 'sa1', blockId: block.id, address } });
   }
 
   // Dev user + team + token
@@ -101,11 +101,11 @@ async function main() {
         isStaff: true, // so the seeded admin token works locally
         emailVerified: new Date(),
         passwordHash: await argon2.hash('devpassword123'),
-        memberships: { create: { role: 'owner', team: { create: { name: 'Dev Team', slug: 'dev', country: 'TR', currency: 'TRY', status: 'active', kycLevel: 1, projects: { create: { name: 'Default', slug: 'default' } } } } } },
+        memberships: { create: { role: 'owner', team: { create: { name: 'Dev Team', slug: 'dev', country: 'SA', currency: 'SAR', status: 'active', kycLevel: 1, projects: { create: { name: 'Default', slug: 'default' } } } } } },
       },
     });
     const team = await prisma.team.findUniqueOrThrow({ where: { slug: 'dev' } });
-    await prisma.credit.create({ data: { teamId: team.id, kind: 'promo', currency: 'TRY', amountMinor: 410000, remainingMinor: 410000, reason: 'dev seed ($100 at 41)' } });
+    await prisma.credit.create({ data: { teamId: team.id, kind: 'promo', currency: 'SAR', amountMinor: 37500, remainingMinor: 37500, reason: 'dev seed ($100 at 3.75)' } });
     const raw = 'pgc_' + randomBytes(32).toString('base64url');
     await prisma.apiToken.create({
       data: { teamId: team.id, userId: user.id, name: 'dev', prefix: raw.slice(0, 12), hash: createHash('sha256').update(raw).digest('hex'), scopes: ['servers:read', 'servers:write', 'servers:delete', 'images:read', 'snapshots:read', 'snapshots:write', 'volumes:read', 'volumes:write', 'dns:read', 'dns:write', 'storage:read', 'storage:write', 'network:read', 'network:write', 'apps:read', 'billing:read', 'billing:write', 'iam:read', 'iam:write'] },

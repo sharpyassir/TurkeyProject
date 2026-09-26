@@ -6,27 +6,26 @@ import { EventsService } from '../../events/events.service';
 import { loadConfig } from '../../../config/config';
 import type { Actor } from '../../../common/auth/actor';
 import type { PaymentProvider } from './provider';
-import { StripeProvider } from './stripe.provider';
-import { IyzicoProvider } from './iyzico.provider';
+import { MoyasarProvider } from './moyasar.provider';
 import { FakeProvider } from './fake.provider';
 
-/** Card payments: prepaid credit top ups and paying open invoices. USD goes to Stripe, TRY to iyzico. */
+/** Card payments: prepaid credit top ups and paying open invoices, in riyals or dollars through Moyasar. */
 @Injectable()
 export class PaymentsService {
   private readonly log = new Logger(PaymentsService.name);
-  private readonly providers: Record<'stripe' | 'iyzico' | 'fake', PaymentProvider> = { stripe: new StripeProvider(), iyzico: new IyzicoProvider(), fake: new FakeProvider() };
+  private readonly providers: Record<'moyasar' | 'fake', PaymentProvider> = { moyasar: new MoyasarProvider(), fake: new FakeProvider() };
 
   constructor(private readonly prisma: PrismaService, private readonly events: EventsService) {}
 
   providerFor(currency: Currency): PaymentProvider {
     const c = loadConfig();
-    const name = currency === 'TRY' ? c.PAYMENT_PROVIDER_TRY : c.PAYMENT_PROVIDER_USD;
-    return this.providers[name];
+    void currency; // one provider serves both currencies
+    return this.providers[c.PAYMENT_PROVIDER];
   }
 
   /** Limits per currency in minor units: keeps typos and card testing out. */
   limits(currency: Currency) {
-    return currency === 'TRY' ? { min: 20_000, max: 20_000_000 } : { min: 500, max: 500_000 };
+    return currency === 'SAR' ? { min: 2_000, max: 2_000_000 } : { min: 500, max: 500_000 };
   }
 
   async topup(actor: Actor, amountMinor: number) {
@@ -52,10 +51,10 @@ export class PaymentsService {
 
   /** Provider webhook or callback: idempotent, so redelivery is harmless. */
   async handle(provider: ProviderName | 'fake', rawBody: Buffer, headers: Record<string, string | undefined>, query?: Record<string, string>) {
-    const events = await this.providers[provider as 'stripe' | 'iyzico' | 'fake'].parseEvent(rawBody, headers, query);
+    const events = await this.providers[provider as 'moyasar' | 'fake'].parseEvent(rawBody, headers, query);
     const out: { paymentId: string; status: string; successUrl?: string; cancelUrl?: string }[] = [];
     for (const ev of events) {
-      const p = await this.prisma.payment.findFirst({ where: { provider: provider === 'fake' ? 'stripe' : provider, providerRef: ev.providerRef }, include: { invoice: true } });
+      const p = await this.prisma.payment.findFirst({ where: { provider: 'moyasar', providerRef: ev.providerRef }, include: { invoice: true } });
       if (!p) { this.log.warn(`${provider} event for unknown payment ${ev.providerRef}`); continue; }
       const meta = (p.metadata ?? {}) as { successUrl?: string; cancelUrl?: string };
       if (p.status !== 'pending') { out.push({ paymentId: p.id, status: p.status, ...meta }); continue; }
@@ -90,7 +89,7 @@ export class PaymentsService {
     const successUrl = `${c.CONSOLE_URL}/billing?payment=success`;
     const cancelUrl = `${c.CONSOLE_URL}/billing?payment=cancel`;
     const payment = await this.prisma.payment.create({
-      data: { teamId: team.id, invoiceId, provider: provider.name === 'fake' ? 'stripe' : provider.name, currency: team.currency, amountMinor, metadata: { successUrl, cancelUrl, providerName: provider.name } },
+      data: { teamId: team.id, invoiceId, provider: 'moyasar', currency: team.currency, amountMinor, metadata: { successUrl, cancelUrl, providerName: provider.name } },
     });
     try {
       const r = await provider.createCheckout({ paymentId: payment.id, amountMinor, currency: team.currency, description, customer: { email: user.email, name: user.name, teamId: team.id }, successUrl, cancelUrl, callbackUrl: `${c.PUBLIC_API_URL}/v1/billing/payments/${provider.name}/callback` });

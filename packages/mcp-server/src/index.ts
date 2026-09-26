@@ -121,8 +121,8 @@ server.registerTool('get_server', {
 
 server.registerTool('list_sizes', {
   title: 'List sizes',
-  description: 'Available server sizes with vCPU, memory, disk and price. Prices are in USD unless you pass currency=TRY.',
-  inputSchema: { currency: z.enum(['USD', 'TRY']).optional() },
+  description: 'Available server sizes with vCPU, memory, disk and price. Prices are in USD unless you pass currency=SAR.',
+  inputSchema: { currency: z.enum(['USD', 'SAR']).optional() },
 }, async ({ currency }) => run(async () => {
   const p = await api<{ currency: string; fxRate: number; data: any[] }>('GET', `/v1/pricing?currency=${currency ?? 'USD'}`);
   return {

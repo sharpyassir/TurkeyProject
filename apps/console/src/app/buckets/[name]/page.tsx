@@ -6,7 +6,8 @@ import { ChangeEvent, useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useShell } from '@/components/shell';
 import { StatusBadge } from '@/components/status-badge';
-import { Bucket, fmtBytes } from '../page';
+import type { Bucket } from '../page';
+import { fmtBytes } from '@/lib/format';
 
 interface Obj { key: string; size: number; lastModified: string }
 interface Listing { prefix: string; objects: Obj[]; prefixes: string[]; nextToken?: string }

@@ -11,7 +11,7 @@ interface UsageRow { resourceType: string; resourceId: string; unit: string; qua
 interface Invoice { id: string; number: string; currency: string; totalMinor: number; status: string; periodStart: string; dueAt: string | null; paidAt: string | null; eInvoiceType: string | null }
 interface Payment { id: string; provider: string; currency: string; amountMinor: number; status: string; failureReason: string | null; createdAt: string; invoice: { number: string } | null }
 
-const PRESETS: Record<string, number[]> = { USD: [1000, 2500, 5000, 10000], TRY: [50000, 100000, 250000, 500000] };
+const PRESETS: Record<string, number[]> = { USD: [1000, 2500, 5000, 10000], SAR: [5000, 10000, 25000, 50000] };
 
 function BillingPage() {
   const { locale } = useShell();
@@ -67,10 +67,10 @@ function BillingPage() {
 
       <section className="card space-y-3">
         <h2 className="font-medium">Add credit</h2>
-        <p className="text-sm text-neutral-500">Prepaid credit is used before anything is charged to an invoice. Pay by card in {cur === 'TRY' ? 'lira through iyzico' : 'dollars through Stripe'}; you are sent to the payment page and back here.</p>
+        <p className="text-sm text-neutral-500">Prepaid credit is used before anything is charged to an invoice. Pay by card in riyals or dollars through Moyasar; mada, Visa, Mastercard and Apple Pay are accepted.</p>
         <form onSubmit={topup} className="flex flex-wrap items-center gap-2">
           {PRESETS[cur].map((m) => <button type="button" key={m} onClick={() => setAmount(m / 100)} className={`btn-ghost ${amount === m / 100 ? 'ring-2 ring-blue-500' : ''}`}>{money(m, cur, locale)}</button>)}
-          <input className="input max-w-[10rem]" type="number" min={cur === 'TRY' ? 200 : 5} step="1" placeholder={`Other (${cur})`} value={amount} onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))} />
+          <input className="input max-w-[10rem]" type="number" min={cur === 'SAR' ? 20 : 5} step="1" placeholder={`Other (${cur})`} value={amount} onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))} />
           <button className="btn-primary" disabled={busy || !amount}>{busy ? 'Redirecting…' : 'Pay by card'}</button>
         </form>
       </section>

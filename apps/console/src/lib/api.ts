@@ -59,7 +59,7 @@ export interface Firewall { id: string; name: string; rules: { id: string; direc
 export interface App { id: string; slug: string; name: string; category: string; summary: string; version: string; minSizeId: string; variables: AppVariable[]; priceMonthlyMinor: number }
 export interface AppVariable { name: string; label: string; type: string; required?: boolean; default?: string; generate?: string }
 export interface Price { resourceType: string; sku: string; monthlyMinor: number; hourlyMinor: number }
-export interface Balance { currency: 'USD' | 'TRY'; creditMinor: number; monthToDateMinor: number; status: string }
+export interface Balance { currency: 'USD' | 'SAR'; creditMinor: number; monthToDateMinor: number; status: string }
 
 export function money(minor: number, currency: string, locale = 'en') {
   return new Intl.NumberFormat(locale === 'tr' ? 'tr-TR' : locale === 'ar' ? 'ar-EG' : 'en-US', { style: 'currency', currency }).format(minor / 100);

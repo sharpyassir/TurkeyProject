@@ -1,13 +1,12 @@
 # Competitor reference
 
 Two products we benchmark against while building. DigitalOcean sets the bar for
-developer experience and pricing shape; Netlen is the local Istanbul incumbent for
-Turkish SMEs paying in TRY.
+developer experience and pricing shape; the local comparison set is the Saudi hosting and cloud market: STC Cloud, Mobily, Alibaba Cloud through SCCC, Oracle and Google regions in the Kingdom, and the domestic hosting companies serving SMEs in SAR.
 
 > DigitalOcean figures below are from memory of their public pricing (2024–2025 list
 > prices) and must be re-verified against https://www.digitalocean.com/pricing/droplets
-> before we publish a price list. Netlen figures are **to be filled in** from
-> https://www.netlen.com.tr/bulut-sunucu (not reachable from the build environment).
+> before we publish a price list. the local incumbent figures are **to be filled in** from
+> the local incumbent's public price list (to be captured; not reachable from the build environment).
 
 ## DigitalOcean — Droplets
 
@@ -16,7 +15,7 @@ Turkish SMEs paying in TRY.
 | Concept | DigitalOcean | pgcloud |
 |---|---|---|
 | Billing | Hourly, capped at the monthly price; **672 h/month** | Same (`BILLING_HOURS_PER_MONTH=672`) |
-| Basic (regular) sizes | $4 · 1 vCPU/512 MB/10 GB/500 GB · $6 · 1/1 GB/25/1 TB · $12 · 1/2 GB/50/2 TB · $18 · 2/2 GB/60/3 TB · $24 · 2/4 GB/80/4 TB · $48 · 4/8 GB/160/5 TB · $96 · 8/16 GB/320/6 TB | Same ladder, `s-<vcpu>vcpu-<ram>` ids; TRY book ≈ ×40 placeholder |
+| Basic (regular) sizes | $4 · 1 vCPU/512 MB/10 GB/500 GB · $6 · 1/1 GB/25/1 TB · $12 · 1/2 GB/50/2 TB · $18 · 2/2 GB/60/3 TB · $24 · 2/4 GB/80/4 TB · $48 · 4/8 GB/160/5 TB · $96 · 8/16 GB/320/6 TB | Same ladder, `s-<vcpu>vcpu-<ram>` ids; SAR book ≈ ×40 placeholder |
 | Premium (NVMe, newer CPU) | +~$1–2 per tier, e.g. $7/$14/$28 | Phase 2 (`Size.family = "premium"`) |
 | CPU-/Memory-optimized | from $42 (2 dedicated vCPU/4 GB) / $84 (2 vCPU/16 GB) | Phase 2 (`family = "dedicated"`) |
 | Bandwidth overage | $0.01/GB beyond the pooled allowance | Same (`bandwidth_gb` price) |
@@ -63,30 +62,30 @@ auth (we are SSH-key only), IPv6, Kubernetes, managed databases, Spaces.
 
 ### Where we aim to beat DO
 
-- Istanbul region with TRY billing, e-Fatura/e-Arşiv, KVKK residency.
+- Saudi region with SAR billing, ZATCA e-invoicing, PDPL residency.
 - Agent-safe tokens (spend caps, approval for destructive actions) and an MCP server.
-- Console + docs in Turkish and Arabic (RTL).
+- Console + docs in Saudi and Arabic (RTL).
 
-## Netlen — Bulut Sunucu (to fill in)
+## the local incumbent — Bulut Sunucu (to fill in)
 
-Capture from https://www.netlen.com.tr/bulut-sunucu:
+Capture from the local incumbent's price page:
 
-| Item | Netlen | Notes for us |
+| Item | the local incumbent | Notes for us |
 |---|---|---|
 | Plans (vCPU / RAM / disk / traffic) | | Match or undercut the entry plan |
-| Price (TRY/month, KDV included?) | | Our TRY book is a ×40 placeholder — replace |
+| Price (SAR/month, VAT included?) | | Our SAR book is USD × 3.75 at the peg |
 | Hourly billing? | | If monthly-only, hourly is our differentiator |
-| Data center | | Istanbul? which provider? |
+| Data center | | Riyadh, Jeddah or Dammam? which provider? |
 | Disk type (SSD/NVMe), Ceph? | | |
 | Snapshots / backups (price, schedule) | | |
 | Firewall, DDoS protection | | |
 | IPv4 included, extra IP price | | |
-| OS images, panels (cPanel/Plesk), one-click apps | | Plesk/cPanel licenses are common Turkish asks |
+| OS images, panels (cPanel/Plesk), one-click apps | | Plesk/cPanel licenses are common Saudi asks |
 | API / Terraform | | Likely none → our advantage |
-| Support (7/24, Turkish), SLA % | | |
-| Payment (Turkish cards, havale), e-Fatura | | |
+| Support (7/24, Saudi), SLA % | | |
+| Payment (Saudi cards, havale), ZATCA e-invoice | | |
 | Trial / promo | | |
 
-Typical Turkish-market expectations to confirm against Netlen: prices shown KDV-included
+Typical Saudi market expectations to confirm against local providers: prices shown VAT included
 (**+20 %**), monthly billing, Windows Server licenses, cPanel/Plesk add-ons, 7/24
-Turkish-language support, payment by havale/EFT as well as card.
+Saudi-language support, payment by havale/EFT as well as card.

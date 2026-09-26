@@ -35,8 +35,8 @@ export default function AdminFinance() {
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card space-y-3">
           <h2 className="font-medium">Exchange rate</h2>
-          <p className="text-sm">USD to TRY: <span className="text-2xl font-semibold">{fx?.rate.toFixed(4) ?? '…'}</span></p>
-          <p className="text-xs text-neutral-500">Prices are kept in dollars. Lira prices and invoices use the rate stored at the hour of usage. The hourly job refreshes it from the provider; set it by hand when the provider is down or the central bank rate must be used.</p>
+          <p className="text-sm">USD to SAR: <span className="text-2xl font-semibold">{fx?.rate.toFixed(4) ?? '…'}</span></p>
+          <p className="text-xs text-neutral-500">Prices are kept in dollars. Riyal prices and invoices use the rate stored at the hour of usage. The hourly job refreshes it from the provider; set it by hand when the provider is down or the central bank rate must be used.</p>
           <form className="flex gap-2" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const rate = Number(new FormData(e.currentTarget).get('rate')); run(() => api('/admin/v1/fx', { method: 'POST', body: JSON.stringify({ rate }) }), 'Rate set.'); }}>
             <input className="input max-w-[10rem]" name="rate" type="number" step="0.0001" min="0.0001" placeholder="41.2500" required />
             <button className="btn-primary">Set rate</button>
@@ -62,7 +62,7 @@ export default function AdminFinance() {
         </section>
       </div>
       <section className="card p-0">
-        <h2 className="border-b border-neutral-100 px-4 py-2 font-medium dark:border-neutral-800">Invoices <span className="ms-2 text-xs font-normal text-neutral-500">{open.length} open · {fmtMoney(open.filter((i) => i.currency === 'TRY').reduce((s, i) => s + i.totalMinor, 0), 'TRY')} + {fmtMoney(open.filter((i) => i.currency === 'USD').reduce((s, i) => s + i.totalMinor, 0), 'USD')} outstanding</span></h2>
+        <h2 className="border-b border-neutral-100 px-4 py-2 font-medium dark:border-neutral-800">Invoices <span className="ms-2 text-xs font-normal text-neutral-500">{open.length} open · {fmtMoney(open.filter((i) => i.currency === 'SAR').reduce((s, i) => s + i.totalMinor, 0), 'SAR')} + {fmtMoney(open.filter((i) => i.currency === 'USD').reduce((s, i) => s + i.totalMinor, 0), 'USD')} outstanding</span></h2>
         <table className="w-full text-sm">
           <thead className="text-xs uppercase text-neutral-500"><tr><th className="px-4 py-2 text-start">Number</th><th className="px-4 py-2 text-start">Team</th><th className="px-4 py-2 text-start">Period</th><th className="px-4 py-2 text-start">Status</th><th className="px-4 py-2 text-start">Type</th><th className="px-4 py-2 text-end">Total</th></tr></thead>
           <tbody>

@@ -57,8 +57,8 @@ volumes: { db: {}, wp: {} }`),
   },
   {
     slug: 'woocommerce', name: 'WooCommerce', category: 'ecommerce', version: '9.x', minSizeId: 's-2vcpu-4gb', ports: [80, 443],
-    summary: 'WordPress + WooCommerce, ready for a Turkish or international store.',
-    description: 'WordPress with the WooCommerce plugin preinstalled and iyzico / Stripe gateway plugins available.',
+    summary: 'WordPress + WooCommerce, ready for a Saudi or international store.',
+    description: 'WordPress with the WooCommerce plugin preinstalled and Moyasar and other gateway plugins available.',
     variables: [adminEmail, adminPassword, domain],
     cloudInit: dockerCompose('woocommerce', `services:
   db:
@@ -160,8 +160,8 @@ volumes: { db: {}, n8n: {} }`),
   },
   {
     slug: 'nextcloud', name: 'Nextcloud', category: 'collaboration', version: '30', minSizeId: 's-2vcpu-4gb', ports: [80, 443],
-    summary: 'Self-hosted files, calendar and office — data stays in Turkey.',
-    description: 'Nextcloud Hub with MariaDB and Redis. KVKK-friendly: all data lives on your server in the Istanbul region.',
+    summary: 'Self-hosted files, calendar and office — data stays in Saudi Arabia.',
+    description: 'Nextcloud Hub with MariaDB and Redis. PDPL friendly: all data lives on your server in the Saudi region.',
     variables: [adminPassword, domain],
     cloudInit: dockerCompose('nextcloud', `services:
   db:
@@ -197,8 +197,8 @@ volumes: { db: {}, mm: {} }`),
   },
   {
     slug: 'odoo', name: 'Odoo', category: 'business', version: '18', minSizeId: 's-2vcpu-4gb', ports: [80, 443, 8069],
-    summary: 'ERP, CRM, invoicing and inventory — popular with Turkish SMEs.',
-    description: 'Odoo 18 Community with PostgreSQL. Turkish localisation (l10n_tr) installable from Apps.',
+    summary: 'ERP, CRM, invoicing and inventory — popular with Saudi SMEs.',
+    description: 'Odoo 18 Community with PostgreSQL. Saudi localisation (l10n_sa) installable from Apps.',
     variables: [adminPassword],
     cloudInit: dockerCompose('odoo', `services:
   db:

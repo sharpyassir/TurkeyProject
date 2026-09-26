@@ -14,7 +14,7 @@ function CreateServerForm() {
   const [images, setImages] = useState<Image[]>([]);
   const [apps, setApps] = useState<App[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
-  const [currency, setCurrency] = useState<'USD' | 'TRY'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'SAR'>('USD');
   const [image, setImage] = useState(params.get('app') ?? 'ubuntu-24-04');
   const [size, setSize] = useState('s-2vcpu-4gb');
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +22,7 @@ function CreateServerForm() {
 
   useEffect(() => {
     (async () => {
-      const bal = await api<{ currency: 'USD' | 'TRY' }>('/v1/billing/balance').catch(() => ({ currency: 'USD' as const }));
+      const bal = await api<{ currency: 'USD' | 'SAR' }>('/v1/billing/balance').catch(() => ({ currency: 'USD' as const }));
       setCurrency(bal.currency);
       const [s, i, a, p] = await Promise.all([
         api<{ data: Size[] }>('/v1/sizes'),

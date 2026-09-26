@@ -225,14 +225,14 @@ export class AdminController {
 
   @Get('fx')
   async fx_() {
-    return { base: 'USD', quote: 'TRY', rate: await this.fx.rate('TRY'), history: await this.prisma.fxRate.findMany({ orderBy: { at: 'desc' }, take: 20 }) };
+    return { base: 'USD', quote: 'SAR', rate: await this.fx.rate('SAR'), history: await this.prisma.fxRate.findMany({ orderBy: { at: 'desc' }, take: 20 }) };
   }
 
-  /** Set the USD→TRY rate by hand (e.g. from the TCMB daily rate). */
+  /** Set the USD→SAR rate by hand (the peg is 3.75; only needed if it ever moves). */
   @Post('fx')
   async setFx(@CurrentActor() actor: Actor, @Body() body: { rate: number }) {
     if (!(body.rate > 0)) throw new Error('rate must be positive');
-    const row = await this.fx.set('TRY', body.rate, `admin:${actor.userId}`);
+    const row = await this.fx.set('SAR', body.rate, `admin:${actor.userId}`);
     await this.events.emit('admin.fx_set', { rate: body.rate }, { actor });
     return row;
   }

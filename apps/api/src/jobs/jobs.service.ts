@@ -73,7 +73,7 @@ export class JobsService {
     });
   }
 
-  @Cron('7 * * * *') // hourly: refresh the USD→TRY rate
+  @Cron('7 * * * *') // hourly: refresh the USD→SAR rate
   fxRefresh() {
     return this.locked('fx-refresh', 60_000, () => this.fx.refresh());
   }

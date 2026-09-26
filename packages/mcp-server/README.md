@@ -31,7 +31,7 @@ An MCP server that turns the pgcloud API into tools for Claude Code, Cursor, Win
 | Tool | What it does |
 |---|---|
 | `list_servers`, `get_server` | Inventory and status, including recent actions |
-| `list_sizes`, `list_images` | Catalog with prices (USD or TRY) and marketplace apps |
+| `list_sizes`, `list_images` | Catalog with prices (USD or SAR) and marketplace apps |
 | `create_server` | Creates a server and waits until it is active |
 | `server_action` | start, stop, reboot, resize, rebuild, snapshot |
 | `delete_server` | Requires `confirm: true`; usually needs a human to approve |

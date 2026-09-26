@@ -49,5 +49,5 @@ export function Stat({ label, value, sub, tone }: { label: string; value: string
   );
 }
 
-export const fmtMoney = (minor: number, currency: string) => new Intl.NumberFormat(currency === 'TRY' ? 'tr-TR' : 'en-US', { style: 'currency', currency }).format(minor / 100);
+export const fmtMoney = (minor: number, currency: string) => new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(minor / 100);
 export const fmtDate = (d: string | null | undefined) => (d ? new Date(d).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '—');

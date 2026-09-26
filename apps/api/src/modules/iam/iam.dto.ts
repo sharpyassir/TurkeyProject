@@ -6,7 +6,7 @@ export class SignupDto {
   @IsString() @MinLength(10) password: string;
   @IsString() @Length(1, 80) name: string;
   @IsString() @Length(2, 60) teamName: string;
-  @IsOptional() @IsIn(['TR', 'US', 'DE', 'GB', 'AE', 'SA', 'NL', 'FR']) country?: string;
+  @IsOptional() @IsIn(['SA', 'AE', 'KW', 'QA', 'BH', 'OM', 'EG', 'JO', 'TR', 'US', 'DE', 'GB', 'NL', 'FR']) country?: string;
   @IsOptional() @IsIn(['en', 'tr', 'ar']) locale?: string;
 }
 

@@ -15,11 +15,11 @@ const schema = z.object({
   JWT_SECRET: z.string().min(16).default('dev-only-secret-change-me'),
   SESSION_TTL_SECONDS: z.coerce.number().default(86400),
   BILLING_HOURS_PER_MONTH: z.coerce.number().default(672),
-  DEFAULT_CURRENCY: z.enum(['USD', 'TRY']).default('USD'),
-  DEFAULT_REGION: z.string().default('ist1'),
-  /** Fallback USD→TRY rate when no FxRate row exists yet. */
-  FX_USD_TRY: z.coerce.number().positive().default(41),
-  /** JSON endpoint returning { rates: { TRY: number } } for USD. */
+  DEFAULT_CURRENCY: z.enum(['USD', 'SAR']).default('USD'),
+  DEFAULT_REGION: z.string().default('sa1'),
+  /** Fallback USD→SAR rate when no FxRate row exists yet (the riyal is pegged at 3.75). */
+  FX_USD_SAR: z.coerce.number().positive().default(3.75),
+  /** JSON endpoint returning { rates: { SAR: number } } for USD. */
   PUBLIC_API_URL: z.string().url().default('http://localhost:4000'),
   /** GitHub App for Git Deploy (optional; without it customers paste a repository URL and token). */
   GITHUB_APP_ID: z.coerce.number().optional(),
@@ -27,16 +27,14 @@ const schema = z.object({
   GITHUB_APP_PRIVATE_KEY: z.string().optional(),
   GITHUB_APP_WEBHOOK_SECRET: z.string().optional(),
   /** Card payments. fake = built in test page (development and demos). */
-  PAYMENT_PROVIDER_USD: z.enum(['stripe', 'fake']).default('fake'),
-  PAYMENT_PROVIDER_TRY: z.enum(['iyzico', 'fake']).default('fake'),
-  STRIPE_SECRET_KEY: z.string().optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().optional(),
-  IYZICO_API_KEY: z.string().optional(),
-  IYZICO_SECRET_KEY: z.string().optional(),
-  IYZICO_BASE_URL: z.string().url().default('https://sandbox-api.iyzipay.com'),
+  /** Card payments for both currencies: Moyasar (mada, Visa, Mastercard, Apple Pay) or the built in test page. */
+  PAYMENT_PROVIDER: z.enum(['moyasar', 'fake']).default('fake'),
+  MOYASAR_SECRET_KEY: z.string().optional(),
+  MOYASAR_WEBHOOK_SECRET: z.string().optional(),
+  MOYASAR_BASE_URL: z.string().url().default('https://api.moyasar.com'),
   /** Seller details printed on invoices. */
   COMPANY_NAME: z.string().default('pgcloud'),
-  COMPANY_ADDRESS: z.string().default('Türkiye'),
+  COMPANY_ADDRESS: z.string().default('Saudi Arabia'),
   COMPANY_TAX_ID: z.string().optional(),
   CONSOLE_URL: z.string().url().default('http://localhost:3000'),
   MAIL_PROVIDER: z.enum(['log', 'postmark', 'resend']).default('log'),
@@ -45,9 +43,9 @@ const schema = z.object({
   /** When true, team owners must enable two factor sign in before using the console. */
   REQUIRE_TOTP_FOR_OWNERS: z.coerce.boolean().default(false),
   OBJECT_STORAGE_PROVIDER: z.enum(['fake', 'rgw']).default('fake'),
-  /** Public S3 endpoint customers use, e.g. https://s3.ist1.pgcloud.example */
+  /** Public S3 endpoint customers use, e.g. https://s3.sa1.pgcloud.example */
   S3_ENDPOINT: z.string().url().default('http://localhost:4000/_fake-s3'),
-  S3_REGION: z.string().default('ist1'),
+  S3_REGION: z.string().default('sa1'),
   RGW_ADMIN_URL: z.string().url().optional(),
   RGW_ADMIN_ACCESS_KEY: z.string().optional(),
   RGW_ADMIN_SECRET_KEY: z.string().optional(),

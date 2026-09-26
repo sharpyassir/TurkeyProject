@@ -28,7 +28,7 @@ export interface Deployment { id: string; name: string; repoUrl: string; repo: s
 export interface Size { id: string; vcpu: number; memoryMb: number; diskGb: number; transferTb: number }
 export interface Image { id: string; kind: 'distribution' | 'marketplace'; name: string; distribution?: string; version?: string }
 export interface Price { resourceType: string; sku: string; unit: string; monthlyMinor: number; hourlyMinor: number }
-export interface Balance { currency: 'USD' | 'TRY'; creditMinor: number; monthToDateMinor: number; status: string }
+export interface Balance { currency: 'USD' | 'SAR'; creditMinor: number; monthToDateMinor: number; status: string }
 export interface Firewall { id: string; name: string; rules: FirewallRule[]; servers: { serverId: string }[] }
 export interface FirewallRule { id?: string; direction: 'inbound' | 'outbound'; protocol: 'tcp' | 'udp' | 'icmp' | 'any'; ports?: string | null; cidrs: string[]; description?: string }
 export interface Snapshot { id: string; name: string; status: string; sizeGb: number; serverId: string | null; createdAt: string }
@@ -104,7 +104,7 @@ export class Pgcloud {
   }
 
   readonly account = {
-    me: () => this.request<{ user: { id: string; email: string; name: string; totpEnabled: boolean; emailVerified: boolean }; team: { id: string; slug: string; name: string; currency: 'USD' | 'TRY' }; role: string; scopes: string[]; isAgent: boolean; isStaff: boolean }>('GET', '/v1/account'),
+    me: () => this.request<{ user: { id: string; email: string; name: string; totpEnabled: boolean; emailVerified: boolean }; team: { id: string; slug: string; name: string; currency: 'USD' | 'SAR' }; role: string; scopes: string[]; isAgent: boolean; isStaff: boolean }>('GET', '/v1/account'),
     tokens: () => this.request<List<ApiToken>>('GET', '/v1/tokens'),
     createToken: (body: { name: string; scopes: string[]; isAgent?: boolean; spendCapMinor?: number; requireApprovalFor?: string[]; projectId?: string; expiresInDays?: number }) => this.request<ApiToken & { token: string }>('POST', '/v1/tokens', body),
     revokeToken: (id: string) => this.request<void>('DELETE', `/v1/tokens/${id}`),
@@ -116,7 +116,7 @@ export class Pgcloud {
     sizes: () => this.request<List<Size>>('GET', '/v1/sizes'),
     images: (kind?: 'distribution' | 'marketplace') => this.request<List<Image>>('GET', '/v1/images', undefined, { kind }),
     regions: () => this.request<List<{ id: string; name: string; country: string }>>('GET', '/v1/regions'),
-    pricing: (currency: 'USD' | 'TRY' = 'USD') => this.request<{ currency: string; baseCurrency: 'USD'; fxRate: number; hoursPerMonth: number; data: Price[] }>('GET', '/v1/pricing', undefined, { currency }),
+    pricing: (currency: 'USD' | 'SAR' = 'USD') => this.request<{ currency: string; baseCurrency: 'USD'; fxRate: number; hoursPerMonth: number; data: Price[] }>('GET', '/v1/pricing', undefined, { currency }),
   };
 
   readonly servers = {

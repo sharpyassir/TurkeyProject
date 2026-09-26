@@ -40,7 +40,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'knowledge-base', name: 'Knowledge Base', group: 'Data & Learning', phase: 3, blurb: 'RAG over your documents, served through the inference gateway.' },
 
   // Core Cloud
-  { slug: 'servers', name: 'Servers', group: 'Core Cloud', href: '/servers', blurb: 'KVM virtual machines in Türkiye, billed hourly and capped monthly.' },
+  { slug: 'servers', name: 'Servers', group: 'Core Cloud', href: '/servers', blurb: 'KVM virtual machines in Saudi Arabia, billed hourly and capped monthly.' },
   { slug: 'deploys', name: 'Git Deploy', group: 'Core Cloud', href: '/deploys', blurb: 'Link a GitHub repo; we build and run it, and redeploy on every push.' },
   { slug: 'kubernetes', name: 'Kubernetes', group: 'Core Cloud', phase: 3, blurb: 'Managed Kubernetes clusters on pgcloud servers.' },
   { slug: 'public-ips', name: 'Public IPs', group: 'Core Cloud', href: '/public-ips', blurb: 'IPv4 addresses from our own blocks. Floating IPs come in phase 2.' },
