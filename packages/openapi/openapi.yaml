@@ -38,6 +38,7 @@ tags:
   - name: dns
   - name: object-storage
   - name: databases
+  - name: kubernetes
   - name: marketplace
   - name: billing
   - name: support
@@ -586,6 +587,28 @@ paths:
   /storage-keys/{id}:
     delete: { tags: [object-storage], summary: Revoke an access key, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: Revoked } } }
 
+  /kubernetes/versions:
+    get: { tags: [kubernetes], summary: Kubernetes versions on offer, responses: { "200": { description: OK } } }
+  /kubernetes/clusters:
+    get: { tags: [kubernetes], summary: List clusters, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/KubeCluster" } } } } } } } } }
+    post:
+      tags: [kubernetes]
+      summary: Create a cluster
+      description: Returns `202` with status `creating`. One control plane node is included; `ha` gives three behind one address for a flat monthly fee. Worker pools are sized like servers (at least 2 GB of memory) and billed as servers. Bootstrapping takes about ten minutes; poll until `active`, then fetch the kubeconfig.
+      parameters: [{ $ref: "#/components/parameters/idempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, pools], properties: { name: { type: string }, version: { type: string, example: "1.31" }, region: { type: string }, project: { type: string }, ha: { type: boolean }, controlSize: { type: string }, pools: { type: array, minItems: 1, items: { $ref: "#/components/schemas/KubePoolInput" } } } } } } }
+      responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/KubeCluster" } } } }, "402": { description: Spend limit (`spend_limit_reached`) }, "429": { description: Quota (`quota_exceeded`) } }
+  /kubernetes/clusters/{id}:
+    get: { tags: [kubernetes], summary: Get a cluster with its pools, nodes and cloud resources, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/KubeCluster" } } } }, "404": { $ref: "#/components/responses/NotFound" } } }
+    patch: { tags: [kubernetes], summary: Rename a cluster, parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string } } } } } }, responses: { "200": { description: OK } } }
+    delete: { tags: [kubernetes], summary: Delete a cluster with its nodes and the load balancers and volumes it created, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted } } }
+  /kubernetes/clusters/{id}/kubeconfig:
+    get: { tags: [kubernetes], summary: Admin kubeconfig as YAML, description: Needs `kubernetes:write`. Treat it like a password., parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK, content: { application/yaml: { schema: { type: string } } } }, "409": { description: Cluster not bootstrapped yet (`invalid_state`) } } }
+  /kubernetes/clusters/{id}/pools:
+    post: { tags: [kubernetes], summary: Add a worker pool, parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/KubePoolInput" } } } }, responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/KubeCluster" } } } } } }
+  /kubernetes/clusters/{id}/pools/{poolId}:
+    patch: { tags: [kubernetes], summary: Scale a pool, description: Growing adds servers; shrinking drains and removes the highest numbered nodes first., parameters: [{ $ref: "#/components/parameters/id" }, { name: poolId, in: path, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [count], properties: { count: { type: integer, minimum: 0, maximum: 50 } } } } } }, responses: { "202": { description: Accepted } } }
+    delete: { tags: [kubernetes], summary: Remove a pool and its nodes, parameters: [{ $ref: "#/components/parameters/id" }, { name: poolId, in: path, required: true, schema: { type: string } }], responses: { "202": { description: Accepted }, "400": { description: The last pool cannot be removed } } }
   /support/plans:
     get:
       tags: [support]
@@ -1048,6 +1071,57 @@ components:
         backupsEnabled: { type: boolean }
         managed: { type: boolean }
         managedHealth: { type: [string, "null"], enum: [ok, warn, stale, pending, null] }
+        projectId: { type: string }
+        createdAt: { type: string, format: date-time }
+    KubePoolInput:
+      type: object
+      required: [name, size, count]
+      properties:
+        name: { type: string }
+        size: { type: string, description: Server size id with at least 2 GB of memory }
+        count: { type: integer, minimum: 1, maximum: 50 }
+        labels: { type: object, additionalProperties: { type: string } }
+        taints: { type: array, items: { type: object, properties: { key: { type: string }, value: { type: string }, effect: { type: string, enum: [NoSchedule, PreferNoSchedule, NoExecute] } } } }
+    KubeNode:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [control, worker] }
+        index: { type: integer }
+        poolId: { type: [string, "null"] }
+        status: { type: string, description: Server status }
+        ready: { type: boolean }
+        kubeVersion: { type: [string, "null"] }
+        ip: { type: [string, "null"] }
+        privateIp: { type: [string, "null"] }
+        lastSeenAt: { type: [string, "null"], format: date-time }
+    KubeCluster:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: string }
+        status: { type: string, enum: [creating, active, updating, failed, deleting, deleted] }
+        statusMessage: { type: [string, "null"] }
+        ha: { type: boolean }
+        region: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        controlSize: { type: object, properties: { id: { type: string }, vcpu: { type: integer }, memoryMb: { type: integer }, diskGb: { type: integer } } }
+        endpoint: { type: [string, "null"], description: "https://<address>:6443" }
+        host: { type: [string, "null"] }
+        podCidr: { type: string }
+        serviceCidr: { type: string }
+        configVersion: { type: integer }
+        pools: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string }, size: { type: object }, count: { type: integer }, labels: { type: object }, taints: { type: array, items: { type: object } }, nodes: { type: array, items: { $ref: "#/components/schemas/KubeNode" } } } } }
+        controlPlane: { type: array, items: { $ref: "#/components/schemas/KubeNode" } }
+        cloud:
+          type: object
+          description: What the cloud controller created for the cluster
+          properties:
+            loadBalancers: { type: array, items: { type: object, properties: { service: { type: string, description: "namespace/name" }, loadBalancerId: { type: string }, ip: { type: [string, "null"] } } } }
+            volumes: { type: array, items: { type: object, properties: { claim: { type: string, description: "namespace/name" }, volumeId: { type: string }, node: { type: string }, sizeGb: { type: integer }, mounted: { type: boolean } } } }
+        workers: { type: integer }
+        readyNodes: { type: integer }
         projectId: { type: string }
         createdAt: { type: string, format: date-time }
     SupportPlan:

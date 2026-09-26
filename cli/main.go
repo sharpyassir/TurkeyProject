@@ -104,6 +104,8 @@ func main() {
 		err = cmdDatabases(rest)
 	case "support":
 		err = cmdSupport(rest)
+	case "kubernetes", "k8s":
+		err = cmdKubernetes(rest)
 	case "tokens":
 		err = cmdTokens(rest)
 	case "firewalls":
@@ -135,6 +137,7 @@ LBS       load-balancers [ls | create NAME --rule http:80:80 [--rule https:443:8
           certificates [ls | add NAME --le example.com,www.example.com | add NAME --cert FILE --key FILE | delete ID]
 DATABASES databases [ls | create NAME --size S [--engine postgres] [--nodes 1|3] [--trusted CIDR,...] [--wait] | get ID | users ID [ls | add NAME | rm USER_ID] | dbs ID [ls | add NAME | rm DB_ID]
                      | trusted ID CIDR,... | backups ID [ls | now] | delete ID]
+KUBERNETES kubernetes [ls | create NAME [--size S] [--count N] [--version V] [--ha] [--wait] | get ID | kubeconfig ID | pools ID [add NAME --size S --count N | scale POOL_ID N | rm POOL_ID] | delete ID]
 STORAGE   buckets [ls | create NAME [--public] | get NAME | ls NAME [--prefix P] | upload NAME FILE [--key K] | download NAME KEY [--out FILE] | rm NAME KEY | public NAME on|off | delete NAME]
           buckets keys [ls | create NAME | revoke ID]
 DNS       domains [ls | add NAME [--ip A.B.C.D] | get NAME | zone-file NAME | delete NAME]
@@ -1956,4 +1959,155 @@ func cmdSupport(args []string) error {
 func toFloat(v any) float64 {
 	f, _ := v.(float64)
 	return f
+}
+
+// cmdKubernetes: managed Kubernetes clusters and their node pools.
+func cmdKubernetes(args []string) error {
+	if len(args) == 0 || args[0] == "ls" {
+		return cmdList("/v1/kubernetes/clusters", nil, []string{"name", "version", "status", "workers", "readyNodes", "endpoint", "id"})
+	}
+	usage := errors.New("usage: pgcloud kubernetes [ls | create NAME [--size S] [--count N] [--version V] [--ha] [--wait] | get ID | kubeconfig ID | pools ID [add NAME --size S --count N | scale POOL_ID N | rm POOL_ID] | delete ID]")
+	var c map[string]any
+	switch args[0] {
+	case "create":
+		if len(args) < 2 {
+			return usage
+		}
+		size, rest := flag(args[2:], "--size")
+		count, rest := flag(rest, "--count")
+		version, rest := flag(rest, "--version")
+		ha := hasFlag(rest, "--ha")
+		wait := hasFlag(rest, "--wait")
+		n := 2
+		if count != "" {
+			fmt.Sscanf(count, "%d", &n)
+		}
+		body := map[string]any{"name": args[1], "ha": ha, "pools": []map[string]any{{"name": "default", "size": or(size, "s-2vcpu-4gb"), "count": n}}}
+		if version != "" {
+			body["version"] = version
+		}
+		if err := call(http.MethodPost, "/v1/kubernetes/clusters", body, &c); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ cluster %s is being created (%s)\n", c["name"], c["id"])
+		if wait {
+			return waitKubernetes(c["id"].(string))
+		}
+		return nil
+	case "get":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodGet, "/v1/kubernetes/clusters/"+args[1], nil, &c); err != nil {
+			return err
+		}
+		if jsonOut {
+			return printJSON(c)
+		}
+		fmt.Fprintf(stdout, "%s  kubernetes %v  %v %v\n  endpoint %v  workers %v  ready %v  config v%v\n", c["name"], c["version"], c["status"], orEmpty(c["statusMessage"]), orEmpty(c["endpoint"]), c["workers"], c["readyNodes"], c["configVersion"])
+		for _, n := range toList(c["controlPlane"]) {
+			nn, _ := n.(map[string]any)
+			fmt.Fprintf(stdout, "  control  %-28v %-10v ready=%v %v\n", nn["name"], nn["status"], nn["ready"], orEmpty(nn["ip"]))
+		}
+		for _, p := range toList(c["pools"]) {
+			pp, _ := p.(map[string]any)
+			sz, _ := pp["size"].(map[string]any)
+			fmt.Fprintf(stdout, "  pool %v (%v) size %v count %v\n", pp["name"], pp["id"], sz["id"], pp["count"])
+			for _, n := range toList(pp["nodes"]) {
+				nn, _ := n.(map[string]any)
+				fmt.Fprintf(stdout, "    worker %-28v %-10v ready=%v %v\n", nn["name"], nn["status"], nn["ready"], orEmpty(nn["ip"]))
+			}
+		}
+		if cloud, ok := c["cloud"].(map[string]any); ok {
+			for _, l := range toList(cloud["loadBalancers"]) {
+				ll, _ := l.(map[string]any)
+				fmt.Fprintf(stdout, "  service %v -> load balancer %v %v\n", ll["service"], ll["loadBalancerId"], orEmpty(ll["ip"]))
+			}
+			for _, v := range toList(cloud["volumes"]) {
+				vv, _ := v.(map[string]any)
+				fmt.Fprintf(stdout, "  claim %v -> volume %v %vGB on %v\n", vv["claim"], vv["volumeId"], vv["sizeGb"], vv["node"])
+			}
+		}
+		return nil
+	case "kubeconfig":
+		if len(args) < 2 {
+			return usage
+		}
+		var text string
+		if err := callText(http.MethodGet, "/v1/kubernetes/clusters/"+args[1]+"/kubeconfig", &text); err != nil {
+			return err
+		}
+		fmt.Fprint(stdout, text)
+		return nil
+	case "pools":
+		if len(args) < 3 {
+			return usage
+		}
+		id := args[1]
+		switch args[2] {
+		case "add":
+			if len(args) < 4 {
+				return usage
+			}
+			size, rest := flag(args[4:], "--size")
+			count, _ := flag(rest, "--count")
+			n := 1
+			if count != "" {
+				fmt.Sscanf(count, "%d", &n)
+			}
+			if err := call(http.MethodPost, "/v1/kubernetes/clusters/"+id+"/pools", map[string]any{"name": args[3], "size": or(size, "s-2vcpu-4gb"), "count": n}, &c); err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "✓ pool %s added\n", args[3])
+		case "scale":
+			if len(args) < 5 {
+				return usage
+			}
+			var n int
+			fmt.Sscanf(args[4], "%d", &n)
+			if err := call(http.MethodPatch, "/v1/kubernetes/clusters/"+id+"/pools/"+args[3], map[string]any{"count": n}, &c); err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "✓ pool scaled to %d\n", n)
+		case "rm", "delete":
+			if len(args) < 4 {
+				return usage
+			}
+			if err := call(http.MethodDelete, "/v1/kubernetes/clusters/"+id+"/pools/"+args[3], nil, &c); err != nil {
+				return err
+			}
+			fmt.Fprintln(stdout, "✓ pool removed")
+		default:
+			return usage
+		}
+		return nil
+	case "delete", "rm":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodDelete, "/v1/kubernetes/clusters/"+args[1], nil, &c); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ cluster %s is being deleted\n", args[1])
+		return nil
+	}
+	return usage
+}
+
+func waitKubernetes(id string) error {
+	for i := 0; i < 240; i++ {
+		var c map[string]any
+		if err := call(http.MethodGet, "/v1/kubernetes/clusters/"+id, nil, &c); err != nil {
+			return err
+		}
+		switch c["status"] {
+		case "active":
+			fmt.Fprintf(stdout, "✓ cluster %v is active at %v\n", c["name"], c["endpoint"])
+			return nil
+		case "failed":
+			return fmt.Errorf("cluster failed: %v", orEmpty(c["statusMessage"]))
+		}
+		time.Sleep(10 * time.Second)
+	}
+	return errors.New("timed out waiting for the cluster")
 }

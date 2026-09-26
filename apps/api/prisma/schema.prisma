@@ -138,6 +138,7 @@ model Project {
   buckets       Bucket[]
   storageKeys   StorageKey[]
   dbClusters    DbCluster[]
+  kubeClusters  KubeCluster[]
   apiTokens ApiToken[]
   usage     UsageRecord[]
   deployments Deployment[]
@@ -234,6 +235,7 @@ model Region {
   loadBalancers LoadBalancer[]
   buckets   Bucket[]
   dbClusters DbCluster[]
+  kubeClusters KubeCluster[]
 }
 
 enum HostStatus {
@@ -296,6 +298,8 @@ model Size {
   servers   Server[]
   prices    Price[]
   dbClusters DbCluster[]
+  kubeControl  KubeCluster[]  @relation("KubeControlSize")
+  kubePools    KubeNodePool[] @relation("KubePoolSize")
 }
 
 enum ImageKind {
@@ -375,6 +379,7 @@ model Server {
 
   @@index([managedBy])
   dbNode    DbNode?
+  kubeNode  KubeNode?
 }
 
 enum ActionType {
@@ -486,6 +491,7 @@ model PublicIp {
   /// False while a reverse DNS change waits to reach the nameservers.
   reverseDnsSynced Boolean @default(true)
   dbCluster    DbCluster?
+  kubeCluster  KubeCluster?
 }
 
 enum FirewallDirection {
@@ -582,6 +588,7 @@ enum ResourceType {
   backup
   managed_server
   support
+  kubernetes
 }
 
 /// Raw per-minute usage from host agents (TimescaleDB hypertable on `at`, created in
@@ -1437,4 +1444,91 @@ model TicketMessage {
   createdAt  DateTime @default(now())
 
   @@index([ticketId, createdAt])
+}
+
+/// ---------------------------------------------------------------------------
+/// Managed Kubernetes
+/// ---------------------------------------------------------------------------
+enum KubeClusterStatus {
+  creating
+  active
+  updating
+  failed
+  deleting
+  deleted
+}
+
+model KubeCluster {
+  id            String            @id @default(cuid())
+  projectId     String
+  regionId      String
+  name          String
+  version       String
+  status        KubeClusterStatus @default(creating)
+  statusMessage String?
+  /// Three control plane nodes instead of one.
+  ha            Boolean           @default(false)
+  controlSizeId String
+  publicIpId    String?           @unique
+  firewallId    String?
+  vmSecret      String
+  joinToken     String
+  certKey       String
+  caHash        String?
+  kubeconfig    String?
+  podCidr       String            @default("10.244.0.0/16")
+  serviceCidr   String            @default("10.96.0.0/12")
+  configVersion Int               @default(1)
+  /// Cloud controller state: load balancers and volumes created for Services and PVCs.
+  cloudState    Json              @default("{}")
+  meteredSince  DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+
+  project     Project        @relation(fields: [projectId], references: [id])
+  region      Region         @relation(fields: [regionId], references: [id])
+  controlSize Size           @relation("KubeControlSize", fields: [controlSizeId], references: [id])
+  publicIp    PublicIp?      @relation(fields: [publicIpId], references: [id], onDelete: SetNull)
+  pools       KubeNodePool[]
+  nodes       KubeNode[]
+
+  @@index([projectId])
+}
+
+model KubeNodePool {
+  id        String   @id @default(cuid())
+  clusterId String
+  name      String
+  sizeId    String
+  count     Int
+  labels    Json     @default("{}")
+  taints    Json     @default("[]")
+  createdAt DateTime @default(now())
+
+  cluster KubeCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  size    Size        @relation("KubePoolSize", fields: [sizeId], references: [id])
+  nodes   KubeNode[]
+
+  @@unique([clusterId, name])
+}
+
+model KubeNode {
+  id             String    @id @default(cuid())
+  clusterId      String
+  poolId         String?
+  serverId       String    @unique
+  index          Int
+  /// control | worker
+  role           String
+  ready          Boolean   @default(false)
+  kubeVersion    String?
+  appliedVersion Int       @default(0)
+  lastSeenAt     DateTime?
+
+  cluster KubeCluster   @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  pool    KubeNodePool? @relation(fields: [poolId], references: [id], onDelete: SetNull)
+  server  Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
 }

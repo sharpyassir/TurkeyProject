@@ -1,9 +1,10 @@
 import { Logger } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import type { DbClusterStatus, LoadBalancerStatus, ServerStatus, VolumeStatus } from '@prisma/client';
+import type { DbClusterStatus, KubeClusterStatus, LoadBalancerStatus, ServerStatus, VolumeStatus } from '@prisma/client';
 import { LoadBalancersService } from '../modules/lb/lb.service';
 import { DatabasesService } from '../modules/databases/db.service';
+import { KubernetesService } from '../modules/kubernetes/k8s.service';
 import { TemporalService } from '../common/temporal/temporal.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { HYPERVISOR_DRIVER, HypervisorDriver } from '../drivers/hypervisor.driver';
@@ -57,6 +58,15 @@ export interface Activities {
   dbSetStatus(clusterId: string, status: DbClusterStatus, message?: string): Promise<void>;
   dbDeleteNodes(clusterId: string): Promise<void>;
   dbWaitNodesGone(clusterId: string): Promise<void>;
+  k8sWaitNodes(clusterId: string): Promise<void>;
+  k8sPushConfig(clusterId: string): Promise<{ applied: number; nodes: number }>;
+  k8sWaitBootstrap(clusterId: string): Promise<void>;
+  k8sSetStatus(clusterId: string, status: KubeClusterStatus, message?: string): Promise<void>;
+  k8sDeleteCloud(clusterId: string): Promise<void>;
+  k8sDeleteNodes(clusterId: string): Promise<void>;
+  k8sWaitNodesGone(clusterId: string): Promise<void>;
+  k8sFinalizeDelete(clusterId: string): Promise<void>;
+  emitK8s(name: string, clusterId: string, payload: Record<string, unknown>): Promise<void>;
   dbFinalizeDelete(clusterId: string): Promise<void>;
   emitDb(name: string, clusterId: string, payload: Record<string, unknown>): Promise<void>;
   completeAction(actionId: string): Promise<void>;
@@ -74,6 +84,7 @@ export function createActivities(app: INestApplicationContext): Activities {
   const events = app.get(EventsService);
   const lbs = app.get(LoadBalancersService);
   const dbs = app.get(DatabasesService);
+  const k8s = app.get(KubernetesService);
   const temporal = app.get(TemporalService);
 
   /** Loads a server with everything the driver needs. Throws non-retryable if gone. */
@@ -439,6 +450,113 @@ export function createActivities(app: INestApplicationContext): Activities {
       if (c.firewallId) await prisma.firewall.delete({ where: { id: c.firewallId } }).catch(() => undefined);
       // Backups stay in the platform bucket for seven days after deletion (pgBackRest retention), then expire.
       await prisma.dbCluster.update({ where: { id: clusterId }, data: { status: 'deleted', deletedAt: new Date(), publicIpId: null, firewallId: null, meteredSince: null, adminPassword: '', backupSecretKey: null } });
+    },
+
+    // ---- managed kubernetes (same shape as databases) ----
+
+    async k8sWaitNodes(clusterId) {
+      const deadline = Date.now() + 20 * 60_000;
+      for (;;) {
+        Context.current().heartbeat();
+        const nodes = await prisma.kubeNode.findMany({ where: { clusterId }, include: { server: { select: { status: true, statusMessage: true, name: true } } } });
+        if (!nodes.length) throw nonRetryable('cluster has no nodes');
+        const failed = nodes.find((n) => n.server.status === 'failed');
+        if (failed) throw nonRetryable(`node ${failed.server.name} failed: ${failed.server.statusMessage ?? 'unknown error'}`);
+        if (nodes.every((n) => n.server.status === 'active')) return;
+        if (Date.now() > deadline) throw nonRetryable('nodes did not become active in 20 minutes');
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    },
+
+    async k8sPushConfig(clusterId) {
+      const heartbeat = setInterval(() => Context.current().heartbeat(), 20_000);
+      try {
+        return await wrap(k8s.pushConfig(clusterId));
+      } finally {
+        clearInterval(heartbeat);
+      }
+    },
+
+    /** Node 0 initialises the cluster on its first config; keep pushing until every node has joined. */
+    async k8sWaitBootstrap(clusterId) {
+      const deadline = Date.now() + 30 * 60_000;
+      for (;;) {
+        Context.current().heartbeat();
+        const r = await wrap(k8s.pushConfig(clusterId));
+        const c = await prisma.kubeCluster.findUnique({ where: { id: clusterId }, select: { kubeconfig: true, configVersion: true } });
+        if (r.applied === r.nodes && c?.kubeconfig) return;
+        if (Date.now() > deadline) throw nonRetryable(`only ${r.applied} of ${r.nodes} nodes joined in 30 minutes`);
+        await new Promise((res) => setTimeout(res, 15_000));
+      }
+    },
+
+    async k8sSetStatus(clusterId, status, message) {
+      const data: Record<string, unknown> = { status, statusMessage: message ?? null };
+      if (status === 'active') data.meteredSince = (await prisma.kubeCluster.findUnique({ where: { id: clusterId }, select: { meteredSince: true } }))?.meteredSince ?? new Date();
+      await prisma.kubeCluster.update({ where: { id: clusterId }, data }).catch(() => undefined);
+    },
+
+    /** Load balancers and volumes the cloud controller made go with the cluster. */
+    async k8sDeleteCloud(clusterId) {
+      const c = await prisma.kubeCluster.findUnique({ where: { id: clusterId } });
+      if (!c) return;
+      const state = (c.cloudState ?? {}) as { services?: Record<string, { lbId: string }>; volumes?: Record<string, { volumeId: string }> };
+      for (const s of Object.values(state.services ?? {})) {
+        const lb = await prisma.loadBalancer.findUnique({ where: { id: s.lbId } });
+        if (lb && !['deleting', 'deleted'].includes(lb.status)) {
+          await prisma.loadBalancer.update({ where: { id: s.lbId }, data: { status: 'deleting' } });
+          await temporal.start('deleteLoadBalancer', [{ lbId: s.lbId }], `deleteLoadBalancer-${s.lbId}`);
+        }
+      }
+      for (const v of Object.values(state.volumes ?? {})) {
+        const vol = await prisma.volume.findUnique({ where: { id: v.volumeId } });
+        if (vol && !['deleting', 'deleted'].includes(vol.status)) {
+          // Node servers are deleted next, which detaches; the volume itself is removed after that.
+          await prisma.volume.update({ where: { id: v.volumeId }, data: { statusMessage: 'cluster deleted' } });
+        }
+      }
+    },
+
+    async k8sDeleteNodes(clusterId) {
+      const nodes = await prisma.kubeNode.findMany({ where: { clusterId }, include: { server: true } });
+      for (const n of nodes) {
+        if (['deleted', 'deleting'].includes(n.server.status)) continue;
+        const action = await prisma.serverAction.create({ data: { serverId: n.serverId, type: 'delete', requestedBy: 'system:k8s' } });
+        await prisma.server.update({ where: { id: n.serverId }, data: { status: 'deleting' } });
+        await temporal.start('deleteServer', [{ serverId: n.serverId, actionId: action.id }], `deleteServer-${action.id}`);
+      }
+    },
+
+    async k8sWaitNodesGone(clusterId) {
+      const deadline = Date.now() + 15 * 60_000;
+      for (;;) {
+        Context.current().heartbeat();
+        const nodes = await prisma.kubeNode.findMany({ where: { clusterId }, include: { server: { select: { status: true } } } });
+        if (nodes.every((n) => n.server.status === 'deleted')) return;
+        if (Date.now() > deadline) throw nonRetryable('nodes did not delete in 15 minutes');
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    },
+
+    async k8sFinalizeDelete(clusterId) {
+      const c = await prisma.kubeCluster.findUnique({ where: { id: clusterId } });
+      if (!c) return;
+      const state = (c.cloudState ?? {}) as { volumes?: Record<string, { volumeId: string }> };
+      for (const v of Object.values(state.volumes ?? {})) {
+        const vol = await prisma.volume.findUnique({ where: { id: v.volumeId } });
+        if (vol && vol.status === 'available') {
+          await prisma.volume.update({ where: { id: v.volumeId }, data: { status: 'deleting' } });
+          await temporal.start('deleteVolume', [{ volumeId: v.volumeId }], `deleteVolume-${v.volumeId}`);
+        }
+      }
+      if (c.publicIpId) await ips.release(c.publicIpId).catch(() => undefined);
+      if (c.firewallId) await prisma.firewall.delete({ where: { id: c.firewallId } }).catch(() => undefined);
+      await prisma.kubeCluster.update({ where: { id: clusterId }, data: { status: 'deleted', deletedAt: new Date(), publicIpId: null, firewallId: null, meteredSince: null, kubeconfig: null, certKey: '', joinToken: '' } });
+    },
+
+    async emitK8s(name, clusterId, payload) {
+      const c = await prisma.kubeCluster.findUnique({ where: { id: clusterId }, include: { project: { select: { teamId: true } }, publicIp: { select: { address: true } } } });
+      await events.emit(name, { clusterId, name: c?.name, version: c?.version, status: c?.status, host: c?.publicIp?.address, ...payload }, { teamId: c?.project.teamId, resource: `kubernetes:${clusterId}` });
     },
 
     async emitDb(name, clusterId, payload) {

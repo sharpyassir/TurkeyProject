@@ -55,6 +55,7 @@ class Pgcloud:
         self.buckets = _Buckets(self)
         self.databases = _Databases(self)
         self.support = _Support(self)
+        self.kubernetes = _Kubernetes(self)
         self.storage_keys = _StorageKeys(self)
         self.certificates = _Certificates(self)
         self.billing = _Billing(self)
@@ -84,6 +85,20 @@ class Pgcloud:
                 err = {}
             raise PgcloudError(e.code, err.get("code", "http_error"), err.get("message", str(e)), err.get("details")) from None
         return json.loads(raw) if raw else None
+
+    def request_text(self, method: str, path: str) -> str:
+        """Like request, for endpoints that answer with plain text or YAML."""
+        req = urllib.request.Request(self.base + path, method=method, headers={"Authorization": f"Bearer {self.token}", "Accept": "*/*", "User-Agent": f"pgcloud-sdk-py/{__version__}"})
+        try:
+            with self._open(req, timeout=self.timeout) as res:
+                return res.read().decode()
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            try:
+                err = json.loads(raw).get("error") or {}
+            except ValueError:
+                err = {}
+            raise PgcloudError(e.code, err.get("code", "http_error"), err.get("message", str(e)), err.get("details")) from None
 
 
 class _Res:
@@ -376,6 +391,54 @@ class _StorageKeys(_Res):
 
     def revoke(self, id: str):
         return self.c.request("DELETE", f"/v1/storage-keys/{id}")
+
+
+class _Kubernetes(_Res):
+    """Managed Kubernetes clusters."""
+
+    def versions(self):
+        return self.c.request("GET", "/v1/kubernetes/versions")["data"]
+
+    def list(self):
+        return self.c.request("GET", "/v1/kubernetes/clusters", query={"project": self.c.project})["data"]
+
+    def get(self, id: str):
+        return self.c.request("GET", f"/v1/kubernetes/clusters/{id}")
+
+    def create(self, name: str, pools: list, version: str | None = None, ha: bool = False, **kw):
+        """pools is a list of {"name", "size", "count", "labels"?, "taints"?}. Returns the cluster with status creating."""
+        body = {"name": name, "pools": pools, "ha": ha, "project": self.c.project, **kw}
+        if version:
+            body["version"] = version
+        return self.c.request("POST", "/v1/kubernetes/clusters", body)
+
+    def delete(self, id: str):
+        return self.c.request("DELETE", f"/v1/kubernetes/clusters/{id}")
+
+    def kubeconfig(self, id: str) -> str:
+        """The admin kubeconfig as YAML text."""
+        return self.c.request_text("GET", f"/v1/kubernetes/clusters/{id}/kubeconfig")
+
+    def add_pool(self, id: str, name: str, size: str, count: int, **kw):
+        return self.c.request("POST", f"/v1/kubernetes/clusters/{id}/pools", {"name": name, "size": size, "count": count, **kw})
+
+    def scale_pool(self, id: str, pool_id: str, count: int):
+        return self.c.request("PATCH", f"/v1/kubernetes/clusters/{id}/pools/{pool_id}", {"count": count})
+
+    def remove_pool(self, id: str, pool_id: str):
+        return self.c.request("DELETE", f"/v1/kubernetes/clusters/{id}/pools/{pool_id}")
+
+    def wait_until_active(self, id: str, timeout: float = 1800.0, interval: float = 10.0):
+        until = time.time() + timeout
+        while True:
+            c = self.get(id)
+            if c["status"] == "active":
+                return c
+            if c["status"] == "failed":
+                raise PgcloudError(500, "kubernetes_failed", c.get("statusMessage") or "Cluster provisioning failed")
+            if time.time() > until:
+                raise PgcloudError(504, "timeout", f"Cluster {id} is still {c['status']}")
+            time.sleep(interval)
 
 
 class _Support(_Res):

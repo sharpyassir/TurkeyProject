@@ -42,7 +42,7 @@ export const PRODUCTS: Product[] = [
   // Core Cloud
   { slug: 'servers', name: 'Servers', group: 'Core Cloud', href: '/servers', blurb: 'KVM virtual machines in Saudi Arabia, billed hourly and capped monthly.' },
   { slug: 'deploys', name: 'Git Deploy', group: 'Core Cloud', href: '/deploys', blurb: 'Link a GitHub repo; we build and run it, and redeploy on every push.' },
-  { slug: 'kubernetes', name: 'Kubernetes', group: 'Core Cloud', phase: 3, blurb: 'Managed Kubernetes clusters on pgcloud servers.' },
+  { slug: 'kubernetes', name: 'Kubernetes', group: 'Core Cloud', href: '/kubernetes', blurb: 'Clusters we bootstrap and keep healthy: node pools as servers, load balancers and volumes from Services and claims.' },
   { slug: 'public-ips', name: 'Public IPs', group: 'Core Cloud', href: '/public-ips', blurb: 'IPv4 addresses from our own blocks. Floating IPs come in phase 2.' },
   { slug: 'vpc', name: 'VPC', group: 'Core Cloud', phase: 2, blurb: 'Isolated private networks per project (VXLAN / EVPN).' },
   { slug: 'load-balancers', name: 'Load Balancers', group: 'Core Cloud', href: '/load-balancers', blurb: 'Managed HAProxy with a public IP, health checks, sticky sessions and free TLS.' },

@@ -333,3 +333,49 @@ function describe(err: unknown): string {
   }
   return err instanceof Error ? err.message : String(err);
 }
+
+// ---- managed kubernetes ----
+
+export async function createKubernetes(input: { clusterId: string }): Promise<void> {
+  const { clusterId } = input;
+  try {
+    await slow.k8sWaitNodes(clusterId);
+    await slow.k8sWaitBootstrap(clusterId);
+    await act.k8sSetStatus(clusterId, 'active');
+    await act.emitK8s('kubernetes.created', clusterId, {});
+  } catch (err) {
+    const message = describe(err);
+    await act.k8sSetStatus(clusterId, 'failed', `create failed: ${message}`);
+    await act.emitK8s('kubernetes.failed', clusterId, { message });
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function updateKubernetes(input: { clusterId: string }): Promise<void> {
+  const { clusterId } = input;
+  try {
+    await slow.k8sWaitNodes(clusterId);
+    const r = await slow.k8sPushConfig(clusterId);
+    if (r.applied === r.nodes) await act.k8sSetStatus(clusterId, 'active');
+    await act.emitK8s('kubernetes.updated', clusterId, { applied: r.applied, nodes: r.nodes });
+  } catch (err) {
+    const message = describe(err);
+    await act.k8sSetStatus(clusterId, 'active', `update failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function deleteKubernetes(input: { clusterId: string }): Promise<void> {
+  const { clusterId } = input;
+  try {
+    await act.k8sDeleteCloud(clusterId);
+    await act.k8sDeleteNodes(clusterId);
+    await slow.k8sWaitNodesGone(clusterId);
+    await act.k8sFinalizeDelete(clusterId);
+    await act.emitK8s('kubernetes.deleted', clusterId, {});
+  } catch (err) {
+    const message = describe(err);
+    await act.k8sSetStatus(clusterId, 'failed', `delete failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}

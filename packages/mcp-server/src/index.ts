@@ -51,6 +51,18 @@ class ApiError extends Error {
   }
 }
 
+/** Like api, for endpoints that answer with text (the kubeconfig). */
+async function apiText(method: string, path: string): Promise<string> {
+  const res = await fetch(cfg.apiUrl + path, { method, headers: { authorization: `Bearer ${cfg.token}`, accept: '*/*', 'user-agent': `pgcloud-mcp/${VERSION}` } });
+  const text = await res.text();
+  if (!res.ok) {
+    let e: { code?: string; message?: string; details?: unknown } = { code: 'http_error', message: res.statusText };
+    try { e = JSON.parse(text)?.error ?? e; } catch { /* plain text error */ }
+    throw new ApiError(res.status, e.code ?? 'http_error', e.message ?? res.statusText, e.details);
+  }
+  return text;
+}
+
 async function api<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(cfg.apiUrl + path, {
     method,
@@ -397,6 +409,33 @@ server.registerTool('support_ticket', {
     case 'get': return api('GET', `/v1/support/tickets/${id}`);
     case 'reply': return api('POST', `/v1/support/tickets/${id}/messages`, { body });
     case 'close': return api('POST', `/v1/support/tickets/${id}/close`, {});
+  }
+}));
+
+server.registerTool('list_kubernetes', {
+  title: 'List Kubernetes clusters',
+  description: 'Managed Kubernetes clusters in the project. Pass id for one cluster with its node pools, node readiness, endpoint, and the load balancers and volumes its Services and claims created. The kubeconfig comes from kubernetes_admin.',
+  inputSchema: { id: z.string().optional(), project: z.string().optional() },
+}, async ({ id, project }) => run(() => id ? api('GET', `/v1/kubernetes/clusters/${id}`) : api('GET', `/v1/kubernetes/clusters${project ? `?project=${encodeURIComponent(project)}` : ''}`)));
+
+server.registerTool('create_kubernetes', {
+  title: 'Create a Kubernetes cluster',
+  description: 'Creates a managed Kubernetes cluster: one control plane node (included) or three (flat fee) behind one address, plus worker pools sized like servers (at least 2 GB of memory, billed as servers). Ready in about ten minutes; poll list_kubernetes with the id until status is active. Services of type LoadBalancer and PersistentVolumeClaims with the pgcloud-block class get platform resources on their own.',
+  inputSchema: { name: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/), version: z.string().optional(), ha: z.boolean().optional(), pools: z.array(z.object({ name: z.string(), size: z.string(), count: z.number().int().min(1).max(50), labels: z.record(z.string()).optional() })).min(1), project: z.string().optional() },
+}, async (input) => run(() => api('POST', '/v1/kubernetes/clusters', input)));
+
+server.registerTool('kubernetes_admin', {
+  title: 'Manage a Kubernetes cluster',
+  description: 'kubeconfig returns the admin kubeconfig (hand it to the user, do not paste it elsewhere). add_pool, scale_pool and remove_pool change worker pools; delete_cluster removes the cluster with its nodes, load balancers and volumes.',
+  inputSchema: { id: z.string(), action: z.enum(['kubeconfig', 'add_pool', 'scale_pool', 'remove_pool', 'delete_cluster']), poolId: z.string().optional(), name: z.string().optional(), size: z.string().optional(), count: z.number().int().optional() },
+}, async ({ id, action, poolId, name, size, count }) => run(async () => {
+  const base = `/v1/kubernetes/clusters/${id}`;
+  switch (action) {
+    case 'kubeconfig': return { kubeconfig: await apiText('GET', `${base}/kubeconfig`) };
+    case 'add_pool': return api('POST', `${base}/pools`, { name, size, count });
+    case 'scale_pool': return api('PATCH', `${base}/pools/${poolId}`, { count });
+    case 'remove_pool': return api('DELETE', `${base}/pools/${poolId}`);
+    case 'delete_cluster': return api('DELETE', base);
   }
 }));
 

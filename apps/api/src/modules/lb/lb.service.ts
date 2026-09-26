@@ -265,7 +265,7 @@ export class LoadBalancersService {
       }
       // Tag based targets: keep the target set in sync with the servers carrying the tag.
       if (lb.tag) {
-        const tagged = await this.prisma.server.findMany({ where: { projectId: lb.projectId, regionId: lb.regionId, deletedAt: null, managedBy: null, tags: { has: lb.tag } }, select: { id: true } });
+        const tagged = await this.prisma.server.findMany({ where: { projectId: lb.projectId, regionId: lb.regionId, deletedAt: null, OR: [{ managedBy: null }, { managedBy: { startsWith: 'k8s:' } }], tags: { has: lb.tag } }, select: { id: true } });
         const want = new Set(tagged.map((s) => s.id));
         const have = new Set(lb.targets.map((t) => t.serverId));
         const add = [...want].filter((x) => !have.has(x));
@@ -322,7 +322,7 @@ export class LoadBalancersService {
   private async effectiveTargets(lb: LbRow) {
     const explicit = lb.targets.map((t) => t.server);
     if (!lb.tag) return explicit.filter((s) => s.status !== 'deleted');
-    const tagged = await this.prisma.server.findMany({ where: { projectId: lb.projectId, regionId: lb.regionId, deletedAt: null, managedBy: null, tags: { has: lb.tag } }, select: { id: true, name: true, status: true, privateIp: true, publicIps: { select: { address: true } }, tags: true } });
+    const tagged = await this.prisma.server.findMany({ where: { projectId: lb.projectId, regionId: lb.regionId, deletedAt: null, OR: [{ managedBy: null }, { managedBy: { startsWith: 'k8s:' } }], tags: { has: lb.tag } }, select: { id: true, name: true, status: true, privateIp: true, publicIps: { select: { address: true } }, tags: true } });
     const seen = new Set(explicit.map((s) => s.id));
     return [...explicit, ...tagged.filter((s) => !seen.has(s.id))].filter((s) => s.status !== 'deleted');
   }

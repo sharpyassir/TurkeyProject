@@ -43,7 +43,8 @@ export class MeteringService {
   async tickFallback(now = new Date()) {
     const at = minuteAligned(now);
     const [servers, ips, snapshots, volumes, lbs, buckets, dbs] = await Promise.all([
-      this.prisma.server.findMany({ where: { status: { in: ['active', 'off', 'rebooting', 'resizing', 'rebuilding'] }, meteredSince: { not: null }, managedBy: null }, select: { id: true, projectId: true, hostId: true, backupsEnabled: true, managed: true } }),
+      // Kubernetes workers are customer capacity and bill as servers; control plane nodes, load balancer and database nodes are part of their product's price.
+      this.prisma.server.findMany({ where: { status: { in: ['active', 'off', 'rebooting', 'resizing', 'rebuilding'] }, meteredSince: { not: null }, OR: [{ managedBy: null }, { managedBy: { startsWith: 'k8s:' }, tags: { has: 'worker' } }] }, select: { id: true, projectId: true, hostId: true, backupsEnabled: true, managed: true } }),
       // IPs held by a load balancer (the VIP) or its nodes are part of the load balancer price.
       this.prisma.publicIp.findMany({ where: { status: { in: ['assigned', 'reserved'] }, projectId: { not: null }, loadBalancer: null, dbCluster: null, OR: [{ serverId: null }, { server: { managedBy: null } }] }, select: { id: true, projectId: true } }),
       this.prisma.snapshot.findMany({ where: { status: 'available', kind: 'manual' }, select: { id: true, projectId: true, sizeGb: true } }),
@@ -54,10 +55,12 @@ export class MeteringService {
       this.prisma.dbCluster.findMany({ where: { status: { in: ['active', 'updating'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, nodes: true } }),
     ]);
     // Support plans are team level; the charge lands on the team's oldest project.
+    const haClusters = await this.prisma.kubeCluster.findMany({ where: { ha: true, status: { in: ['active', 'updating'] }, meteredSince: { not: null } }, select: { id: true, projectId: true } });
     const planTeams = await this.prisma.team.findMany({ where: { supportPlan: { not: 'free' }, status: { not: 'suspended' } }, select: { id: true, projects: { select: { id: true }, orderBy: { createdAt: 'asc' }, take: 1 } } });
     const data: Prisma.UsageEventCreateManyInput[] = [
       ...servers.map((s) => ({ at, resourceType: 'server' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...servers.filter((s) => s.backupsEnabled).map((s) => ({ at, resourceType: 'backup' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
+      ...haClusters.map((k) => ({ at, resourceType: 'kubernetes' as const, resourceId: k.id, projectId: k.projectId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...planTeams.filter((t) => t.projects.length).map((t) => ({ at, resourceType: 'support' as const, resourceId: t.id, projectId: t.projects[0].id, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...servers.filter((s) => s.managed).map((s) => ({ at, resourceType: 'managed_server' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...ips.map((ip) => ({ at, resourceType: 'public_ip' as const, resourceId: ip.id, projectId: ip.projectId!, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),

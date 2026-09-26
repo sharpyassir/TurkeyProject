@@ -31,6 +31,34 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("pgcloud %s (%d): %s", e.Code, e.Status, e.Message)
 }
 
+// DoText performs a request whose answer is plain text or YAML, such as the kubeconfig.
+func (c *Client) DoText(ctx context.Context, method, path string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("User-Agent", "terraform-provider-pgcloud/0.1.0")
+	res, err := c.HTTP.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	if res.StatusCode >= 400 {
+		var env struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		_ = json.Unmarshal(raw, &env)
+		return "", &APIError{Status: res.StatusCode, Code: env.Error.Code, Message: env.Error.Message}
+	}
+	return string(raw), nil
+}
+
 func IsNotFound(err error) bool {
 	e, ok := err.(*APIError)
 	return ok && e.Status == 404
@@ -378,4 +406,57 @@ type Image struct {
 	ID   string `json:"id"`
 	Kind string `json:"kind"`
 	Name string `json:"name"`
+}
+
+// KubeCluster is a managed Kubernetes cluster as the API presents it.
+type KubeCluster struct {
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	Version       string  `json:"version"`
+	Status        string  `json:"status"`
+	StatusMessage *string `json:"statusMessage"`
+	HA            bool    `json:"ha"`
+	Endpoint      *string `json:"endpoint"`
+	Workers       int     `json:"workers"`
+	ReadyNodes    int     `json:"readyNodes"`
+	Region        struct {
+		ID string `json:"id"`
+	} `json:"region"`
+	Pools []struct {
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+		Size  struct {
+			ID string `json:"id"`
+		} `json:"size"`
+	} `json:"pools"`
+}
+
+// WaitKubernetes polls until the cluster is active or failed.
+func (c *Client) WaitKubernetes(ctx context.Context, id string, timeout time.Duration) (*KubeCluster, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		var k KubeCluster
+		if err := c.Do(ctx, http.MethodGet, "/v1/kubernetes/clusters/"+id, nil, &k); err != nil {
+			return nil, err
+		}
+		switch k.Status {
+		case "active":
+			return &k, nil
+		case "failed":
+			msg := "provisioning failed"
+			if k.StatusMessage != nil {
+				msg = *k.StatusMessage
+			}
+			return &k, fmt.Errorf("kubernetes cluster %s: %s", id, msg)
+		}
+		if time.Now().After(deadline) {
+			return &k, fmt.Errorf("kubernetes cluster %s is still %s", id, k.Status)
+		}
+		select {
+		case <-ctx.Done():
+			return &k, ctx.Err()
+		case <-time.After(10 * time.Second):
+		}
+	}
 }

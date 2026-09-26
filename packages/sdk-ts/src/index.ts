@@ -50,6 +50,9 @@ export interface Domain { id: string; name: string; status: string; statusMessag
 export interface Bucket { id: string; name: string; status: string; statusMessage: string | null; regionId: string; projectId: string; public: boolean; sizeBytes: number; objectCount: number; usageUpdatedAt: string | null; endpoint: string; url: string; createdAt: string }
 export interface StorageObject { key: string; size: number; lastModified: string; etag?: string }
 export interface StorageKey { id: string; name: string; accessKey: string; createdAt: string; lastUsedAt: string | null }
+export interface KubeNode { id: string; name: string; role: 'control' | 'worker'; index: number; poolId: string | null; status: string; ready: boolean; kubeVersion: string | null; ip: string | null; privateIp: string | null; lastSeenAt: string | null }
+export interface KubePool { id: string; name: string; size: { id: string; vcpu: number; memoryMb: number; diskGb: number }; count: number; labels: Record<string, string>; taints: { key: string; value?: string; effect?: string }[]; nodes: KubeNode[] }
+export interface KubeCluster { id: string; name: string; version: string; status: string; statusMessage: string | null; ha: boolean; region: { id: string; name: string }; controlSize: { id: string; vcpu: number; memoryMb: number; diskGb: number }; endpoint: string | null; host: string | null; podCidr: string; serviceCidr: string; configVersion: number; pools: KubePool[]; controlPlane: KubeNode[]; cloud: { loadBalancers: { service: string; loadBalancerId: string; ip: string | null }[]; volumes: { claim: string; volumeId: string; node: string; sizeGb: number; mounted: boolean }[] }; workers: number; readyNodes: number; projectId: string; createdAt: string }
 export interface DatabaseCluster { id: string; name: string; engine: 'postgres' | 'valkey' | 'mysql'; version: string; status: string; statusMessage: string | null; nodes: number; size: { id: string; vcpu: number; memoryMb: number; diskGb: number }; port: number; poolerPort: number | null; trustedSources: string[]; backupHourUtc: number; connection: { host: string | null; privateHost: string | null; port: number; database: string; user?: string; password?: string; uri?: string | null; privateUri?: string | null; appUri?: string | null }; users: { id: string; name: string; password?: string }[]; databases: { id: string; name: string }[]; nodeStatus: { index: number; status: string; role: string; lagBytes: number | null }[]; createdAt: string }
 export interface SshKey { id: string; name: string; fingerprint: string; createdAt: string }
 export interface ApiToken { id: string; name: string; prefix: string; scopes: string[]; isAgent: boolean; spendCapMinor: number | null; spentThisMonthMinor: number; requireApprovalFor: string[]; expiresAt: string | null; lastUsedAt: string | null; createdAt: string }
@@ -105,6 +108,17 @@ export class Pgcloud {
       throw new PgcloudError(res.status, e?.code ?? 'http_error', e?.message ?? res.statusText, e?.details as Record<string, unknown> | undefined);
     }
     return json as T;
+  }
+
+  /** Like request, for endpoints that answer with text (the kubeconfig). */
+  async requestText(method: Method, path: string): Promise<string> {
+    const res = await this.fetchImpl(new URL(this.base + path), { method, headers: { authorization: `Bearer ${this.opts.token}`, accept: '*/*', 'user-agent': this.opts.userAgent ?? 'pgcloud-sdk-ts/0.1.0' } });
+    const text = await res.text();
+    if (!res.ok) {
+      const e = (safeJson(text) as { error?: ApiErrorBody['error'] } | null)?.error;
+      throw new PgcloudError(res.status, e?.code ?? 'http_error', e?.message ?? res.statusText, e?.details as Record<string, unknown> | undefined);
+    }
+    return text;
   }
 
   readonly account = {
@@ -263,6 +277,31 @@ export class Pgcloud {
     open: (body: { subject: string; body: string; priority?: 'low' | 'normal' | 'high' | 'urgent'; resource?: string }) => this.request<Ticket>('POST', '/v1/support/tickets', body),
     reply: (id: string, body: string) => this.request<Ticket>('POST', `/v1/support/tickets/${id}/messages`, { body }),
     close: (id: string) => this.request<Ticket>('POST', `/v1/support/tickets/${id}/close`, {}),
+  };
+
+  readonly kubernetes = {
+    versions: () => this.request<List<{ version: string; default: boolean }>>('GET', '/v1/kubernetes/versions'),
+    list: () => this.request<List<KubeCluster>>('GET', '/v1/kubernetes/clusters', undefined, { project: this.opts.project }),
+    get: (id: string) => this.request<KubeCluster>('GET', `/v1/kubernetes/clusters/${id}`),
+    /** Creates a cluster; returns 202 with status `creating`. Poll `get` until `active`. */
+    create: (body: { name: string; version?: string; region?: string; project?: string; ha?: boolean; controlSize?: string; pools: { name: string; size: string; count: number; labels?: Record<string, string>; taints?: { key: string; value?: string; effect?: string }[] }[] }) => this.request<KubeCluster>('POST', '/v1/kubernetes/clusters', { project: this.opts.project, ...body }),
+    update: (id: string, body: { name?: string }) => this.request<KubeCluster>('PATCH', `/v1/kubernetes/clusters/${id}`, body),
+    delete: (id: string) => this.request<{ id: string; status: string }>('DELETE', `/v1/kubernetes/clusters/${id}`),
+    /** The admin kubeconfig as YAML text. */
+    kubeconfig: (id: string) => this.requestText('GET', `/v1/kubernetes/clusters/${id}/kubeconfig`),
+    addPool: (id: string, body: { name: string; size: string; count: number; labels?: Record<string, string>; taints?: { key: string; value?: string; effect?: string }[] }) => this.request<KubeCluster>('POST', `/v1/kubernetes/clusters/${id}/pools`, body),
+    scalePool: (id: string, poolId: string, count: number) => this.request<KubeCluster>('PATCH', `/v1/kubernetes/clusters/${id}/pools/${poolId}`, { count }),
+    removePool: (id: string, poolId: string) => this.request<KubeCluster>('DELETE', `/v1/kubernetes/clusters/${id}/pools/${poolId}`),
+    waitUntilActive: async (id: string, timeoutMs = 30 * 60_000, intervalMs = 10_000) => {
+      const until = Date.now() + timeoutMs;
+      for (;;) {
+        const c = await this.request<KubeCluster>('GET', `/v1/kubernetes/clusters/${id}`);
+        if (c.status === 'active') return c;
+        if (c.status === 'failed') throw new PgcloudError(500, 'kubernetes_failed', c.statusMessage ?? 'Cluster provisioning failed');
+        if (Date.now() > until) throw new PgcloudError(504, 'timeout', `Cluster ${id} is still ${c.status}`);
+        await new Promise((r) => setTimeout(r, intervalMs));
+      }
+    },
   };
 
   readonly databases = {
