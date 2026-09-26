@@ -303,6 +303,41 @@ server.registerTool('volume_action', {
   return api('POST', `/v1/volumes/${volumeId}/detach`, {});
 }));
 
+server.registerTool('list_load_balancers', {
+  title: 'List load balancers',
+  description: 'Load balancers in the project with their IP, forwarding rules and target health.',
+  inputSchema: { project: z.string().optional() },
+}, async ({ project }) => run(async () => (await api<{ data: unknown[] }>('GET', `/v1/load-balancers${project ? `?project=${encodeURIComponent(project)}` : ''}`)).data));
+
+server.registerTool('create_load_balancer', {
+  title: 'Create a load balancer',
+  description: 'Creates a managed HAProxy load balancer with its own public IP in front of servers. Each forwarding rule maps an entry port (http, https with a certificateId, or tcp) to a target port. Billed per node per month. Point DNS at the returned ip.',
+  inputSchema: {
+    name: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/),
+    forwardingRules: z.array(z.object({ entryProtocol: z.enum(['http', 'https', 'tcp']), entryPort: z.number().int(), targetProtocol: z.enum(['http', 'tcp']), targetPort: z.number().int(), certificateId: z.string().optional() })).min(1),
+    serverIds: z.array(z.string()).optional(), tag: z.string().optional().describe('Servers with this tag become targets automatically'),
+    nodes: z.number().int().min(1).max(3).optional(), algorithm: z.enum(['round_robin', 'least_conn']).optional(), redirectHttpToHttps: z.boolean().optional(),
+    healthCheck: z.object({ protocol: z.enum(['http', 'tcp']).optional(), port: z.number().int().optional(), path: z.string().optional() }).optional(),
+    project: z.string().optional(),
+  },
+}, async (input) => run(() => api('POST', '/v1/load-balancers', input)));
+
+server.registerTool('load_balancer_servers', {
+  title: 'Add or remove load balancer targets',
+  description: 'add attaches servers to the load balancer; remove detaches one.',
+  inputSchema: { loadBalancerId: z.string(), action: z.enum(['add', 'remove']), serverIds: z.array(z.string()).min(1) },
+}, async ({ loadBalancerId, action, serverIds }) => run(async () => {
+  if (action === 'add') return api('POST', `/v1/load-balancers/${loadBalancerId}/servers`, { serverIds });
+  for (const s of serverIds) await api('DELETE', `/v1/load-balancers/${loadBalancerId}/servers/${s}`);
+  return api('GET', `/v1/load-balancers/${loadBalancerId}`);
+}));
+
+server.registerTool('delete_load_balancer', {
+  title: 'Delete a load balancer',
+  description: 'Deletes the load balancer, its nodes and releases its IP. Target servers are untouched.',
+  inputSchema: { loadBalancerId: z.string() },
+}, async ({ loadBalancerId }) => run(() => api('DELETE', `/v1/load-balancers/${loadBalancerId}`)));
+
 /* ───────────────────────── start ───────────────────────── */
 
 const transport = new StdioServerTransport();

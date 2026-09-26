@@ -10,9 +10,12 @@ import { BillingModule } from './modules/billing/billing.module';
 import { IamModule } from './modules/iam/iam.module';
 import { MailModule } from './common/mail/mail.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
+import { TemporalModule } from './common/temporal/temporal.module';
+import { LbModule } from './modules/lb/lb.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
 
 /** Dependency graph for the worker process: no HTTP, no controllers. */
 @Module({
-  imports: [PrismaModule, NatsModule, RedisModule, MailModule, DriversModule, IamModule, EventsModule, SchedulerModule, NetworkModule, BillingModule, MonitoringModule],
+  imports: [PrismaModule, NatsModule, RedisModule, MailModule, DriversModule, IamModule, EventsModule, SchedulerModule, NetworkModule, BillingModule, MonitoringModule, TemporalModule, ApprovalsModule, LbModule],
 })
 export class WorkerModule {}

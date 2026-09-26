@@ -40,6 +40,19 @@ resource "pgcloud_volume" "data" {
   server_id = pgcloud_server.web.id
 }
 
+resource "pgcloud_load_balancer" "web" {
+  name       = "web"
+  nodes      = 2
+  server_ids = [pgcloud_server.web.id]
+
+  forwarding_rule {
+    entry_protocol  = "http"
+    entry_port      = 80
+    target_protocol = "http"
+    target_port     = 80
+  }
+}
+
 output "address" {
   value = pgcloud_server.web.ipv4_address
 }

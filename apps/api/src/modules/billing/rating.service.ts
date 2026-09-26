@@ -47,11 +47,11 @@ export class RatingService {
       const minutes = g.unit === 'minute' ? g._count._all : g._count._all; // one event per minute either way
       const quantity = g._sum.quantity ?? 0;
 
-      // Per-GB resources are priced per GB-month; scale monthly price by average GB in the hour.
+      // Per-GB and per-node resources are priced per unit-month; scale monthly price by the average quantity in the hour.
       // Percent prices (backups) are a share of the server's own plan price.
       let monthlyMinor = 0;
       if (price && price.unit === 'percent') monthlyMinor = Math.round(((await this.planPriceFor(g.resourceId, hourEnd)) * fx * price.monthlyMinor) / 100);
-      else if (price) monthlyMinor = Math.round((g.unit === 'gb_minute' ? price.monthlyMinor * (quantity / Math.max(minutes, 1)) : price.monthlyMinor) * fx);
+      else if (price) monthlyMinor = Math.round((g.unit === 'gb_minute' || g.unit === 'node_minute' ? price.monthlyMinor * (quantity / Math.max(minutes, 1)) : price.monthlyMinor) * fx);
 
       const charged = await this.prisma.usageRecord.aggregate({
         where: { resourceType: g.resourceType, resourceId: g.resourceId, hourStart: { gte: startOfMonth(hourStart), lt: hourStart } },
@@ -83,6 +83,8 @@ export class RatingService {
         return 'snapshot_gb';
       case 'volume':
         return 'volume_gb';
+      case 'load_balancer':
+        return 'lb_node';
       case 'bandwidth':
         return 'bandwidth_gb';
       case 'backup':

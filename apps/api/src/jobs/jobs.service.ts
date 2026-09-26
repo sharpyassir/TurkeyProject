@@ -11,6 +11,7 @@ import { EventsService } from '../modules/events/events.service';
 import { ApprovalsService } from '../modules/approvals/approvals.service';
 import { MetricsService } from '../modules/monitoring/metrics.service';
 import { AlertsService } from '../modules/monitoring/alerts.service';
+import { LoadBalancersService } from '../modules/lb/lb.service';
 
 /**
  * Periodic jobs. Each takes a Redis lock so only one API replica runs it.
@@ -32,7 +33,13 @@ export class JobsService {
     private readonly approvals: ApprovalsService,
     private readonly metrics: MetricsService,
     private readonly alerts: AlertsService,
+    private readonly lbs: LoadBalancersService,
   ) {}
+
+  @Cron('45 * * * * *') // every minute at :45: load balancer health and config retries
+  refreshLoadBalancers() {
+    return this.locked('lb-refresh', 50_000, () => this.lbs.refreshAll());
+  }
 
   @Cron(CronExpression.EVERY_MINUTE)
   fallbackMeter() {

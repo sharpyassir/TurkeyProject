@@ -7,6 +7,7 @@ import type { Actor } from '../../common/auth/actor';
 
 /** Public event names customers can subscribe to via webhooks. */
 export const CUSTOMER_EVENTS = [
+  'load_balancer.created', 'load_balancer.updated', 'load_balancer.deleted', 'load_balancer.target_unhealthy', 'load_balancer.target_healthy',
   'volume.created', 'volume.attached', 'volume.detached', 'volume.resized', 'volume.deleted',
   'server.created', 'server.active', 'server.failed', 'server.deleted', 'server.resized',
   'snapshot.completed', 'invoice.issued', 'invoice.paid', 'payment.failed',

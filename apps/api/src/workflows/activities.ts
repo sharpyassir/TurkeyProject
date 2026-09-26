@@ -1,7 +1,9 @@
 import { Logger } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import type { ServerStatus, VolumeStatus } from '@prisma/client';
+import type { LoadBalancerStatus, ServerStatus, VolumeStatus } from '@prisma/client';
+import { LoadBalancersService } from '../modules/lb/lb.service';
+import { TemporalService } from '../common/temporal/temporal.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { HYPERVISOR_DRIVER, HypervisorDriver } from '../drivers/hypervisor.driver';
 import { AgentJobError } from '../drivers/proxmox.driver';
@@ -42,6 +44,13 @@ export interface Activities {
   volumeDelete(volumeId: string): Promise<void>;
   setVolumeStatus(volumeId: string, status: VolumeStatus, message?: string): Promise<void>;
   emitVolume(name: string, volumeId: string, payload: Record<string, unknown>): Promise<void>;
+  lbWaitNodes(lbId: string): Promise<void>;
+  lbPushConfig(lbId: string): Promise<{ applied: number; nodes: number }>;
+  lbSetStatus(lbId: string, status: LoadBalancerStatus, message?: string): Promise<void>;
+  lbDeleteNodes(lbId: string): Promise<void>;
+  lbWaitNodesGone(lbId: string): Promise<void>;
+  lbFinalizeDelete(lbId: string): Promise<void>;
+  emitLb(name: string, lbId: string, payload: Record<string, unknown>): Promise<void>;
   completeAction(actionId: string): Promise<void>;
   failAction(actionId: string, message: string): Promise<void>;
   emit(name: string, serverId: string, payload: Record<string, unknown>): Promise<void>;
@@ -55,6 +64,8 @@ export function createActivities(app: INestApplicationContext): Activities {
   const ips = app.get(IpsService);
   const firewalls = app.get(FirewallsService);
   const events = app.get(EventsService);
+  const lbs = app.get(LoadBalancersService);
+  const temporal = app.get(TemporalService);
 
   /** Loads a server with everything the driver needs. Throws non-retryable if gone. */
   async function load(serverId: string) {
@@ -297,6 +308,67 @@ export function createActivities(app: INestApplicationContext): Activities {
     async emitVolume(name, volumeId, payload) {
       const v = await prisma.volume.findUnique({ where: { id: volumeId }, include: { project: { select: { teamId: true } } } });
       await events.emit(name, { volumeId, name: v?.name, status: v?.status, serverId: v?.serverId, sizeGb: v?.sizeGb, ...payload }, { teamId: v?.project.teamId, resource: `volume:${volumeId}` });
+    },
+
+    // ---- load balancers ----
+
+    async lbWaitNodes(lbId) {
+      // Node VMs are provisioned by their own createServer workflows; wait for all of them.
+      const deadline = Date.now() + 15 * 60_000;
+      for (;;) {
+        Context.current().heartbeat();
+        const nodes = await prisma.loadBalancerNode.findMany({ where: { loadBalancerId: lbId }, include: { server: { select: { status: true, statusMessage: true, name: true } } } });
+        if (!nodes.length) throw nonRetryable('load balancer has no nodes');
+        const failed = nodes.find((n) => n.server.status === 'failed');
+        if (failed) throw nonRetryable(`node ${failed.server.name} failed: ${failed.server.statusMessage ?? 'unknown error'}`);
+        if (nodes.every((n) => n.server.status === 'active')) return;
+        if (Date.now() > deadline) throw nonRetryable('nodes did not become active in 15 minutes');
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    },
+
+    async lbPushConfig(lbId) {
+      return wrap(lbs.pushConfig(lbId));
+    },
+
+    async lbSetStatus(lbId, status, message) {
+      const data: Record<string, unknown> = { status, statusMessage: message ?? null };
+      if (status === 'active') data.meteredSince = (await prisma.loadBalancer.findUnique({ where: { id: lbId }, select: { meteredSince: true } }))?.meteredSince ?? new Date();
+      await prisma.loadBalancer.update({ where: { id: lbId }, data }).catch(() => undefined);
+    },
+
+    async lbDeleteNodes(lbId) {
+      const nodes = await prisma.loadBalancerNode.findMany({ where: { loadBalancerId: lbId }, include: { server: true } });
+      for (const n of nodes) {
+        if (['deleted', 'deleting'].includes(n.server.status)) continue;
+        const action = await prisma.serverAction.create({ data: { serverId: n.serverId, type: 'delete', requestedBy: 'system:lb' } });
+        await prisma.server.update({ where: { id: n.serverId }, data: { status: 'deleting' } });
+        await temporal.start('deleteServer', [{ serverId: n.serverId, actionId: action.id }], `deleteServer-${action.id}`);
+      }
+    },
+
+    async lbWaitNodesGone(lbId) {
+      const deadline = Date.now() + 15 * 60_000;
+      for (;;) {
+        Context.current().heartbeat();
+        const nodes = await prisma.loadBalancerNode.findMany({ where: { loadBalancerId: lbId }, include: { server: { select: { status: true } } } });
+        if (nodes.every((n) => n.server.status === 'deleted')) return;
+        if (Date.now() > deadline) throw nonRetryable('nodes did not delete in 15 minutes');
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    },
+
+    async lbFinalizeDelete(lbId) {
+      const lb = await prisma.loadBalancer.findUnique({ where: { id: lbId } });
+      if (!lb) return;
+      if (lb.publicIpId) await ips.release(lb.publicIpId).catch(() => undefined);
+      if (lb.firewallId) await prisma.firewall.delete({ where: { id: lb.firewallId } }).catch(() => undefined);
+      await prisma.loadBalancer.update({ where: { id: lbId }, data: { status: 'deleted', deletedAt: new Date(), publicIpId: null, firewallId: null, meteredSince: null } });
+    },
+
+    async emitLb(name, lbId, payload) {
+      const lb = await prisma.loadBalancer.findUnique({ where: { id: lbId }, include: { project: { select: { teamId: true } }, publicIp: { select: { address: true } } } });
+      await events.emit(name, { loadBalancerId: lbId, name: lb?.name, status: lb?.status, ip: lb?.publicIp?.address, ...payload }, { teamId: lb?.project.teamId, resource: `load_balancer:${lbId}` });
     },
 
     async completeAction(actionId) {

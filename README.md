@@ -101,6 +101,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Scheduler: least-loaded placement, anti-affinity, capacity from heartbeats | ✅ |
 | Network: public IP pool, host-enforced firewalls | ✅ (VPCs, LBs, DNS: phase 2) |
 | Storage: snapshots | ✅ (backups: phase 2) |
+| Load balancers: managed HAProxy nodes with a shared IP (keepalived), forwarding rules, health checks, sticky sessions, Let's Encrypt and uploaded certificates, tag based targets, CLI, SDKs, Terraform | ✅ |
 | Volumes: Ceph RBD block storage 10 GB to 16 TB, hot attach and detach, live grow, per GB pricing, CLI, SDKs, Terraform | ✅ |
 | Marketplace: 15 launch apps as image + cloud-init + variables | ✅ (vendor portal: phase 3) |
 | Billing: per-minute metering, hourly rating with monthly cap, USD price book converted to TRY at a stored exchange rate (hourly refresh, admin override), invoices, credits, spend limits | ✅ (payment gateways, e-Fatura provider: integration points only) |
@@ -114,7 +115,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Payments: Stripe (USD) and iyzico (TRY) checkout, credit top up, invoice pay, invoice PDF, built in test page | ✅ |
 | Monitoring: per minute metrics from the host agent, graphs on the server page, alert rules with email and webhook, incidents | ✅ |
 | SDKs: TypeScript (types generated from OpenAPI) and Python, both with tests | ✅ |
-| Terraform provider: server, volume, firewall, SSH key resources; sizes and images data sources | ✅ (registry publishing: to do) |
+| Terraform provider: server, volume, load balancer, firewall, SSH key resources; sizes and images data sources | ✅ (registry publishing: to do) |
 | Mobile app: architecture and delivery plan ([docs/mobile-app.md](docs/mobile-app.md)) | planned after G5 |
 
 ### Local dev without Docker

@@ -42,6 +42,7 @@ async function main() {
     ['public_ip', 'public_ip', 300],
     ['snapshot_gb', 'snapshot', 6],
     ['volume_gb', 'volume', 10],
+    ['lb_node', 'load_balancer', 1200],
     ['bandwidth_gb', 'bandwidth', 1],
     // Backups: 20% of the server's monthly price (DigitalOcean weekly backup model). Stored as
     // percent in monthlyMinor with unit "percent"; RatingService applies it per server hour.

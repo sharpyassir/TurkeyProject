@@ -206,6 +206,64 @@ func (c *Client) WaitVolume(ctx context.Context, id string, timeout time.Duratio
 	}
 }
 
+type LoadBalancer struct {
+	ID                  string  `json:"id"`
+	Name                string  `json:"name"`
+	Status              string  `json:"status"`
+	StatusMessage       *string `json:"statusMessage"`
+	IP                  *string `json:"ip"`
+	RegionID            string  `json:"regionId"`
+	Algorithm           string  `json:"algorithm"`
+	Nodes               int     `json:"nodes"`
+	RedirectHTTPToHTTPS bool    `json:"redirectHttpToHttps"`
+	Tag                 *string `json:"tag"`
+	StickySessions      *struct {
+		Type string `json:"type"`
+	} `json:"stickySessions"`
+	HealthCheck struct {
+		Path string `json:"path"`
+	} `json:"healthCheck"`
+	ForwardingRules []struct {
+		EntryProtocol  string `json:"entryProtocol"`
+		EntryPort      int    `json:"entryPort"`
+		TargetProtocol string `json:"targetProtocol"`
+		TargetPort     int    `json:"targetPort"`
+		CertificateID  string `json:"certificateId"`
+	} `json:"forwardingRules"`
+	Targets []struct {
+		ServerID string `json:"serverId"`
+	} `json:"targets"`
+}
+
+// WaitLoadBalancer polls until the load balancer is active. Failed provisioning is an error.
+func (c *Client) WaitLoadBalancer(ctx context.Context, id string, timeout time.Duration) (*LoadBalancer, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		var lb LoadBalancer
+		if err := c.Do(ctx, http.MethodGet, "/v1/load-balancers/"+id, nil, &lb); err != nil {
+			return nil, err
+		}
+		switch lb.Status {
+		case "active":
+			return &lb, nil
+		case "failed":
+			msg := "provisioning failed"
+			if lb.StatusMessage != nil {
+				msg = *lb.StatusMessage
+			}
+			return &lb, fmt.Errorf("load balancer %s: %s", id, msg)
+		}
+		if time.Now().After(deadline) {
+			return &lb, fmt.Errorf("load balancer %s still %s after %s", id, lb.Status, timeout)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+
 type FirewallRule struct {
 	Direction string   `json:"direction"`
 	Protocol  string   `json:"protocol"`

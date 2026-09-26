@@ -34,6 +34,13 @@ export interface FirewallRule { id?: string; direction: 'inbound' | 'outbound'; 
 export interface Snapshot { id: string; name: string; status: string; sizeGb: number; serverId: string | null; createdAt: string }
 export type VolumeStatus = 'creating' | 'available' | 'attaching' | 'attached' | 'detaching' | 'resizing' | 'deleting' | 'failed' | 'deleted';
 export interface Volume { id: string; name: string; sizeGb: number; status: VolumeStatus; statusMessage: string | null; serverId: string | null; device: string | null; regionId: string; projectId: string; createdAt: string; server: { id: string; name: string } | null }
+export interface ForwardingRule { entryProtocol: 'http' | 'https' | 'tcp'; entryPort: number; targetProtocol: 'http' | 'tcp'; targetPort: number; certificateId?: string }
+export interface HealthCheck { protocol?: 'http' | 'tcp'; port?: number; path?: string; intervalSeconds?: number; timeoutSeconds?: number; healthyThreshold?: number; unhealthyThreshold?: number }
+export interface StickySessions { type: 'none' | 'cookie'; cookieName?: string; ttlSeconds?: number }
+export type LoadBalancerStatus = 'creating' | 'active' | 'updating' | 'failed' | 'deleting' | 'deleted';
+export interface LoadBalancer { id: string; name: string; status: LoadBalancerStatus; statusMessage: string | null; ip: string | null; regionId: string; projectId: string; algorithm: 'round_robin' | 'least_conn'; nodes: number; forwardingRules: ForwardingRule[]; healthCheck: Required<HealthCheck>; stickySessions: StickySessions | null; redirectHttpToHttps: boolean; proxyProtocol: boolean; tag: string | null; configVersion: number; nodeStatus: { index: number; status: string; appliedVersion: number; lastSeenAt: string | null }[]; targets: { serverId: string; name: string; status: string; healthy: boolean | null; lastCheckedAt: string | null }[]; createdAt: string }
+export interface CreateLoadBalancer { name: string; region?: string; project?: string; nodes?: number; algorithm?: 'round_robin' | 'least_conn'; forwardingRules: ForwardingRule[]; healthCheck?: HealthCheck; stickySessions?: StickySessions; redirectHttpToHttps?: boolean; proxyProtocol?: boolean; serverIds?: string[]; tag?: string }
+export interface Certificate { id: string; name: string; type: 'custom' | 'letsencrypt'; domains: string[]; notAfter: string | null; createdAt: string }
 export interface SshKey { id: string; name: string; fingerprint: string; createdAt: string }
 export interface ApiToken { id: string; name: string; prefix: string; scopes: string[]; isAgent: boolean; spendCapMinor: number | null; spentThisMonthMinor: number; requireApprovalFor: string[]; expiresAt: string | null; lastUsedAt: string | null; createdAt: string }
 export interface MetricPoint { at: string; cpu: number; cpuMax?: number; memoryUsedMb: number; memoryTotalMb: number; netInBps: number; netOutBps: number; diskReadBps: number; diskWriteBps: number; diskUsedPercent?: number | null }
@@ -170,6 +177,31 @@ export class Pgcloud {
         await sleep(2000);
       }
     },
+  };
+
+  readonly loadBalancers = {
+    list: () => this.request<List<LoadBalancer>>('GET', '/v1/load-balancers', undefined, { project: this.opts.project }),
+    get: (id: string) => this.request<LoadBalancer>('GET', `/v1/load-balancers/${id}`),
+    create: (body: CreateLoadBalancer) => this.request<LoadBalancer>('POST', '/v1/load-balancers', { project: this.opts.project, ...body }),
+    update: (id: string, body: Partial<Omit<CreateLoadBalancer, 'region' | 'project' | 'nodes' | 'serverIds'>>) => this.request<LoadBalancer>('PATCH', `/v1/load-balancers/${id}`, body),
+    addServers: (id: string, serverIds: string[]) => this.request<LoadBalancer>('POST', `/v1/load-balancers/${id}/servers`, { serverIds }),
+    removeServer: (id: string, serverId: string) => this.request<LoadBalancer>('DELETE', `/v1/load-balancers/${id}/servers/${serverId}`),
+    delete: (id: string) => this.request<void>('DELETE', `/v1/load-balancers/${id}`),
+    /** Polls until the load balancer is active or failed, or the timeout passes. */
+    waitUntilActive: async (id: string, timeoutMs = 900_000) => {
+      const until = Date.now() + timeoutMs;
+      for (;;) {
+        const lb = await this.loadBalancers.get(id);
+        if (['active', 'failed'].includes(lb.status) || Date.now() > until) return lb;
+        await sleep(3000);
+      }
+    },
+  };
+
+  readonly certificates = {
+    list: () => this.request<List<Certificate>>('GET', '/v1/certificates', undefined, { project: this.opts.project }),
+    create: (body: { name: string; type: 'custom' | 'letsencrypt'; certPem?: string; keyPem?: string; domains?: string[]; project?: string }) => this.request<Certificate>('POST', '/v1/certificates', { project: this.opts.project, ...body }),
+    delete: (id: string) => this.request<{ id: string; deleted: boolean }>('DELETE', `/v1/certificates/${id}`),
   };
 
   readonly billing = {

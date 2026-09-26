@@ -129,6 +129,8 @@ model Project {
   firewalls Firewall[]
   snapshots Snapshot[]
   volumes   Volume[]
+  loadBalancers LoadBalancer[]
+  certificates  Certificate[]
   apiTokens ApiToken[]
   usage     UsageRecord[]
   deployments Deployment[]
@@ -222,6 +224,7 @@ model Region {
   ipBlocks  IpBlock[]
   images    Image[]
   volumes   Volume[]
+  loadBalancers LoadBalancer[]
 }
 
 enum HostStatus {
@@ -330,6 +333,8 @@ model Server {
   sshKeyIds String[]     @default([])
   tags      String[]     @default([])
   backupsEnabled Boolean @default(false)
+  /// Set for platform owned VMs ("lb:<id>"): hidden from the server list, not deletable directly.
+  managedBy String?
   meteredSince   DateTime? // billing starts here, never before VM is running
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -349,6 +354,10 @@ model Server {
   @@index([projectId, status])
   @@index([hostId])
   volumes Volume[]
+  lbNode    LoadBalancerNode?
+  lbTargets LoadBalancerTarget[]
+
+  @@index([managedBy])
 }
 
 enum ActionType {
@@ -447,6 +456,7 @@ model PublicIp {
   server  Server?  @relation(fields: [serverId], references: [id], onDelete: SetNull)
 
   @@index([status, regionId])
+  loadBalancer LoadBalancer?
 }
 
 enum FirewallDirection {
@@ -536,6 +546,7 @@ enum ResourceType {
   public_ip
   bandwidth
   volume
+  load_balancer
   app
   backup
 }
@@ -998,4 +1009,110 @@ model Volume {
 
   @@index([projectId])
   @@index([serverId])
+}
+
+// ───────────────────────── Load balancers ─────────────────────────
+
+enum LoadBalancerStatus {
+  creating
+  active
+  updating
+  failed
+  deleting
+  deleted
+}
+
+enum LbAlgorithm {
+  round_robin
+  least_conn
+}
+
+enum CertificateType {
+  custom
+  letsencrypt
+}
+
+/// TLS certificate for HTTPS forwarding rules: uploaded PEM, or domains that the
+/// load balancer nodes get issued by Let's Encrypt.
+model Certificate {
+  id        String          @id @default(cuid())
+  projectId String
+  name      String
+  type      CertificateType
+  domains   String[]        @default([])
+  certPem   String?
+  keyPem    String?
+  notAfter  DateTime?
+  createdAt DateTime        @default(now())
+  deletedAt DateTime?
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+}
+
+/// A managed HAProxy in front of servers. We run one to three node VMs (Server rows with
+/// managedBy = "lb:<id>", hidden from the customer's server list) that share a VIP through
+/// keepalived; the control plane pushes the rendered config to each node.
+model LoadBalancer {
+  id                  String             @id @default(cuid())
+  projectId           String
+  regionId            String
+  name                String
+  status              LoadBalancerStatus @default(creating)
+  statusMessage       String?
+  algorithm           LbAlgorithm        @default(round_robin)
+  nodes               Int                @default(1)
+  /// [{ entryProtocol: http|https|tcp, entryPort, targetProtocol: http|tcp, targetPort, certificateId? }]
+  forwardingRules     Json
+  /// { protocol: http|tcp, port, path?, intervalSeconds, timeoutSeconds, healthyThreshold, unhealthyThreshold }
+  healthCheck         Json
+  /// { type: cookie, cookieName?, ttlSeconds? } or null for none
+  stickySessions      Json?
+  redirectHttpToHttps Boolean            @default(false)
+  proxyProtocol       Boolean            @default(false)
+  /// Servers carrying this tag are targets automatically.
+  tag                 String?
+  publicIpId          String?            @unique
+  firewallId          String?
+  vmSecret            String
+  /// Bumped on every change; nodes report the version they run.
+  configVersion       Int                @default(1)
+  meteredSince        DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  deletedAt           DateTime?
+
+  project     Project              @relation(fields: [projectId], references: [id])
+  region      Region               @relation(fields: [regionId], references: [id])
+  publicIp    PublicIp?            @relation(fields: [publicIpId], references: [id], onDelete: SetNull)
+  nodeServers LoadBalancerNode[]
+  targets     LoadBalancerTarget[]
+
+  @@index([projectId])
+}
+
+model LoadBalancerNode {
+  id             String    @id @default(cuid())
+  loadBalancerId String
+  serverId       String    @unique
+  index          Int
+  appliedVersion Int       @default(0)
+  lastSeenAt     DateTime?
+
+  loadBalancer LoadBalancer @relation(fields: [loadBalancerId], references: [id], onDelete: Cascade)
+  server       Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+model LoadBalancerTarget {
+  id             String    @id @default(cuid())
+  loadBalancerId String
+  serverId       String
+  healthy        Boolean?
+  lastCheckedAt  DateTime?
+
+  loadBalancer LoadBalancer @relation(fields: [loadBalancerId], references: [id], onDelete: Cascade)
+  server       Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([loadBalancerId, serverId])
 }

@@ -67,6 +67,7 @@ export class ServersService {
       where: {
         projectId: project.id,
         deletedAt: null,
+        managedBy: null,
         ...(q.status ? { status: q.status as ServerStatus } : {}),
         ...(q.tag ? { tags: { has: q.tag } } : {}),
       },
@@ -169,6 +170,7 @@ export class ServersService {
   async action(actor: Actor, id: string, dto: ServerActionDto) {
     const server = await this.mustOwn(actor, id);
     this.assertTransition(server.status, dto.type);
+    if (server.managedBy && ['resize', 'rebuild'].includes(dto.type)) throw ApiError.invalidState(`This server is managed by ${server.managedBy.replace('lb:', 'load balancer ')}; change the load balancer instead`);
     if (this.approvals.needs(actor, `servers:${dto.type}`)) {
       await this.approvals.request(actor, { kind: `servers:${dto.type}`, resourceType: 'server', resourceId: server.id, resourceName: server.name, projectId: server.projectId, summary: `${cap(dto.type)} server ${server.name}${dto.size ? ` to ${dto.size}` : ''}${dto.image ? ` with ${dto.image}` : ''}`, payload: { ...dto } });
     }
@@ -228,6 +230,7 @@ export class ServersService {
   async delete(actor: Actor, id: string) {
     const server = await this.mustOwn(actor, id);
     this.assertTransition(server.status, 'delete');
+    if (server.managedBy) throw ApiError.invalidState(`This server is managed by ${server.managedBy.replace('lb:', 'load balancer ')}; delete the load balancer instead`);
     if (this.approvals.needs(actor, 'servers:delete')) {
       await this.approvals.request(actor, { kind: 'servers:delete', resourceType: 'server', resourceId: server.id, resourceName: server.name, projectId: server.projectId, summary: `Delete server ${server.name} (${server.sizeId})`, payload: {} });
     }

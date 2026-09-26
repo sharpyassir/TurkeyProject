@@ -91,6 +91,10 @@ func main() {
 		err = cmdAlerts(rest)
 	case "volumes":
 		err = cmdVolumes(rest)
+	case "load-balancers", "lbs":
+		err = cmdLoadBalancers(rest)
+	case "certificates", "certs":
+		err = cmdCertificates(rest)
 	case "tokens":
 		err = cmdTokens(rest)
 	case "firewalls":
@@ -118,6 +122,8 @@ USAGE  pgcloud [--json] [--project SLUG] <command> [args]
 
 ACCOUNT   login · logout · whoami · billing [invoices|payments|topup AMOUNT|pay INVOICE_ID] · tokens create NAME [--agent --cap 500] · ssh-keys ls|add NAME FILE
 AGENTS    approvals [ls | approve ID | deny ID --reason TEXT]   (requests parked by agent tokens)
+LBS       load-balancers [ls | create NAME --rule http:80:80 [--rule https:443:80:CERT_ID] [--server ID ...] [--tag T] [--nodes 2] [--wait] | get ID | add ID SERVER_ID | remove ID SERVER_ID | delete ID]
+          certificates [ls | add NAME --le example.com,www.example.com | add NAME --cert FILE --key FILE | delete ID]
 VOLUMES   volumes [ls | create NAME --size GB [--server ID] | attach ID SERVER_ID | detach ID | resize ID --size GB | delete ID]
 MONITOR   servers metrics ID [--period 1h|6h|24h|7d|30d] · alerts [ls | incidents | create NAME --metric cpu --above 90 | mute ID | delete ID]
 SERVERS   servers ls | create NAME [--size s-2vcpu-4gb] [--image ubuntu-24-04|wordpress] [--key ID] [--wait]
@@ -323,6 +329,31 @@ func money(minor any, currency any) string {
 	f, _ := minor.(float64)
 	sym := map[string]string{"TRY": "₺", "USD": "$"}[fmt.Sprint(currency)]
 	return fmt.Sprintf("%s%.2f", sym, f/100)
+}
+
+// hasFlag reports whether a boolean flag is present.
+func hasFlag(args []string, name string) bool {
+	for _, a := range args {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
+// orEmpty renders a nullable JSON value without the word "<nil>".
+func orEmpty(v any) string {
+	if v == nil {
+		return ""
+	}
+	return fmt.Sprint(v)
+}
+
+// printJSON writes a value as indented JSON to stdout.
+func printJSON(v any) error {
+	enc := json.NewEncoder(stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
 }
 
 func flag(args []string, name string) (string, []string) {
@@ -980,6 +1011,169 @@ func cmdAlerts(args []string) error {
 		return nil
 	}
 	return errors.New("usage: pgcloud alerts [ls | incidents | create ... | mute ID | enable ID | delete ID]")
+}
+
+func cmdLoadBalancers(args []string) error {
+	if len(args) == 0 || args[0] == "ls" {
+		return cmdList("/v1/load-balancers", nil, []string{"name", "status", "ip", "nodes", "id"})
+	}
+	usage := errors.New("usage: pgcloud load-balancers [ls | create NAME --rule PROTO:ENTRY:TARGET[:CERT] ... [--server ID] [--tag T] [--nodes N] [--wait] | get ID | add ID SERVER_ID | remove ID SERVER_ID | delete ID]")
+	var lb map[string]any
+	switch args[0] {
+	case "create":
+		if len(args) < 2 {
+			return usage
+		}
+		ruleSpecs, rest := multi(args[2:], "--rule")
+		servers, rest := multi(rest, "--server")
+		tag, rest := flag(rest, "--tag")
+		nodes, rest := flag(rest, "--nodes")
+		wait := hasFlag(rest, "--wait")
+		if len(ruleSpecs) == 0 {
+			ruleSpecs = []string{"http:80:80"}
+		}
+		rules := []map[string]any{}
+		for _, spec := range ruleSpecs {
+			parts := strings.Split(spec, ":")
+			if len(parts) < 3 {
+				return fmt.Errorf("rule %q: use PROTO:ENTRY_PORT:TARGET_PORT[:CERT_ID], for example http:80:8080 or https:443:8080:cert_id", spec)
+			}
+			var entry, target int
+			fmt.Sscanf(parts[1], "%d", &entry)
+			fmt.Sscanf(parts[2], "%d", &target)
+			r := map[string]any{"entryProtocol": parts[0], "entryPort": entry, "targetPort": target, "targetProtocol": "http"}
+			if parts[0] == "tcp" {
+				r["targetProtocol"] = "tcp"
+			}
+			if len(parts) > 3 {
+				r["certificateId"] = parts[3]
+			}
+			rules = append(rules, r)
+		}
+		body := map[string]any{"name": args[1], "forwardingRules": rules, "serverIds": servers}
+		if tag != "" {
+			body["tag"] = tag
+		}
+		if nodes != "" {
+			var n int
+			fmt.Sscanf(nodes, "%d", &n)
+			body["nodes"] = n
+		}
+		if err := call(http.MethodPost, "/v1/load-balancers", body, &lb); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ load balancer %s is being created at %v (%s)\n", lb["name"], lb["ip"], lb["id"])
+		if wait {
+			id := lb["id"].(string)
+			for i := 0; i < 300; i++ {
+				time.Sleep(3 * time.Second)
+				if err := call(http.MethodGet, "/v1/load-balancers/"+id, nil, &lb); err != nil {
+					return err
+				}
+				if lb["status"] == "active" || lb["status"] == "failed" {
+					break
+				}
+			}
+			fmt.Fprintf(stdout, "  status: %v %v\n", lb["status"], orEmpty(lb["statusMessage"]))
+		}
+	case "get":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodGet, "/v1/load-balancers/"+args[1], nil, &lb); err != nil {
+			return err
+		}
+		if jsonOut {
+			return printJSON(lb)
+		}
+		fmt.Fprintf(stdout, "%s  %v  ip=%v  nodes=%v  algorithm=%v  version=%v\n", lb["name"], lb["status"], lb["ip"], lb["nodes"], lb["algorithm"], lb["configVersion"])
+		if rules, ok := lb["forwardingRules"].([]any); ok {
+			for _, r := range rules {
+				m := r.(map[string]any)
+				fmt.Fprintf(stdout, "  rule  %v:%v -> %v:%v\n", m["entryProtocol"], m["entryPort"], m["targetProtocol"], m["targetPort"])
+			}
+		}
+		if targets, ok := lb["targets"].([]any); ok {
+			for _, t := range targets {
+				m := t.(map[string]any)
+				health := "unknown"
+				if h, ok := m["healthy"].(bool); ok {
+					health = map[bool]string{true: "healthy", false: "unhealthy"}[h]
+				}
+				fmt.Fprintf(stdout, "  target  %v  %v  %s\n", m["name"], m["status"], health)
+			}
+		}
+	case "add", "remove", "rm":
+		if len(args) < 3 {
+			return usage
+		}
+		if args[0] == "add" {
+			if err := call(http.MethodPost, "/v1/load-balancers/"+args[1]+"/servers", map[string]any{"serverIds": args[2:]}, &lb); err != nil {
+				return err
+			}
+		} else if err := call(http.MethodDelete, "/v1/load-balancers/"+args[1]+"/servers/"+args[2], nil, &lb); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ %s now has %d target(s); config v%v is rolling out\n", lb["name"], len(lb["targets"].([]any)), lb["configVersion"])
+	case "delete":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodDelete, "/v1/load-balancers/"+args[1], nil, nil); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "✓ deleting")
+	default:
+		return usage
+	}
+	return nil
+}
+
+func cmdCertificates(args []string) error {
+	if len(args) == 0 || args[0] == "ls" {
+		return cmdList("/v1/certificates", nil, []string{"name", "type", "domains", "notAfter", "id"})
+	}
+	switch args[0] {
+	case "add":
+		if len(args) < 2 {
+			return errors.New("usage: pgcloud certificates add NAME --le DOMAIN[,DOMAIN] | add NAME --cert FILE --key FILE")
+		}
+		le, rest := flag(args[2:], "--le")
+		certFile, rest := flag(rest, "--cert")
+		keyFile, _ := flag(rest, "--key")
+		body := map[string]any{"name": args[1]}
+		if le != "" {
+			body["type"], body["domains"] = "letsencrypt", strings.Split(le, ",")
+		} else if certFile != "" && keyFile != "" {
+			c, err := os.ReadFile(certFile)
+			if err != nil {
+				return err
+			}
+			k, err := os.ReadFile(keyFile)
+			if err != nil {
+				return err
+			}
+			body["type"], body["certPem"], body["keyPem"] = "custom", string(c), string(k)
+		} else {
+			return errors.New("give --le DOMAINS or --cert FILE --key FILE")
+		}
+		var c map[string]any
+		if err := call(http.MethodPost, "/v1/certificates", body, &c); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ certificate %s (%v) added: %s\n", c["name"], c["type"], c["id"])
+		return nil
+	case "delete", "rm":
+		if len(args) < 2 {
+			return errors.New("certificate id required")
+		}
+		if err := call(http.MethodDelete, "/v1/certificates/"+args[1], nil, nil); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "✓ deleted")
+		return nil
+	}
+	return errors.New("usage: pgcloud certificates [ls | add ... | delete ID]")
 }
 
 func cmdVolumes(args []string) error {

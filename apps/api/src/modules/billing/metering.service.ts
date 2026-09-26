@@ -42,18 +42,22 @@ export class MeteringService {
    */
   async tickFallback(now = new Date()) {
     const at = minuteAligned(now);
-    const [servers, ips, snapshots, volumes] = await Promise.all([
-      this.prisma.server.findMany({ where: { status: { in: ['active', 'off', 'rebooting', 'resizing', 'rebuilding'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, hostId: true, backupsEnabled: true } }),
-      this.prisma.publicIp.findMany({ where: { status: { in: ['assigned', 'reserved'] }, projectId: { not: null } }, select: { id: true, projectId: true } }),
+    const [servers, ips, snapshots, volumes, lbs] = await Promise.all([
+      this.prisma.server.findMany({ where: { status: { in: ['active', 'off', 'rebooting', 'resizing', 'rebuilding'] }, meteredSince: { not: null }, managedBy: null }, select: { id: true, projectId: true, hostId: true, backupsEnabled: true } }),
+      // IPs held by a load balancer (the VIP) or its nodes are part of the load balancer price.
+      this.prisma.publicIp.findMany({ where: { status: { in: ['assigned', 'reserved'] }, projectId: { not: null }, loadBalancer: null, OR: [{ serverId: null }, { server: { managedBy: null } }] }, select: { id: true, projectId: true } }),
       this.prisma.snapshot.findMany({ where: { status: 'available' }, select: { id: true, projectId: true, sizeGb: true } }),
     
-      this.prisma.volume.findMany({ where: { status: { in: ['available', 'attaching', 'attached', 'detaching', 'resizing'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, sizeGb: true } }),]);
+      this.prisma.volume.findMany({ where: { status: { in: ['available', 'attaching', 'attached', 'detaching', 'resizing'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, sizeGb: true } }),
+      this.prisma.loadBalancer.findMany({ where: { status: { in: ['active', 'updating'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, nodes: true } }),
+    ]);
     const data: Prisma.UsageEventCreateManyInput[] = [
       ...servers.map((s) => ({ at, resourceType: 'server' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...servers.filter((s) => s.backupsEnabled).map((s) => ({ at, resourceType: 'backup' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...ips.map((ip) => ({ at, resourceType: 'public_ip' as const, resourceId: ip.id, projectId: ip.projectId!, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...snapshots.map((sn) => ({ at, resourceType: 'snapshot' as const, resourceId: sn.id, projectId: sn.projectId, quantity: sn.sizeGb, unit: 'gb_minute', meta: { source: 'fallback' } })),
       ...volumes.map((v) => ({ at, resourceType: 'volume' as const, resourceId: v.id, projectId: v.projectId, quantity: v.sizeGb, unit: 'gb_minute', meta: { source: 'fallback' } })),
+      ...lbs.map((lb) => ({ at, resourceType: 'load_balancer' as const, resourceId: lb.id, projectId: lb.projectId, quantity: lb.nodes, unit: 'node_minute', meta: { source: 'fallback' } })),
     ];
     if (!data.length) return 0;
     const r = await this.prisma.usageEvent.createMany({ data, skipDuplicates: true });

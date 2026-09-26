@@ -45,7 +45,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'kubernetes', name: 'Kubernetes', group: 'Core Cloud', phase: 3, blurb: 'Managed Kubernetes clusters on pgcloud servers.' },
   { slug: 'public-ips', name: 'Public IPs', group: 'Core Cloud', href: '/public-ips', blurb: 'IPv4 addresses from our own blocks. Floating IPs come in phase 2.' },
   { slug: 'vpc', name: 'VPC', group: 'Core Cloud', phase: 2, blurb: 'Isolated private networks per project (VXLAN / EVPN).' },
-  { slug: 'load-balancers', name: 'Load Balancers', group: 'Core Cloud', phase: 2, blurb: 'Managed HAProxy with automatic TLS.' },
+  { slug: 'load-balancers', name: 'Load Balancers', group: 'Core Cloud', href: '/load-balancers', blurb: 'Managed HAProxy with a public IP, health checks, sticky sessions and free TLS.' },
   { slug: 'dns', name: 'DNS', group: 'Core Cloud', phase: 2, blurb: 'API-managed zones and reverse DNS, free with your account.' },
   { slug: 'snapshots', name: 'Snapshots', group: 'Core Cloud', href: '/snapshots', blurb: 'Point-in-time copies of a server.' },
   { slug: 'volumes', name: 'Volumes', group: 'Core Cloud', href: '/volumes', blurb: 'Block storage from 10 GB to 16 TB, attached to any server, grown live.' },

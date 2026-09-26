@@ -239,6 +239,50 @@ export async function deleteVolume(input: { volumeId: string }): Promise<void> {
   }
 }
 
+// ---- load balancers ----
+
+export async function createLoadBalancer(input: { lbId: string }): Promise<void> {
+  const { lbId } = input;
+  try {
+    await slow.lbWaitNodes(lbId);
+    await act.lbPushConfig(lbId);
+    await act.lbSetStatus(lbId, 'active');
+    await act.emitLb('load_balancer.created', lbId, {});
+  } catch (err) {
+    const message = describe(err);
+    await act.lbSetStatus(lbId, 'failed', `create failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function updateLoadBalancer(input: { lbId: string }): Promise<void> {
+  const { lbId } = input;
+  try {
+    const r = await act.lbPushConfig(lbId);
+    // With nodes still unreachable the minute job keeps retrying; the row stays 'updating' until every node runs the version.
+    if (r.applied === r.nodes) await act.lbSetStatus(lbId, 'active');
+    await act.emitLb('load_balancer.updated', lbId, { applied: r.applied, nodes: r.nodes });
+  } catch (err) {
+    const message = describe(err);
+    await act.lbSetStatus(lbId, 'active', `update failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function deleteLoadBalancer(input: { lbId: string }): Promise<void> {
+  const { lbId } = input;
+  try {
+    await act.lbDeleteNodes(lbId);
+    await slow.lbWaitNodesGone(lbId);
+    await act.lbFinalizeDelete(lbId);
+    await act.emitLb('load_balancer.deleted', lbId, {});
+  } catch (err) {
+    const message = describe(err);
+    await act.lbSetStatus(lbId, 'failed', `delete failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
 function describe(err: unknown): string {
   if (err && typeof err === 'object' && 'cause' in err && (err as { cause?: { message?: string } }).cause?.message) {
     return (err as { cause: { message: string } }).cause.message;

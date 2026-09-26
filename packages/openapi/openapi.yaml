@@ -34,6 +34,7 @@ tags:
   - name: network
   - name: snapshots
   - name: volumes
+  - name: load-balancers
   - name: marketplace
   - name: billing
   - name: webhooks
@@ -472,6 +473,34 @@ paths:
   /volumes/{id}/resize:
     post: { tags: [volumes], summary: Grow a volume, description: Volumes only grow. An attached volume grows live; extend the file system in the guest afterwards., parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [sizeGb], properties: { sizeGb: { type: integer, minimum: 10, maximum: 16384 } } } } } }, responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/Volume" } } } } } }
 
+  /load-balancers:
+    get: { tags: [load-balancers], summary: List load balancers, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/LoadBalancer" } } } } } } } } }
+    post:
+      tags: [load-balancers]
+      summary: Create a load balancer
+      description: Reserves a public IP, creates one to three HAProxy nodes and pushes the forwarding rules. Returns 202; status becomes `active` once every node runs the config.
+      parameters: [{ $ref: "#/components/parameters/idempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateLoadBalancer" } } } }
+      responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/LoadBalancer" } } } }, "403": { $ref: "#/components/responses/Forbidden" } }
+  /load-balancers/{id}:
+    get: { tags: [load-balancers], summary: Get a load balancer with target health, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LoadBalancer" } } } }, "404": { $ref: "#/components/responses/NotFound" } } }
+    patch: { tags: [load-balancers], summary: Change rules, health check, algorithm, sticky sessions or tag, parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateLoadBalancer" } } } }, responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/LoadBalancer" } } } } } }
+    delete: { tags: [load-balancers], summary: Delete a load balancer, description: Deletes the nodes and releases the IP., parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted } } }
+  /load-balancers/{id}/servers:
+    post: { tags: [load-balancers], summary: Add target servers, parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [serverIds], properties: { serverIds: { type: array, items: { type: string } } } } } } }, responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/LoadBalancer" } } } } } }
+  /load-balancers/{id}/servers/{serverId}:
+    delete: { tags: [load-balancers], summary: Remove a target server, parameters: [{ $ref: "#/components/parameters/id" }, { name: serverId, in: path, required: true, schema: { type: string } }], responses: { "202": { description: Accepted } } }
+  /certificates:
+    get: { tags: [load-balancers], summary: List certificates, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK } } }
+    post:
+      tags: [load-balancers]
+      summary: Add a certificate
+      description: Either an uploaded PEM pair (`custom`) or a list of domains the load balancer gets issued by Let's Encrypt (`letsencrypt`). Point the domains at the load balancer IP first.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, type], properties: { name: { type: string }, type: { type: string, enum: [custom, letsencrypt] }, certPem: { type: string }, keyPem: { type: string }, domains: { type: array, items: { type: string } }, project: { type: string } } } } } }
+      responses: { "201": { description: Created } }
+  /certificates/{id}:
+    delete: { tags: [load-balancers], summary: Delete a certificate, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: Deleted }, "409": { description: In use by a load balancer } } }
+
   /apps:
     get: { tags: [marketplace], security: [], summary: List marketplace apps, parameters: [{ name: category, in: query, schema: { type: string } }], responses: { "200": { description: OK } } }
   /apps/categories:
@@ -697,6 +726,74 @@ components:
         region: { type: string, description: Defaults to the platform region }
         project: { type: string }
         serverId: { type: string, description: Attach right after creation }
+    ForwardingRule:
+      type: object
+      required: [entryProtocol, entryPort, targetProtocol, targetPort]
+      properties:
+        entryProtocol: { type: string, enum: [http, https, tcp] }
+        entryPort: { type: integer }
+        targetProtocol: { type: string, enum: [http, tcp] }
+        targetPort: { type: integer }
+        certificateId: { type: string, description: Required for https }
+    HealthCheck:
+      type: object
+      properties:
+        protocol: { type: string, enum: [http, tcp] }
+        port: { type: integer }
+        path: { type: string }
+        intervalSeconds: { type: integer }
+        timeoutSeconds: { type: integer }
+        healthyThreshold: { type: integer }
+        unhealthyThreshold: { type: integer }
+    LoadBalancer:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [creating, active, updating, failed, deleting, deleted] }
+        statusMessage: { type: string, nullable: true }
+        ip: { type: string, nullable: true, description: The load balancer's public IP (VIP) }
+        regionId: { type: string }
+        projectId: { type: string }
+        algorithm: { type: string, enum: [round_robin, least_conn] }
+        nodes: { type: integer, description: HAProxy nodes sharing the IP }
+        forwardingRules: { type: array, items: { $ref: "#/components/schemas/ForwardingRule" } }
+        healthCheck: { $ref: "#/components/schemas/HealthCheck" }
+        stickySessions: { type: object, nullable: true, properties: { type: { type: string, enum: [cookie] }, cookieName: { type: string }, ttlSeconds: { type: integer } } }
+        redirectHttpToHttps: { type: boolean }
+        proxyProtocol: { type: boolean }
+        tag: { type: string, nullable: true, description: Servers with this tag are targets automatically }
+        configVersion: { type: integer }
+        nodeStatus: { type: array, items: { type: object, properties: { index: { type: integer }, status: { type: string }, appliedVersion: { type: integer }, lastSeenAt: { type: string, format: date-time, nullable: true } } } }
+        targets: { type: array, items: { type: object, properties: { serverId: { type: string }, name: { type: string }, status: { type: string }, healthy: { type: boolean, nullable: true }, lastCheckedAt: { type: string, format: date-time, nullable: true } } } }
+        createdAt: { type: string, format: date-time }
+    CreateLoadBalancer:
+      type: object
+      required: [name, forwardingRules]
+      properties:
+        name: { type: string, pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", maxLength: 64 }
+        region: { type: string }
+        project: { type: string }
+        nodes: { type: integer, minimum: 1, maximum: 3, default: 1 }
+        algorithm: { type: string, enum: [round_robin, least_conn] }
+        forwardingRules: { type: array, items: { $ref: "#/components/schemas/ForwardingRule" } }
+        healthCheck: { $ref: "#/components/schemas/HealthCheck" }
+        stickySessions: { type: object, properties: { type: { type: string, enum: [none, cookie] }, cookieName: { type: string }, ttlSeconds: { type: integer } } }
+        redirectHttpToHttps: { type: boolean }
+        proxyProtocol: { type: boolean }
+        serverIds: { type: array, items: { type: string } }
+        tag: { type: string }
+    UpdateLoadBalancer:
+      type: object
+      properties:
+        name: { type: string }
+        algorithm: { type: string, enum: [round_robin, least_conn] }
+        forwardingRules: { type: array, items: { $ref: "#/components/schemas/ForwardingRule" } }
+        healthCheck: { $ref: "#/components/schemas/HealthCheck" }
+        stickySessions: { type: object, properties: { type: { type: string, enum: [none, cookie] }, cookieName: { type: string }, ttlSeconds: { type: integer } } }
+        redirectHttpToHttps: { type: boolean }
+        proxyProtocol: { type: boolean }
+        tag: { type: string }
     Server:
       type: object
       properties:

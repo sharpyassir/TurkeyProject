@@ -50,6 +50,8 @@ class Pgcloud:
         self.firewalls = _Firewalls(self)
         self.snapshots = _Snapshots(self)
         self.volumes = _Volumes(self)
+        self.load_balancers = _LoadBalancers(self)
+        self.certificates = _Certificates(self)
         self.billing = _Billing(self)
         self.approvals = _Approvals(self)
         self.alerts = _Alerts(self)
@@ -235,6 +237,52 @@ class _Volumes(_Res):
             if v["status"] in self.SETTLED or time.monotonic() > deadline:
                 return v
             time.sleep(interval)
+
+
+class _LoadBalancers(_Res):
+    def list(self):
+        return self.c.request("GET", "/v1/load-balancers", query={"project": self.c.project})["data"]
+
+    def get(self, id: str):
+        return self.c.request("GET", f"/v1/load-balancers/{id}")
+
+    def create(self, name: str, forwarding_rules, nodes: int = 1, server_ids=None, **kw):
+        body = {"name": name, "forwardingRules": forwarding_rules, "nodes": nodes, "project": self.c.project, **kw}
+        if server_ids:
+            body["serverIds"] = server_ids
+        return self.c.request("POST", "/v1/load-balancers", {k: v for k, v in body.items() if v is not None})
+
+    def update(self, id: str, **fields):
+        return self.c.request("PATCH", f"/v1/load-balancers/{id}", fields)
+
+    def add_servers(self, id: str, server_ids):
+        return self.c.request("POST", f"/v1/load-balancers/{id}/servers", {"serverIds": list(server_ids)})
+
+    def remove_server(self, id: str, server_id: str):
+        return self.c.request("DELETE", f"/v1/load-balancers/{id}/servers/{server_id}")
+
+    def delete(self, id: str):
+        return self.c.request("DELETE", f"/v1/load-balancers/{id}")
+
+    def wait_until_active(self, id: str, timeout: float = 900.0, interval: float = 3.0):
+        deadline = time.monotonic() + timeout
+        while True:
+            lb = self.get(id)
+            if lb["status"] in ("active", "failed") or time.monotonic() > deadline:
+                return lb
+            time.sleep(interval)
+
+
+class _Certificates(_Res):
+    def list(self):
+        return self.c.request("GET", "/v1/certificates", query={"project": self.c.project})["data"]
+
+    def create(self, name: str, type: str, cert_pem: Optional[str] = None, key_pem: Optional[str] = None, domains=None):
+        body = {"name": name, "type": type, "certPem": cert_pem, "keyPem": key_pem, "domains": domains, "project": self.c.project}
+        return self.c.request("POST", "/v1/certificates", {k: v for k, v in body.items() if v is not None})
+
+    def delete(self, id: str):
+        return self.c.request("DELETE", f"/v1/certificates/{id}")
 
 
 class _Billing(_Res):
