@@ -111,7 +111,7 @@ const tr: Copy = {
     ctaPrimary: '100 $ kredi ile başla', ctaSecondary: 'Ajanlar nasıl kurulum yapıyor',
     stats: [['60 sn', 'çalışan bir sunucuya'], ['29 SAR / ay', 'Starter sunucu, saatlik faturalanır'], ['%100', 'veriniz Suudi Arabistan’da kalır']],
   },
-  terminal: { ready: 'WordPress https://185.0.113.42 adresinde hazır, saatlik ücret 0,036 $', orAgent: '# ya da limitli bir tokenla ajanınıza bırakın', capNote: '# aylık 15 $ limit, silme onay ister' },
+  terminal: { ready: 'WordPress https://185.0.113.42 adresinde hazır, saatlik ücret 0,04 SAR', orAgent: '# ya da limitli bir tokenla ajanınıza bırakın', capNote: '# aylık 15 $ limit, silme onay ister' },
   trust: [
     ['🇸🇦', 'Suudi Arabistan’da bölge', 'Suudi Arabistan ve Körfez’de düşük gecikme'],
     ['$', 'Dolar bazlı fiyat, riyal veya dolar ile ödeme', 'ZATCA e-faturası; Moyasar ile mada, kart ve Apple Pay'],
