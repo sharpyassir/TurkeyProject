@@ -44,8 +44,21 @@ export interface FirewallRuleSpec {
   cidrs: string[];
 }
 
+export interface VolumeHandle {
+  volumeRef: string;
+}
+
 export interface HypervisorDriver {
   readonly name: string;
+
+  /** Allocates a block image on the cluster storage (not tied to a VM). */
+  createVolume(hostRef: string, spec: { volumeId: string; sizeGb: number }): Promise<VolumeHandle>;
+  /** Hot plugs the image into the VM; returns the guest facing device path. */
+  attachVolume(hostRef: string, vmRef: string, volumeRef: string, serial: string): Promise<{ device: string }>;
+  detachVolume(hostRef: string, vmRef: string, volumeRef: string): Promise<void>;
+  /** Grows the image; when attached the guest sees the new size at once. */
+  resizeVolume(hostRef: string, volumeRef: string, sizeGb: number, attachedTo?: string): Promise<void>;
+  deleteVolume(hostRef: string, volumeRef: string): Promise<void>;
 
   createVm(hostRef: string, spec: VmSpec): Promise<VmHandle>;
   /** Blocks until cloud-init has finished or the timeout elapses. */

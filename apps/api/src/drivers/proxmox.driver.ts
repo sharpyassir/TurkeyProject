@@ -40,6 +40,22 @@ export class ProxmoxDriver implements HypervisorDriver {
     return res.result as R;
   }
 
+  createVolume(hostRef: string, spec: { volumeId: string; sizeGb: number }) {
+    return this.job<{ volumeRef: string }>(hostRef, 'volume.create', spec, 180_000);
+  }
+  attachVolume(hostRef: string, vmRef: string, volumeRef: string, serial: string) {
+    return this.job<{ device: string }>(hostRef, 'volume.attach', { vmRef, volumeRef, serial });
+  }
+  async detachVolume(hostRef: string, vmRef: string, volumeRef: string) {
+    await this.job(hostRef, 'volume.detach', { vmRef, volumeRef });
+  }
+  async resizeVolume(hostRef: string, volumeRef: string, sizeGb: number, attachedTo?: string) {
+    await this.job(hostRef, 'volume.resize', { volumeRef, sizeGb, vmRef: attachedTo }, 300_000);
+  }
+  async deleteVolume(hostRef: string, volumeRef: string) {
+    await this.job(hostRef, 'volume.delete', { volumeRef }, 300_000);
+  }
+
   createVm(hostRef: string, spec: VmSpec): Promise<VmHandle> {
     return this.job<VmHandle>(hostRef, 'vm.create', { spec }, 180_000);
   }

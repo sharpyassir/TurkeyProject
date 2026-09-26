@@ -16,7 +16,12 @@ export type JobKind =
   | 'snapshot.delete'
   | 'net.attach_ip'
   | 'net.detach_ip'
-  | 'net.apply_firewall';
+  | 'net.apply_firewall'
+  | 'volume.create'
+  | 'volume.attach'
+  | 'volume.detach'
+  | 'volume.resize'
+  | 'volume.delete';
 
 export interface Job<P = Record<string, unknown>> {
   id: string; // uuid, agents dedupe on it

@@ -171,6 +171,74 @@ export async function deleteSnapshot(input: { snapshotId: string }): Promise<voi
   await slow.deleteSnapshotVm(input.snapshotId);
 }
 
+// ---- block volumes ----
+// Each workflow owns one transition. On failure the volume goes back to a stable status with
+// the message so the customer sees what happened and can retry.
+
+export async function createVolume(input: { volumeId: string; serverId?: string }): Promise<void> {
+  const { volumeId, serverId } = input;
+  try {
+    await slow.volumeCreate(volumeId);
+    await act.emitVolume('volume.created', volumeId, {});
+  } catch (err) {
+    const message = describe(err);
+    await act.setVolumeStatus(volumeId, 'failed', `create failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+  if (serverId) {
+    await act.setVolumeStatus(volumeId, 'attaching');
+    await attachVolume({ volumeId, serverId });
+  }
+}
+
+export async function attachVolume(input: { volumeId: string; serverId: string }): Promise<void> {
+  const { volumeId, serverId } = input;
+  try {
+    const r = await act.volumeAttach(volumeId, serverId);
+    await act.emitVolume('volume.attached', volumeId, { serverId, device: r.device });
+  } catch (err) {
+    const message = describe(err);
+    await act.setVolumeStatus(volumeId, 'available', `attach failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function detachVolume(input: { volumeId: string }): Promise<void> {
+  const { volumeId } = input;
+  try {
+    await act.volumeDetach(volumeId);
+    await act.emitVolume('volume.detached', volumeId, {});
+  } catch (err) {
+    const message = describe(err);
+    await act.setVolumeStatus(volumeId, 'attached', `detach failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function resizeVolume(input: { volumeId: string; sizeGb: number; wasAttached: boolean }): Promise<void> {
+  const { volumeId, sizeGb, wasAttached } = input;
+  try {
+    await slow.volumeResize(volumeId, sizeGb);
+    await act.emitVolume('volume.resized', volumeId, { sizeGb });
+  } catch (err) {
+    const message = describe(err);
+    await act.setVolumeStatus(volumeId, wasAttached ? 'attached' : 'available', `resize failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function deleteVolume(input: { volumeId: string }): Promise<void> {
+  const { volumeId } = input;
+  try {
+    await slow.volumeDelete(volumeId);
+    await act.emitVolume('volume.deleted', volumeId, {});
+  } catch (err) {
+    const message = describe(err);
+    await act.setVolumeStatus(volumeId, 'available', `delete failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
 function describe(err: unknown): string {
   if (err && typeof err === 'object' && 'cause' in err && (err as { cause?: { message?: string } }).cause?.message) {
     return (err as { cause: { message: string } }).cause.message;

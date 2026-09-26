@@ -311,6 +311,122 @@ func (c *Client) SetFirewall(ctx context.Context, vmid int, rules []FWRule) erro
 	return nil
 }
 
+// ---- block volumes (Ceph RBD images owned by a reserved vmid) ----
+
+// VolumeOwnerVMID is the pseudo owner of every customer volume image. Proxmox requires
+// storage volumes to be named vm-<vmid>-...; using one reserved id keeps them apart from
+// server disks and lets them move between VMs freely.
+const VolumeOwnerVMID = 900000
+
+// AllocVolume creates an image on the storage: POST /nodes/{node}/storage/{storage}/content.
+func (c *Client) AllocVolume(ctx context.Context, name string, sizeGb int) (string, error) {
+	f := url.Values{"filename": {name}, "size": {fmt.Sprintf("%dG", sizeGb)}, "vmid": {fmt.Sprint(VolumeOwnerVMID)}, "format": {"raw"}}
+	var volid string
+	if err := c.do(ctx, http.MethodPost, c.nodePath("/storage/"+c.cfg.Storage+"/content"), f, &volid); err != nil {
+		return "", err
+	}
+	if volid == "" {
+		volid = c.cfg.Storage + ":" + name
+	}
+	return volid, nil
+}
+
+// FreeVolume deletes an image: DELETE /nodes/{node}/storage/{storage}/content/{volid}.
+func (c *Client) FreeVolume(ctx context.Context, volid string) error {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, c.cfg.URL+"/api2/json"+c.nodePath("/storage/"+c.cfg.Storage+"/content/"+url.PathEscape(volid)), nil)
+	req.Header.Set("Authorization", "PVEAPIToken="+c.cfg.TokenID+"="+c.cfg.TokenSecret)
+	res, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	if res.StatusCode == 500 && (strings.Contains(string(b), "does not exist") || strings.Contains(string(b), "No such")) {
+		return nil
+	}
+	if res.StatusCode/100 != 2 {
+		return &APIError{Status: res.StatusCode, Body: string(b)}
+	}
+	var env struct {
+		Data string `json:"data"`
+	}
+	_ = json.Unmarshal(b, &env)
+	if env.Data != "" {
+		return c.waitTask(ctx, env.Data, 5*time.Minute)
+	}
+	return nil
+}
+
+// Config returns the VM's current config keys (scsi0, net0, ...).
+func (c *Client) Config(ctx context.Context, vmid int) (map[string]string, error) {
+	var raw map[string]interface{}
+	if err := c.do(ctx, http.MethodGet, c.vmPath(vmid, "/config"), nil, &raw); err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for k, v := range raw {
+		out[k] = fmt.Sprint(v)
+	}
+	return out, nil
+}
+
+// AttachDisk plugs an existing image into the first free scsi slot and returns the slot.
+func (c *Client) AttachDisk(ctx context.Context, vmid int, volid, serial string) (string, error) {
+	cfg, err := c.Config(ctx, vmid)
+	if err != nil {
+		return "", err
+	}
+	for _, kv := range cfg {
+		if strings.Contains(kv, volid) {
+			for k, v := range cfg { // already attached: idempotent
+				if v == kv && strings.HasPrefix(k, "scsi") {
+					return k, nil
+				}
+			}
+		}
+	}
+	slot := ""
+	for i := 1; i <= 30; i++ {
+		if _, used := cfg[fmt.Sprintf("scsi%d", i)]; !used {
+			slot = fmt.Sprintf("scsi%d", i)
+			break
+		}
+	}
+	if slot == "" {
+		return "", &APIError{Status: 400, Body: "no free scsi slot"}
+	}
+	f := url.Values{slot: {volid + ",backup=0,serial=" + serial}}
+	return slot, c.do(ctx, http.MethodPost, c.vmPath(vmid, "/config"), f, nil)
+}
+
+// DetachDisk removes the slot that carries volid. The image itself stays on storage.
+func (c *Client) DetachDisk(ctx context.Context, vmid int, volid string) error {
+	cfg, err := c.Config(ctx, vmid)
+	if err != nil {
+		return err
+	}
+	for k, v := range cfg {
+		if strings.HasPrefix(k, "scsi") && strings.Contains(v, volid) {
+			return c.do(ctx, http.MethodPost, c.vmPath(vmid, "/config"), url.Values{"delete": {k}}, nil)
+		}
+	}
+	return nil // not attached: idempotent
+}
+
+// ResizeAttachedDisk grows a plugged disk (the guest sees it immediately).
+func (c *Client) ResizeAttachedDisk(ctx context.Context, vmid int, volid string, sizeGb int) error {
+	cfg, err := c.Config(ctx, vmid)
+	if err != nil {
+		return err
+	}
+	for k, v := range cfg {
+		if strings.HasPrefix(k, "scsi") && strings.Contains(v, volid) {
+			return c.do(ctx, http.MethodPut, c.vmPath(vmid, "/resize"), url.Values{"disk": {k}, "size": {fmt.Sprintf("%dG", sizeGb)}}, nil)
+		}
+	}
+	return &APIError{Status: 400, Body: "volume is not attached to this vm"}
+}
+
 // ---- node capacity ----
 
 type NodeStatus struct {

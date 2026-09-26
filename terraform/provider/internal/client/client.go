@@ -162,6 +162,50 @@ func (c *Client) WaitGone(ctx context.Context, id string, timeout time.Duration)
 	return fmt.Errorf("server %s still exists after %s", id, timeout)
 }
 
+type Volume struct {
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	SizeGb        int     `json:"sizeGb"`
+	Status        string  `json:"status"`
+	StatusMessage *string `json:"statusMessage"`
+	ServerID      *string `json:"serverId"`
+	Device        *string `json:"device"`
+	RegionID      string  `json:"regionId"`
+}
+
+// WaitVolume polls until the volume is available or attached. A failed transition is an error
+// that carries the API's status message.
+func (c *Client) WaitVolume(ctx context.Context, id string, timeout time.Duration) (*Volume, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		var v Volume
+		if err := c.Do(ctx, http.MethodGet, "/v1/volumes/"+id, nil, &v); err != nil {
+			return nil, err
+		}
+		switch v.Status {
+		case "available", "attached":
+			if v.StatusMessage != nil && *v.StatusMessage != "" {
+				return &v, fmt.Errorf("volume %s: %s", id, *v.StatusMessage)
+			}
+			return &v, nil
+		case "failed":
+			msg := "provisioning failed"
+			if v.StatusMessage != nil {
+				msg = *v.StatusMessage
+			}
+			return &v, fmt.Errorf("volume %s: %s", id, msg)
+		}
+		if time.Now().After(deadline) {
+			return &v, fmt.Errorf("volume %s still %s after %s", id, v.Status, timeout)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
 type FirewallRule struct {
 	Direction string   `json:"direction"`
 	Protocol  string   `json:"protocol"`

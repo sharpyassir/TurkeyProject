@@ -32,6 +32,8 @@ export interface Balance { currency: 'USD' | 'TRY'; creditMinor: number; monthTo
 export interface Firewall { id: string; name: string; rules: FirewallRule[]; servers: { serverId: string }[] }
 export interface FirewallRule { id?: string; direction: 'inbound' | 'outbound'; protocol: 'tcp' | 'udp' | 'icmp' | 'any'; ports?: string | null; cidrs: string[]; description?: string }
 export interface Snapshot { id: string; name: string; status: string; sizeGb: number; serverId: string | null; createdAt: string }
+export type VolumeStatus = 'creating' | 'available' | 'attaching' | 'attached' | 'detaching' | 'resizing' | 'deleting' | 'failed' | 'deleted';
+export interface Volume { id: string; name: string; sizeGb: number; status: VolumeStatus; statusMessage: string | null; serverId: string | null; device: string | null; regionId: string; projectId: string; createdAt: string; server: { id: string; name: string } | null }
 export interface SshKey { id: string; name: string; fingerprint: string; createdAt: string }
 export interface ApiToken { id: string; name: string; prefix: string; scopes: string[]; isAgent: boolean; spendCapMinor: number | null; spentThisMonthMinor: number; requireApprovalFor: string[]; expiresAt: string | null; lastUsedAt: string | null; createdAt: string }
 export interface MetricPoint { at: string; cpu: number; cpuMax?: number; memoryUsedMb: number; memoryTotalMb: number; netInBps: number; netOutBps: number; diskReadBps: number; diskWriteBps: number; diskUsedPercent?: number | null }
@@ -149,6 +151,25 @@ export class Pgcloud {
   readonly snapshots = {
     list: () => this.request<List<Snapshot>>('GET', '/v1/snapshots'),
     delete: (id: string) => this.request<void>('DELETE', `/v1/snapshots/${id}`),
+  };
+
+  readonly volumes = {
+    list: (q?: { server?: string }) => this.request<List<Volume>>('GET', '/v1/volumes', undefined, { project: this.opts.project, ...q }),
+    get: (id: string) => this.request<Volume>('GET', `/v1/volumes/${id}`),
+    create: (body: { name: string; sizeGb: number; region?: string; project?: string; serverId?: string }) => this.request<Volume>('POST', '/v1/volumes', { project: this.opts.project, ...body }),
+    attach: (id: string, serverId: string) => this.request<Volume>('POST', `/v1/volumes/${id}/attach`, { serverId }),
+    detach: (id: string) => this.request<Volume>('POST', `/v1/volumes/${id}/detach`, {}),
+    resize: (id: string, sizeGb: number) => this.request<Volume>('POST', `/v1/volumes/${id}/resize`, { sizeGb }),
+    delete: (id: string) => this.request<void>('DELETE', `/v1/volumes/${id}`),
+    /** Polls until the volume settles (available, attached or failed) or the timeout passes. */
+    waitUntilSettled: async (id: string, timeoutMs = 300_000) => {
+      const until = Date.now() + timeoutMs;
+      for (;;) {
+        const v = await this.volumes.get(id);
+        if (['available', 'attached', 'failed'].includes(v.status) || Date.now() > until) return v;
+        await sleep(2000);
+      }
+    },
   };
 
   readonly billing = {

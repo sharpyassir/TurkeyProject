@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -322,6 +323,73 @@ func (a *Agent) dispatch(ctx context.Context, job protocol.Job, log *slog.Logger
 		}
 		return nil, a.pve.SetFirewall(ctx, ref.VMID, toPVERules(p.Rules))
 
+	case protocol.JobVolumeCreate:
+		var p struct {
+			VolumeID string `json:"volumeId"`
+			SizeGb   int    `json:"sizeGb"`
+		}
+		if err := json.Unmarshal(job.Params, &p); err != nil || p.VolumeID == "" || p.SizeGb <= 0 {
+			return nil, permanent{"bad_params", fmt.Errorf("volumeId and sizeGb are required")}
+		}
+		name := "vm-" + fmt.Sprint(proxmox.VolumeOwnerVMID) + "-vol-" + strings.ToLower(p.VolumeID)
+		volid, err := a.pve.AllocVolume(ctx, name, p.SizeGb)
+		if err != nil {
+			return nil, err
+		}
+		ref, _ := json.Marshal(protocol.VolumeRef{Storage: a.cfg.Proxmox.Storage, Volume: strings.TrimPrefix(volid, a.cfg.Proxmox.Storage+":")})
+		return map[string]interface{}{"volumeRef": string(ref)}, nil
+
+	case protocol.JobVolumeAttach, protocol.JobVolumeDetach, protocol.JobVolumeResize, protocol.JobVolumeDelete:
+		var p struct {
+			VmRef     string `json:"vmRef"`
+			VolumeRef string `json:"volumeRef"`
+			Serial    string `json:"serial"`
+			SizeGb    int    `json:"sizeGb"`
+		}
+		json.Unmarshal(job.Params, &p)
+		var vol protocol.VolumeRef
+		if err := json.Unmarshal([]byte(p.VolumeRef), &vol); err != nil || vol.Volume == "" {
+			return nil, permanent{"bad_ref", fmt.Errorf("invalid volumeRef %q", p.VolumeRef)}
+		}
+		volid := vol.Storage + ":" + vol.Volume
+		switch job.Kind {
+		case protocol.JobVolumeAttach:
+			ref, err := parseRef(p.VmRef)
+			if err != nil {
+				return nil, err
+			}
+			serial := p.Serial
+			if len(serial) > 20 {
+				serial = serial[:20]
+			}
+			slot, err := a.pve.AttachDisk(ctx, ref.VMID, volid, serial)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"device": "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_" + serial, "slot": slot}, nil
+		case protocol.JobVolumeDetach:
+			ref, err := parseRef(p.VmRef)
+			if err != nil {
+				return nil, err
+			}
+			return nil, a.pve.DetachDisk(ctx, ref.VMID, volid)
+		case protocol.JobVolumeResize:
+			if p.SizeGb <= 0 {
+				return nil, permanent{"bad_params", fmt.Errorf("sizeGb is required")}
+			}
+			if p.VmRef != "" {
+				ref, err := parseRef(p.VmRef)
+				if err != nil {
+					return nil, err
+				}
+				return nil, a.pve.ResizeAttachedDisk(ctx, ref.VMID, volid, p.SizeGb)
+			}
+			// Detached images have no Proxmox API for resize; use the rbd tool on the node.
+			return nil, rbdResize(ctx, a.cfg.Proxmox.CephPool, vol.Volume, p.SizeGb)
+		default:
+			return nil, a.pve.FreeVolume(ctx, volid)
+		}
+
 	case protocol.JobAttachIP, protocol.JobDetachIP:
 		// Public IPs are configured at create time via cloud-init (ipconfig1). Floating
 		// IP moves are phase 2 and need a config + guest-agent network reload here.
@@ -413,6 +481,18 @@ func (a *Agent) status(ctx context.Context, vmid int) (interface{}, error) {
 		return nil, err
 	}
 	return protocol.VmStatus{Power: st.Status, CpuPercent: st.CPU * 100, MemoryUsedMb: st.Mem >> 20, UptimeSec: st.Uptime}, nil
+}
+
+// rbdResize grows a detached image with the Ceph CLI on the node. Replaced in tests.
+var rbdResize = func(ctx context.Context, pool, image string, sizeGb int) error {
+	if pool == "" {
+		pool = "vm-disks"
+	}
+	out, err := exec.CommandContext(ctx, "rbd", "resize", "--pool", pool, "--image", image, "--size", fmt.Sprintf("%dG", sizeGb)).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("rbd resize: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return nil
 }
 
 // ---- helpers ----

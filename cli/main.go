@@ -89,6 +89,8 @@ func main() {
 		err = cmdApprovals(rest)
 	case "alerts":
 		err = cmdAlerts(rest)
+	case "volumes":
+		err = cmdVolumes(rest)
 	case "tokens":
 		err = cmdTokens(rest)
 	case "firewalls":
@@ -116,6 +118,7 @@ USAGE  pgcloud [--json] [--project SLUG] <command> [args]
 
 ACCOUNT   login · logout · whoami · billing [invoices|payments|topup AMOUNT|pay INVOICE_ID] · tokens create NAME [--agent --cap 500] · ssh-keys ls|add NAME FILE
 AGENTS    approvals [ls | approve ID | deny ID --reason TEXT]   (requests parked by agent tokens)
+VOLUMES   volumes [ls | create NAME --size GB [--server ID] | attach ID SERVER_ID | detach ID | resize ID --size GB | delete ID]
 MONITOR   servers metrics ID [--period 1h|6h|24h|7d|30d] · alerts [ls | incidents | create NAME --metric cpu --above 90 | mute ID | delete ID]
 SERVERS   servers ls | create NAME [--size s-2vcpu-4gb] [--image ubuntu-24-04|wordpress] [--key ID] [--wait]
                   | get ID | start|stop|reboot|delete ID | resize ID --size S | snapshot ID
@@ -977,6 +980,83 @@ func cmdAlerts(args []string) error {
 		return nil
 	}
 	return errors.New("usage: pgcloud alerts [ls | incidents | create ... | mute ID | enable ID | delete ID]")
+}
+
+func cmdVolumes(args []string) error {
+	if len(args) == 0 || args[0] == "ls" {
+		return cmdList("/v1/volumes", nil, []string{"name", "sizeGb", "status", "serverId", "device", "id"})
+	}
+	need := func(n int, usage string) error {
+		if len(args) < n {
+			return errors.New("usage: pgcloud volumes " + usage)
+		}
+		return nil
+	}
+	sizeOf := func(rest []string) (int, []string) {
+		s, rest := flag(rest, "--size")
+		var gb int
+		fmt.Sscanf(strings.TrimSuffix(strings.TrimSuffix(s, "GB"), "G"), "%d", &gb)
+		return gb, rest
+	}
+	var v map[string]any
+	switch args[0] {
+	case "create":
+		if err := need(2, "create NAME --size GB [--server ID]"); err != nil {
+			return err
+		}
+		gb, rest := sizeOf(args[2:])
+		if gb <= 0 {
+			return errors.New("--size GB is required (10 to 16384)")
+		}
+		srv, _ := flag(rest, "--server")
+		body := map[string]any{"name": args[1], "sizeGb": gb}
+		if srv != "" {
+			body["serverId"] = srv
+		}
+		if err := call(http.MethodPost, "/v1/volumes", body, &v); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ volume %s (%v GB) is being created (%s)\n", v["name"], v["sizeGb"], v["id"])
+	case "attach":
+		if err := need(3, "attach VOLUME_ID SERVER_ID"); err != nil {
+			return err
+		}
+		if err := call(http.MethodPost, "/v1/volumes/"+args[1]+"/attach", map[string]any{"serverId": args[2]}, &v); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ attaching %s to %s; the disk appears under /dev/disk/by-id in a few seconds\n", v["name"], args[2])
+	case "detach":
+		if err := need(2, "detach VOLUME_ID"); err != nil {
+			return err
+		}
+		if err := call(http.MethodPost, "/v1/volumes/"+args[1]+"/detach", map[string]any{}, &v); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ detaching %s (unmount it in the guest first)\n", v["name"])
+	case "resize":
+		if err := need(2, "resize VOLUME_ID --size GB"); err != nil {
+			return err
+		}
+		gb, _ := sizeOf(args[2:])
+		if gb <= 0 {
+			return errors.New("--size GB is required")
+		}
+		if err := call(http.MethodPost, "/v1/volumes/"+args[1]+"/resize", map[string]any{"sizeGb": gb}, &v); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ growing %s to %d GB; extend the file system in the guest afterwards\n", v["name"], gb)
+	case "delete", "rm":
+		if err := need(2, "delete VOLUME_ID"); err != nil {
+			return err
+		}
+		if err := call(http.MethodDelete, "/v1/volumes/"+args[1], nil, nil); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "✓ deleting")
+	default:
+		return errors.New("usage: pgcloud volumes [ls | create NAME --size GB [--server ID] | attach ID SERVER_ID | detach ID | resize ID --size GB | delete ID]")
+	}
+	return nil
 }
 
 func cmdApprovals(args []string) error {

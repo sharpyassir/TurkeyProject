@@ -5,6 +5,7 @@ Manage pgcloud from Terraform or OpenTofu. Built on terraform-plugin-framework a
 | Kind | Name | Notes |
 |---|---|---|
 | resource | `pgcloud_server` | create waits until active; `size` changes resize in place; image, region, project, user_data and name replace |
+| resource | `pgcloud_volume` | block storage; `size_gb` grows in place, `server_id` attaches, detaches or moves it |
 | resource | `pgcloud_firewall` | rules as `rule` blocks; a rule change replaces the firewall |
 | resource | `pgcloud_ssh_key` | public key on the account |
 | data | `pgcloud_sizes` | sizes with vCPU, memory, disk and transfer |

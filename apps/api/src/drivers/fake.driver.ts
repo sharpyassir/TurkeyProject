@@ -20,7 +20,33 @@ export class FakeDriver implements HypervisorDriver {
   readonly name = 'fake';
   private readonly log = new Logger(FakeDriver.name);
   private readonly vms = new Map<string, FakeVm>();
+  private readonly volumes = new Map<string, { sizeGb: number; attachedTo?: string }>();
   private nextId = 100;
+
+  async createVolume(_h: string, spec: { volumeId: string; sizeGb: number }) {
+    await sleep(200);
+    const volumeRef = JSON.stringify({ fake: true, storage: 'vm-disks', volume: `vm-900000-vol-${spec.volumeId}` });
+    this.volumes.set(volumeRef, { sizeGb: spec.sizeGb });
+    return { volumeRef };
+  }
+  async attachVolume(_h: string, vmRef: string, volumeRef: string, serial: string) {
+    await sleep(200);
+    const v = this.volumes.get(volumeRef);
+    if (v) v.attachedTo = vmRef;
+    return { device: `/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_${serial}` };
+  }
+  async detachVolume(_h: string, _vmRef: string, volumeRef: string) {
+    await sleep(200);
+    const v = this.volumes.get(volumeRef);
+    if (v) v.attachedTo = undefined;
+  }
+  async resizeVolume(_h: string, volumeRef: string, sizeGb: number) {
+    const v = this.volumes.get(volumeRef);
+    if (v) v.sizeGb = sizeGb;
+  }
+  async deleteVolume(_h: string, volumeRef: string) {
+    this.volumes.delete(volumeRef);
+  }
 
   async createVm(hostRef: string, spec: VmSpec): Promise<VmHandle> {
     await sleep(300);

@@ -53,6 +53,7 @@ export interface Server {
   tags: string[]; createdAt: string;
 }
 export interface ServerAction { id: string; type: string; status: string; params: Record<string, unknown> | null; error: string | null; startedAt: string; finishedAt: string | null }
+export interface Volume { id: string; name: string; sizeGb: number; status: string; statusMessage: string | null; serverId: string | null; device: string | null; regionId: string; createdAt: string; server: { id: string; name: string } | null }
 export interface Snapshot { id: string; name: string; status: string; sizeGb: number; serverId: string | null; createdAt: string }
 export interface Firewall { id: string; name: string; rules: { id: string; direction: string; protocol: string; ports: string | null; sources: string[]; destinations: string[] }[]; servers: { serverId: string }[] }
 export interface App { id: string; slug: string; name: string; category: string; summary: string; version: string; minSizeId: string; variables: AppVariable[]; priceMonthlyMinor: number }

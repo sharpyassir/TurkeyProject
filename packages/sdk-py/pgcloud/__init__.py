@@ -49,6 +49,7 @@ class Pgcloud:
         self.deploys = _Deploys(self)
         self.firewalls = _Firewalls(self)
         self.snapshots = _Snapshots(self)
+        self.volumes = _Volumes(self)
         self.billing = _Billing(self)
         self.approvals = _Approvals(self)
         self.alerts = _Alerts(self)
@@ -196,6 +197,44 @@ class _Snapshots(_Res):
 
     def delete(self, id: str):
         return self.c.request("DELETE", f"/v1/snapshots/{id}")
+
+
+class _Volumes(_Res):
+    SETTLED = ("available", "attached", "failed")
+
+    def list(self, server: Optional[str] = None):
+        return self.c.request("GET", "/v1/volumes", query={"project": self.c.project, "server": server})["data"]
+
+    def get(self, id: str):
+        return self.c.request("GET", f"/v1/volumes/{id}")
+
+    def create(self, name: str, size_gb: int, region: Optional[str] = None, server_id: Optional[str] = None):
+        body = {"name": name, "sizeGb": size_gb, "project": self.c.project}
+        if region:
+            body["region"] = region
+        if server_id:
+            body["serverId"] = server_id
+        return self.c.request("POST", "/v1/volumes", body)
+
+    def attach(self, id: str, server_id: str):
+        return self.c.request("POST", f"/v1/volumes/{id}/attach", {"serverId": server_id})
+
+    def detach(self, id: str):
+        return self.c.request("POST", f"/v1/volumes/{id}/detach", {})
+
+    def resize(self, id: str, size_gb: int):
+        return self.c.request("POST", f"/v1/volumes/{id}/resize", {"sizeGb": size_gb})
+
+    def delete(self, id: str):
+        return self.c.request("DELETE", f"/v1/volumes/{id}")
+
+    def wait_until_settled(self, id: str, timeout: float = 300.0, interval: float = 2.0):
+        deadline = time.monotonic() + timeout
+        while True:
+            v = self.get(id)
+            if v["status"] in self.SETTLED or time.monotonic() > deadline:
+                return v
+            time.sleep(interval)
 
 
 class _Billing(_Res):

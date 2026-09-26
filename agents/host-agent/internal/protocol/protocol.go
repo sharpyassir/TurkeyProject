@@ -17,6 +17,11 @@ const (
 	JobAttachIP      = "net.attach_ip"
 	JobDetachIP      = "net.detach_ip"
 	JobApplyFirewall = "net.apply_firewall"
+	JobVolumeCreate  = "volume.create"
+	JobVolumeAttach  = "volume.attach"
+	JobVolumeDetach  = "volume.detach"
+	JobVolumeResize  = "volume.resize"
+	JobVolumeDelete  = "volume.delete"
 )
 
 type Job struct {
@@ -125,6 +130,13 @@ type MetricSample struct {
 	NetOutBytes    int64   `json:"netOutBytes"`
 	DiskReadBytes  int64   `json:"diskReadBytes"`
 	DiskWriteBytes int64   `json:"diskWriteBytes"`
+}
+
+// VolumeRef is the opaque handle stored in Volume.driverRef for the Proxmox driver.
+// Images are owned by the reserved vmid 900000 so Proxmox never treats them as a VM's own disk.
+type VolumeRef struct {
+	Storage string `json:"storage"`
+	Volume  string `json:"volume"` // vm-900000-vol-<id>
 }
 
 // VmRef is the opaque handle stored in Server.driverRef for the Proxmox driver.

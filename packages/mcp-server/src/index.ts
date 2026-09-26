@@ -280,6 +280,29 @@ server.registerTool('list_firewalls', {
   inputSchema: { project: z.string().optional() },
 }, async ({ project }) => run(async () => (await api<{ data: unknown[] }>('GET', `/v1/firewalls${project ? `?project=${encodeURIComponent(project)}` : ''}`)).data));
 
+server.registerTool('list_volumes', {
+  title: 'List volumes',
+  description: 'Block volumes in the project: size, status and which server each is attached to.',
+  inputSchema: { project: z.string().optional(), server: z.string().optional().describe('Only volumes attached to this server id') },
+}, async ({ project, server: srv }) => run(async () => (await api<{ data: unknown[] }>('GET', `/v1/volumes?${new URLSearchParams({ ...(project ? { project } : {}), ...(srv ? { server: srv } : {}) })}`)).data));
+
+server.registerTool('create_volume', {
+  title: 'Create a volume',
+  description: 'Creates a block volume (10 GB to 16 TB, billed per GB per month) and optionally attaches it to a server in the same region. The guest sees it at the returned device path; format and mount it there.',
+  inputSchema: { name: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/), sizeGb: z.number().int().min(10).max(16384), serverId: z.string().optional(), project: z.string().optional() },
+}, async (input) => run(() => api('POST', '/v1/volumes', input)));
+
+server.registerTool('volume_action', {
+  title: 'Attach, detach, resize or delete a volume',
+  description: 'attach needs serverId; resize needs sizeGb (grow only, live when attached); delete needs the volume detached and destroys its data.',
+  inputSchema: { volumeId: z.string(), action: z.enum(['attach', 'detach', 'resize', 'delete']), serverId: z.string().optional(), sizeGb: z.number().int().min(10).max(16384).optional() },
+}, async ({ volumeId, action, serverId, sizeGb }) => run(async () => {
+  if (action === 'delete') return api('DELETE', `/v1/volumes/${volumeId}`);
+  if (action === 'attach') return api('POST', `/v1/volumes/${volumeId}/attach`, { serverId });
+  if (action === 'resize') return api('POST', `/v1/volumes/${volumeId}/resize`, { sizeGb });
+  return api('POST', `/v1/volumes/${volumeId}/detach`, {});
+}));
+
 /* ───────────────────────── start ───────────────────────── */
 
 const transport = new StdioServerTransport();

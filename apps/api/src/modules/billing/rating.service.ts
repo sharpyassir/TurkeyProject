@@ -81,6 +81,8 @@ export class RatingService {
         return 'public_ip';
       case 'snapshot':
         return 'snapshot_gb';
+      case 'volume':
+        return 'volume_gb';
       case 'bandwidth':
         return 'bandwidth_gb';
       case 'backup':

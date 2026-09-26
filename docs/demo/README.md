@@ -15,3 +15,5 @@ partner conversations.
 | pgcloud-deploys.png | Git Deploy with build logs |
 | pgcloud-billing.png, pgcloud-invoice.png | Billing page and an invoice PDF |
 | pgcloud-admin-ui.pdf | All back office screens |
+| pgcloud-monitoring.png | Monitoring page with alert rules and incidents |
+| pgcloud-volumes.png, pgcloud-server-volumes.png, pgcloud-volumes-tr.png | Volumes page, the server Volumes tab, Turkish version |

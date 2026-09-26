@@ -34,6 +34,12 @@ resource "pgcloud_server" "web" {
   EOT
 }
 
+resource "pgcloud_volume" "data" {
+  name      = "web-data"
+  size_gb   = 100
+  server_id = pgcloud_server.web.id
+}
+
 output "address" {
   value = pgcloud_server.web.ipv4_address
 }

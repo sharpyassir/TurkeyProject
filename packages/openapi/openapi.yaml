@@ -33,6 +33,7 @@ tags:
   - name: github
   - name: network
   - name: snapshots
+  - name: volumes
   - name: marketplace
   - name: billing
   - name: webhooks
@@ -452,6 +453,25 @@ paths:
   /snapshots/{id}:
     delete: { tags: [snapshots], summary: Delete a snapshot, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted } } }
 
+  /volumes:
+    get: { tags: [volumes], summary: List volumes, parameters: [{ $ref: "#/components/parameters/project" }, { name: server, in: query, description: Only volumes attached to this server, schema: { type: string } }], responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Volume" } } } } } } } } }
+    post:
+      tags: [volumes]
+      summary: Create a volume
+      description: Allocates a block volume in the region. Returns 202; the volume becomes `available` within seconds, or `attached` when `serverId` is given.
+      parameters: [{ $ref: "#/components/parameters/idempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateVolume" } } } }
+      responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/Volume" } } } }, "403": { $ref: "#/components/responses/Forbidden" } }
+  /volumes/{id}:
+    get: { tags: [volumes], summary: Get a volume, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Volume" } } } }, "404": { $ref: "#/components/responses/NotFound" } } }
+    delete: { tags: [volumes], summary: Delete a volume, description: The volume must be detached. Data is gone for good., parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted }, "409": { description: Still attached } } }
+  /volumes/{id}/attach:
+    post: { tags: [volumes], summary: Attach to a server, description: Hot plugs the volume. The server must be in the same region and active or off. The guest sees the disk at `device`., parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [serverId], properties: { serverId: { type: string } } } } } }, responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/Volume" } } } } } }
+  /volumes/{id}/detach:
+    post: { tags: [volumes], summary: Detach from its server, description: Unmount the file system in the guest first., parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/Volume" } } } } } }
+  /volumes/{id}/resize:
+    post: { tags: [volumes], summary: Grow a volume, description: Volumes only grow. An attached volume grows live; extend the file system in the guest afterwards., parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [sizeGb], properties: { sizeGb: { type: integer, minimum: 10, maximum: 16384 } } } } } }, responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/Volume" } } } } } }
+
   /apps:
     get: { tags: [marketplace], security: [], summary: List marketplace apps, parameters: [{ name: category, in: query, schema: { type: string } }], responses: { "200": { description: OK } } }
   /apps/categories:
@@ -624,7 +644,7 @@ components:
         expiresInDays: { type: integer }
     Scope:
       type: string
-      enum: [servers:read, servers:write, servers:delete, images:read, snapshots:read, snapshots:write, network:read, network:write, apps:read, billing:read, billing:write, iam:read, iam:write]
+      enum: [servers:read, servers:write, servers:delete, images:read, snapshots:read, snapshots:write, volumes:read, volumes:write, network:read, network:write, apps:read, billing:read, billing:write, iam:read, iam:write]
     Size:
       type: object
       properties:
@@ -653,6 +673,30 @@ components:
         firewalls: { type: array, items: { type: string } }
         appVariables: { type: object, additionalProperties: { type: string }, description: Marketplace app variables }
         avoid: { type: array, items: { type: string }, description: Server ids to anti-affine from }
+    Volume:
+      type: object
+      required: [id, name, sizeGb, status, regionId, projectId, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sizeGb: { type: integer }
+        status: { type: string, enum: [creating, available, attaching, attached, detaching, resizing, deleting, failed, deleted] }
+        statusMessage: { type: string, nullable: true, description: Why the last transition failed, if it did }
+        serverId: { type: string, nullable: true }
+        device: { type: string, nullable: true, description: Guest path, /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_<serial> }
+        regionId: { type: string }
+        projectId: { type: string }
+        createdAt: { type: string, format: date-time }
+        server: { type: object, nullable: true, properties: { id: { type: string }, name: { type: string } } }
+    CreateVolume:
+      type: object
+      required: [name, sizeGb]
+      properties:
+        name: { type: string, pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", maxLength: 64 }
+        sizeGb: { type: integer, minimum: 10, maximum: 16384 }
+        region: { type: string, description: Defaults to the platform region }
+        project: { type: string }
+        serverId: { type: string, description: Attach right after creation }
     Server:
       type: object
       properties:

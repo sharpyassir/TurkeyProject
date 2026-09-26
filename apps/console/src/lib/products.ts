@@ -48,7 +48,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'load-balancers', name: 'Load Balancers', group: 'Core Cloud', phase: 2, blurb: 'Managed HAProxy with automatic TLS.' },
   { slug: 'dns', name: 'DNS', group: 'Core Cloud', phase: 2, blurb: 'API-managed zones and reverse DNS, free with your account.' },
   { slug: 'snapshots', name: 'Snapshots', group: 'Core Cloud', href: '/snapshots', blurb: 'Point-in-time copies of a server.' },
-  { slug: 'volumes', name: 'Block Volumes', group: 'Core Cloud', phase: 2, blurb: 'Ceph-backed volumes you attach and detach from servers.' },
+  { slug: 'volumes', name: 'Volumes', group: 'Core Cloud', href: '/volumes', blurb: 'Block storage from 10 GB to 16 TB, attached to any server, grown live.' },
   { slug: 'object-storage', name: 'Object Storage', group: 'Core Cloud', phase: 3, blurb: 'S3 compatible buckets in Türkiye.' },
   { slug: 'monitoring', name: 'Monitoring & Alerts', group: 'Core Cloud', href: '/monitoring', blurb: 'Metrics from every server, alert rules to email and webhook.' },
   { slug: 'webhooks', name: 'Webhooks', group: 'Core Cloud', href: '/webhooks', blurb: 'Signed event deliveries: server.active, invoice.issued, spend.limit_reached…' },

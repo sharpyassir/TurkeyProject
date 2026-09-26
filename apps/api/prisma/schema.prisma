@@ -128,6 +128,7 @@ model Project {
   publicIps PublicIp[]
   firewalls Firewall[]
   snapshots Snapshot[]
+  volumes   Volume[]
   apiTokens ApiToken[]
   usage     UsageRecord[]
   deployments Deployment[]
@@ -220,6 +221,7 @@ model Region {
   publicIps PublicIp[]
   ipBlocks  IpBlock[]
   images    Image[]
+  volumes   Volume[]
 }
 
 enum HostStatus {
@@ -346,6 +348,7 @@ model Server {
 
   @@index([projectId, status])
   @@index([hostId])
+  volumes Volume[]
 }
 
 enum ActionType {
@@ -954,4 +957,45 @@ model AlertIncident {
 
   @@index([teamId, resolvedAt, startedAt])
   @@index([policyId, serverId, resolvedAt])
+}
+
+// ───────────────────────── Block volumes ─────────────────────────
+
+enum VolumeStatus {
+  creating
+  available
+  attaching
+  attached
+  detaching
+  resizing
+  deleting
+  failed
+  deleted
+}
+
+/// A Ceph RBD image the customer attaches to one server at a time. Billed per GB per month
+/// from creation, attached or not.
+model Volume {
+  id            String       @id @default(cuid())
+  projectId     String
+  regionId      String
+  name          String
+  sizeGb        Int
+  status        VolumeStatus @default(creating)
+  statusMessage String?
+  serverId      String?
+  /// Guest facing path, /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_<serial>
+  device        String?
+  /// Driver handle: storage and image name on Proxmox, opaque outside the driver.
+  driverRef     String?
+  meteredSince  DateTime?
+  createdAt     DateTime     @default(now())
+  deletedAt     DateTime?
+
+  project Project @relation(fields: [projectId], references: [id])
+  region  Region  @relation(fields: [regionId], references: [id])
+  server  Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([serverId])
 }

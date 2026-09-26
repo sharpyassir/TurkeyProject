@@ -21,7 +21,7 @@ export interface Actor {
 
 export const ALL_SCOPES = [
   'servers:read', 'servers:write', 'servers:delete',
-  'images:read', 'snapshots:read', 'snapshots:write',
+  'images:read', 'snapshots:read', 'snapshots:write', 'volumes:read', 'volumes:write',
   'network:read', 'network:write',
   'apps:read',
   'billing:read', 'billing:write',

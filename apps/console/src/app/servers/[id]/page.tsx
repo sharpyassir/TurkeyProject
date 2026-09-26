@@ -3,16 +3,16 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { api, ApiError, Firewall, Image, money, Price, Server, ServerAction, Size, Snapshot } from '@/lib/api';
+import { api, ApiError, Firewall, Image, money, Price, Server, ServerAction, Size, Snapshot, Volume } from '@/lib/api';
 import { Locale, t, tf } from '@/lib/i18n';
 import { useShell } from '@/components/shell';
 import { StatusBadge } from '@/components/status-badge';
 import { ServerMetrics } from '@/components/server-metrics';
 
-type Tab = 'overview' | 'metrics' | 'power' | 'networking' | 'snapshots' | 'activity';
-const TABS: { id: Tab; key: 'tabOverview' | 'tabMetrics' | 'tabPower' | 'tabNetworking' | 'tabSnapshots' | 'tabActivity' }[] = [
+type Tab = 'overview' | 'metrics' | 'power' | 'networking' | 'snapshots' | 'volumes' | 'activity';
+const TABS: { id: Tab; key: 'tabOverview' | 'tabMetrics' | 'tabPower' | 'tabNetworking' | 'tabSnapshots' | 'tabVolumes' | 'tabActivity' }[] = [
   { id: 'overview', key: 'tabOverview' }, { id: 'metrics', key: 'tabMetrics' }, { id: 'power', key: 'tabPower' }, { id: 'networking', key: 'tabNetworking' },
-  { id: 'snapshots', key: 'tabSnapshots' }, { id: 'activity', key: 'tabActivity' },
+  { id: 'snapshots', key: 'tabSnapshots' }, { id: 'volumes', key: 'tabVolumes' }, { id: 'activity', key: 'tabActivity' },
 ];
 const SETTLED = ['active', 'off', 'failed'];
 
@@ -23,6 +23,7 @@ export default function ServerDetailPage() {
   const [server, setServer] = useState<Server | null>(null);
   const [actions, setActions] = useState<ServerAction[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [volumes, setVolumes] = useState<Volume[]>([]);
   const [firewalls, setFirewalls] = useState<Firewall[]>([]);
   const [sizes, setSizes] = useState<Size[]>([]);
   const [images, setImages] = useState<Image[]>([]);
@@ -47,14 +48,16 @@ export default function ServerDetailPage() {
   const loadSide = useCallback(async () => {
     const bal = await api<{ currency: 'USD' | 'TRY' }>('/v1/billing/balance').catch(() => ({ currency: 'USD' as const }));
     setCurrency(bal.currency);
-    const [sn, fw, sz, im, pr, us] = await Promise.all([
+    const [sn, fw, sz, im, pr, us, vo] = await Promise.all([
       api<{ data: Snapshot[] }>('/v1/snapshots').catch(() => ({ data: [] })),
       api<{ data: Firewall[] }>('/v1/firewalls').catch(() => ({ data: [] })),
       api<{ data: Size[] }>('/v1/sizes'),
       api<{ data: Image[] }>('/v1/images'),
       api<{ data: Price[] }>(`/v1/pricing?currency=${bal.currency}`),
       api<{ data: { resourceId: string; amountMinor: number }[] }>('/v1/billing/usage').catch(() => ({ data: [] })),
+      api<{ data: Volume[] }>('/v1/volumes').catch(() => ({ data: [] })),
     ]);
+    setVolumes(vo.data);
     setSnapshots(sn.data.filter((x) => x.serverId === id)); setFirewalls(fw.data); setSizes(sz.data); setImages(im.data); setPrices(pr.data);
     setSpent(us.data.filter((r) => r.resourceId === id).reduce((n, r) => n + (r.amountMinor ?? 0), 0));
   }, [id]);
@@ -64,9 +67,9 @@ export default function ServerDetailPage() {
   useEffect(() => {
     const moving = server && (!SETTLED.includes(server.status) || actions[0]?.status === 'running' || actions[0]?.status === 'queued');
     if (!moving) return;
-    const h = setInterval(() => { load(); if (actions[0]?.type === 'snapshot') loadSide(); }, 2000);
+    const h = setInterval(() => { load(); if (actions[0]?.type === 'snapshot' || volumes.some((v) => !['available', 'attached', 'failed'].includes(v.status))) loadSide(); }, 2000);
     return () => clearInterval(h);
-  }, [server, actions, load, loadSide]);
+  }, [server, actions, volumes, load, loadSide]);
 
   async function run(fn: () => Promise<unknown>, ok?: string) {
     setBusy(true); setError(null); setNotice(null);
@@ -225,6 +228,38 @@ export default function ServerDetailPage() {
           )}
         </section>
       )}
+
+      {tab === 'volumes' && (() => {
+        const mine = volumes.filter((v) => v.serverId === id);
+        const free = volumes.filter((v) => v.status === 'available');
+        return (
+          <section className="card space-y-3 text-sm">
+            <div className="flex items-center gap-3">
+              <h2 className="font-medium">{t(locale, 'volumes')}</h2>
+              <Link href="/volumes" className="ms-auto text-blue-600 hover:underline">{t(locale, 'newVolume')}</Link>
+            </div>
+            <p className="text-neutral-500">{tf(locale, 'volumeNote')(money(priceOf('volume_gb')?.monthlyMinor ?? 0, currency, locale))}</p>
+            {mine.length === 0 ? <p className="text-neutral-500">{t(locale, 'noVolumesOnServer')}</p> : (
+              <table className="w-full"><tbody>
+                {mine.map((v) => (
+                  <tr key={v.id} className="border-t border-neutral-100 dark:border-neutral-800">
+                    <td className="py-2 font-medium">{v.name}</td><td className="py-2"><StatusBadge status={v.status} /></td><td className="py-2">{v.sizeGb} GB</td>
+                    <td className="py-2 font-mono text-xs text-neutral-500">{v.device ?? ''}</td>
+                    <td className="py-2 text-end"><button className="btn-ghost" disabled={busy || v.status !== 'attached'} title={t(locale, 'detachNote')} onClick={() => run(() => api(`/v1/volumes/${v.id}/detach`, { method: 'POST' }).then(loadSide))}>{t(locale, 'detach')}</button></td>
+                  </tr>
+                ))}
+              </tbody></table>
+            )}
+            {free.length > 0 && settled && (
+              <form className="flex flex-wrap items-center gap-2" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const vid = String(new FormData(e.currentTarget).get('volume')); run(() => api(`/v1/volumes/${vid}/attach`, { method: 'POST', body: JSON.stringify({ serverId: id }) }).then(loadSide)); }}>
+                <label className="text-neutral-500">{t(locale, 'attachExisting')}</label>
+                <select name="volume" className="input max-w-[16rem]">{free.map((v) => <option key={v.id} value={v.id}>{v.name} ({v.sizeGb} GB)</option>)}</select>
+                <button className="btn-primary" disabled={busy}>{t(locale, 'attach')}</button>
+              </form>
+            )}
+          </section>
+        );
+      })()}
 
       {tab === 'activity' && (
         <section className="card p-0 text-sm">

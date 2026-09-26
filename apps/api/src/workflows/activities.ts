@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import type { ServerStatus } from '@prisma/client';
+import type { ServerStatus, VolumeStatus } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { HYPERVISOR_DRIVER, HypervisorDriver } from '../drivers/hypervisor.driver';
 import { AgentJobError } from '../drivers/proxmox.driver';
@@ -35,6 +35,13 @@ export interface Activities {
   snapshotVm(serverId: string, snapshotId: string): Promise<void>;
   failSnapshot(snapshotId: string, message: string): Promise<void>;
   deleteSnapshotVm(snapshotId: string): Promise<void>;
+  volumeCreate(volumeId: string): Promise<void>;
+  volumeAttach(volumeId: string, serverId: string): Promise<{ device: string }>;
+  volumeDetach(volumeId: string): Promise<void>;
+  volumeResize(volumeId: string, sizeGb: number): Promise<void>;
+  volumeDelete(volumeId: string): Promise<void>;
+  setVolumeStatus(volumeId: string, status: VolumeStatus, message?: string): Promise<void>;
+  emitVolume(name: string, volumeId: string, payload: Record<string, unknown>): Promise<void>;
   completeAction(actionId: string): Promise<void>;
   failAction(actionId: string, message: string): Promise<void>;
   emit(name: string, serverId: string, payload: Record<string, unknown>): Promise<void>;
@@ -199,6 +206,8 @@ export function createActivities(app: INestApplicationContext): Activities {
       await ips.releaseForServer(serverId);
       if (s.hostId) await scheduler.release(s.hostId, s);
       await prisma.server.update({ where: { id: serverId }, data: { status: 'deleted', deletedAt: new Date(), hostId: null, meteredSince: null } });
+      // Volumes survive their server; the VM is gone so the images are simply free again.
+      await prisma.volume.updateMany({ where: { serverId }, data: { serverId: null, device: null, status: 'available' } });
     },
 
     async createSnapshotRecord(serverId, name) {
@@ -232,6 +241,64 @@ export function createActivities(app: INestApplicationContext): Activities {
       await prisma.snapshot.update({ where: { id: snapshotId }, data: { status: 'deleted', deletedAt: new Date() } });
     },
 
+    // ---- block volumes ----
+
+    async volumeCreate(volumeId) {
+      const v = await prisma.volume.findUnique({ where: { id: volumeId } });
+      if (!v) throw nonRetryable(`volume ${volumeId} no longer exists`);
+      if (v.driverRef) return; // retried after the image was already allocated
+      // Ceph is shared across the region, so any active host can allocate the image.
+      const host = await prisma.host.findFirst({ where: { regionId: v.regionId, status: 'active' }, orderBy: { lastHeartbeatAt: 'desc' } });
+      if (!host) throw new Error('no active host in region to allocate the volume');
+      const r = await wrap(driver.createVolume(host.driverRef, { volumeId, sizeGb: v.sizeGb }));
+      await prisma.volume.update({ where: { id: volumeId }, data: { driverRef: r.volumeRef, status: 'available', statusMessage: null, meteredSince: new Date() } });
+    },
+
+    async volumeAttach(volumeId, serverId) {
+      const [v, s] = await Promise.all([prisma.volume.findUnique({ where: { id: volumeId } }), load(serverId)]);
+      if (!v?.driverRef) throw nonRetryable('volume has no image');
+      if (!s.driverRef) throw nonRetryable('server has no VM');
+      const r = await wrap(driver.attachVolume(hostRef(s), s.driverRef, v.driverRef, serial(volumeId)));
+      await prisma.volume.update({ where: { id: volumeId }, data: { status: 'attached', serverId, device: r.device, statusMessage: null } });
+      return r;
+    },
+
+    async volumeDetach(volumeId) {
+      const v = await prisma.volume.findUnique({ where: { id: volumeId }, include: { server: { include: { host: true } } } });
+      if (!v?.driverRef) throw nonRetryable('volume has no image');
+      if (v.server?.host && v.server.driverRef) await wrap(driver.detachVolume(v.server.host.driverRef, v.server.driverRef, v.driverRef));
+      await prisma.volume.update({ where: { id: volumeId }, data: { status: 'available', serverId: null, device: null, statusMessage: null } });
+    },
+
+    async volumeResize(volumeId, sizeGb) {
+      const v = await prisma.volume.findUnique({ where: { id: volumeId }, include: { server: { include: { host: true } } } });
+      if (!v?.driverRef) throw nonRetryable('volume has no image');
+      let host = v.server?.host?.driverRef;
+      if (!host) host = (await prisma.host.findFirst({ where: { regionId: v.regionId, status: 'active' } }))?.driverRef;
+      if (!host) throw new Error('no active host in region to resize the volume');
+      await wrap(driver.resizeVolume(host, v.driverRef, sizeGb, v.server?.driverRef ?? undefined));
+      await prisma.volume.update({ where: { id: volumeId }, data: { sizeGb, status: v.serverId ? 'attached' : 'available', statusMessage: null } });
+    },
+
+    async volumeDelete(volumeId) {
+      const v = await prisma.volume.findUnique({ where: { id: volumeId } });
+      if (!v || v.status === 'deleted') return;
+      if (v.driverRef) {
+        const host = await prisma.host.findFirst({ where: { regionId: v.regionId, status: 'active' } });
+        if (host) await wrap(driver.deleteVolume(host.driverRef, v.driverRef));
+      }
+      await prisma.volume.update({ where: { id: volumeId }, data: { status: 'deleted', deletedAt: new Date(), serverId: null, device: null, meteredSince: null } });
+    },
+
+    async setVolumeStatus(volumeId, status, message) {
+      await prisma.volume.update({ where: { id: volumeId }, data: { status, statusMessage: message ?? null } }).catch(() => undefined);
+    },
+
+    async emitVolume(name, volumeId, payload) {
+      const v = await prisma.volume.findUnique({ where: { id: volumeId }, include: { project: { select: { teamId: true } } } });
+      await events.emit(name, { volumeId, name: v?.name, status: v?.status, serverId: v?.serverId, sizeGb: v?.sizeGb, ...payload }, { teamId: v?.project.teamId, resource: `volume:${volumeId}` });
+    },
+
     async completeAction(actionId) {
       await prisma.serverAction.update({ where: { id: actionId }, data: { status: 'completed', finishedAt: new Date() } });
     },
@@ -245,6 +312,11 @@ export function createActivities(app: INestApplicationContext): Activities {
       await events.emit(name, { serverId, name: s?.name, status: s?.status, ...payload }, { teamId: s?.project.teamId, resource: `server:${serverId}` });
     },
   };
+}
+
+/** SCSI serial the guest sees in /dev/disk/by-id; QEMU allows 20 characters. */
+function serial(volumeId: string) {
+  return volumeId.replace(/[^a-zA-Z0-9]/g, '').slice(-20);
 }
 
 function nonRetryable(message: string) {
