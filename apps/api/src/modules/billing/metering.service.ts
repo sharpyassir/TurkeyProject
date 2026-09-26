@@ -42,15 +42,16 @@ export class MeteringService {
    */
   async tickFallback(now = new Date()) {
     const at = minuteAligned(now);
-    const [servers, ips, snapshots, volumes, lbs, buckets] = await Promise.all([
+    const [servers, ips, snapshots, volumes, lbs, buckets, dbs] = await Promise.all([
       this.prisma.server.findMany({ where: { status: { in: ['active', 'off', 'rebooting', 'resizing', 'rebuilding'] }, meteredSince: { not: null }, managedBy: null }, select: { id: true, projectId: true, hostId: true, backupsEnabled: true } }),
       // IPs held by a load balancer (the VIP) or its nodes are part of the load balancer price.
-      this.prisma.publicIp.findMany({ where: { status: { in: ['assigned', 'reserved'] }, projectId: { not: null }, loadBalancer: null, OR: [{ serverId: null }, { server: { managedBy: null } }] }, select: { id: true, projectId: true } }),
+      this.prisma.publicIp.findMany({ where: { status: { in: ['assigned', 'reserved'] }, projectId: { not: null }, loadBalancer: null, dbCluster: null, OR: [{ serverId: null }, { server: { managedBy: null } }] }, select: { id: true, projectId: true } }),
       this.prisma.snapshot.findMany({ where: { status: 'available', kind: 'manual' }, select: { id: true, projectId: true, sizeGb: true } }),
     
       this.prisma.volume.findMany({ where: { status: { in: ['available', 'attaching', 'attached', 'detaching', 'resizing'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, sizeGb: true } }),
       this.prisma.loadBalancer.findMany({ where: { status: { in: ['active', 'updating'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, nodes: true } }),
       this.prisma.bucket.findMany({ where: { status: 'active', meteredSince: { not: null }, sizeBytes: { gt: 0 } }, select: { id: true, projectId: true, sizeBytes: true } }),
+      this.prisma.dbCluster.findMany({ where: { status: { in: ['active', 'updating'] }, meteredSince: { not: null } }, select: { id: true, projectId: true, nodes: true } }),
     ]);
     const data: Prisma.UsageEventCreateManyInput[] = [
       ...servers.map((s) => ({ at, resourceType: 'server' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
@@ -59,6 +60,7 @@ export class MeteringService {
       ...snapshots.map((sn) => ({ at, resourceType: 'snapshot' as const, resourceId: sn.id, projectId: sn.projectId, quantity: sn.sizeGb, unit: 'gb_minute', meta: { source: 'fallback' } })),
       ...volumes.map((v) => ({ at, resourceType: 'volume' as const, resourceId: v.id, projectId: v.projectId, quantity: v.sizeGb, unit: 'gb_minute', meta: { source: 'fallback' } })),
       ...buckets.map((b) => ({ at, resourceType: 'object_storage' as const, resourceId: b.id, projectId: b.projectId, quantity: Number(b.sizeBytes) / 1e9, unit: 'gb_minute', meta: { source: 'fallback' } })),
+      ...dbs.map((d) => ({ at, resourceType: 'database' as const, resourceId: d.id, projectId: d.projectId, quantity: d.nodes, unit: 'node_minute', meta: { source: 'fallback' } })),
       ...lbs.map((lb) => ({ at, resourceType: 'load_balancer' as const, resourceId: lb.id, projectId: lb.projectId, quantity: lb.nodes, unit: 'node_minute', meta: { source: 'fallback' } })),
     ];
     if (!data.length) return 0;

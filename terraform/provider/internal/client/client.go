@@ -291,6 +291,60 @@ type Bucket struct {
 	URL      string `json:"url"`
 }
 
+type Database struct {
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Engine         string   `json:"engine"`
+	Version        string   `json:"version"`
+	Status         string   `json:"status"`
+	StatusMessage  *string  `json:"statusMessage"`
+	Nodes          int      `json:"nodes"`
+	RegionID       string   `json:"regionId"`
+	TrustedSources []string `json:"trustedSources"`
+	BackupHourUTC  int      `json:"backupHourUtc"`
+	Size           struct {
+		ID string `json:"id"`
+	} `json:"size"`
+	Connection struct {
+		Host        *string `json:"host"`
+		PrivateHost *string `json:"privateHost"`
+		Port        int     `json:"port"`
+		Database    string  `json:"database"`
+		User        string  `json:"user"`
+		Password    string  `json:"password"`
+		URI         *string `json:"uri"`
+	} `json:"connection"`
+}
+
+// WaitDatabase polls until the cluster is active. Failed provisioning is an error.
+func (c *Client) WaitDatabase(ctx context.Context, id string, timeout time.Duration) (*Database, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		var d Database
+		if err := c.Do(ctx, http.MethodGet, "/v1/databases/"+id, nil, &d); err != nil {
+			return nil, err
+		}
+		switch d.Status {
+		case "active":
+			return &d, nil
+		case "failed":
+			msg := "provisioning failed"
+			if d.StatusMessage != nil {
+				msg = *d.StatusMessage
+			}
+			return &d, fmt.Errorf("database %s: %s", id, msg)
+		}
+		if time.Now().After(deadline) {
+			return &d, fmt.Errorf("database %s still %s after %s", id, d.Status, timeout)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+	}
+}
+
 type FirewallRule struct {
 	Direction string   `json:"direction"`
 	Protocol  string   `json:"protocol"`

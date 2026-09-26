@@ -1,8 +1,9 @@
 import { Logger } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import type { LoadBalancerStatus, ServerStatus, VolumeStatus } from '@prisma/client';
+import type { DbClusterStatus, LoadBalancerStatus, ServerStatus, VolumeStatus } from '@prisma/client';
 import { LoadBalancersService } from '../modules/lb/lb.service';
+import { DatabasesService } from '../modules/databases/db.service';
 import { TemporalService } from '../common/temporal/temporal.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { HYPERVISOR_DRIVER, HypervisorDriver } from '../drivers/hypervisor.driver';
@@ -51,6 +52,13 @@ export interface Activities {
   lbWaitNodesGone(lbId: string): Promise<void>;
   lbFinalizeDelete(lbId: string): Promise<void>;
   emitLb(name: string, lbId: string, payload: Record<string, unknown>): Promise<void>;
+  dbWaitNodes(clusterId: string): Promise<void>;
+  dbPushConfig(clusterId: string): Promise<{ applied: number; nodes: number }>;
+  dbSetStatus(clusterId: string, status: DbClusterStatus, message?: string): Promise<void>;
+  dbDeleteNodes(clusterId: string): Promise<void>;
+  dbWaitNodesGone(clusterId: string): Promise<void>;
+  dbFinalizeDelete(clusterId: string): Promise<void>;
+  emitDb(name: string, clusterId: string, payload: Record<string, unknown>): Promise<void>;
   completeAction(actionId: string): Promise<void>;
   failAction(actionId: string, message: string): Promise<void>;
   emit(name: string, serverId: string, payload: Record<string, unknown>): Promise<void>;
@@ -65,6 +73,7 @@ export function createActivities(app: INestApplicationContext): Activities {
   const firewalls = app.get(FirewallsService);
   const events = app.get(EventsService);
   const lbs = app.get(LoadBalancersService);
+  const dbs = app.get(DatabasesService);
   const temporal = app.get(TemporalService);
 
   /** Loads a server with everything the driver needs. Throws non-retryable if gone. */
@@ -369,6 +378,72 @@ export function createActivities(app: INestApplicationContext): Activities {
     async emitLb(name, lbId, payload) {
       const lb = await prisma.loadBalancer.findUnique({ where: { id: lbId }, include: { project: { select: { teamId: true } }, publicIp: { select: { address: true } } } });
       await events.emit(name, { loadBalancerId: lbId, name: lb?.name, status: lb?.status, ip: lb?.publicIp?.address, ...payload }, { teamId: lb?.project.teamId, resource: `load_balancer:${lbId}` });
+    },
+
+    // ---- managed databases (same shape as load balancers) ----
+
+    async dbWaitNodes(clusterId) {
+      const deadline = Date.now() + 15 * 60_000;
+      for (;;) {
+        Context.current().heartbeat();
+        const nodes = await prisma.dbNode.findMany({ where: { clusterId }, include: { server: { select: { status: true, statusMessage: true, name: true } } } });
+        if (!nodes.length) throw nonRetryable('database has no nodes');
+        const failed = nodes.find((n) => n.server.status === 'failed');
+        if (failed) throw nonRetryable(`node ${failed.server.name} failed: ${failed.server.statusMessage ?? 'unknown error'}`);
+        if (nodes.every((n) => n.server.status === 'active')) return;
+        if (Date.now() > deadline) throw nonRetryable('nodes did not become active in 15 minutes');
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    },
+
+    async dbPushConfig(clusterId) {
+      const heartbeat = setInterval(() => Context.current().heartbeat(), 20_000);
+      try {
+        return await wrap(dbs.pushConfig(clusterId));
+      } finally {
+        clearInterval(heartbeat);
+      }
+    },
+
+    async dbSetStatus(clusterId, status, message) {
+      const data: Record<string, unknown> = { status, statusMessage: message ?? null };
+      if (status === 'active') data.meteredSince = (await prisma.dbCluster.findUnique({ where: { id: clusterId }, select: { meteredSince: true } }))?.meteredSince ?? new Date();
+      await prisma.dbCluster.update({ where: { id: clusterId }, data }).catch(() => undefined);
+    },
+
+    async dbDeleteNodes(clusterId) {
+      const nodes = await prisma.dbNode.findMany({ where: { clusterId }, include: { server: true } });
+      for (const n of nodes) {
+        if (['deleted', 'deleting'].includes(n.server.status)) continue;
+        const action = await prisma.serverAction.create({ data: { serverId: n.serverId, type: 'delete', requestedBy: 'system:db' } });
+        await prisma.server.update({ where: { id: n.serverId }, data: { status: 'deleting' } });
+        await temporal.start('deleteServer', [{ serverId: n.serverId, actionId: action.id }], `deleteServer-${action.id}`);
+      }
+    },
+
+    async dbWaitNodesGone(clusterId) {
+      const deadline = Date.now() + 15 * 60_000;
+      for (;;) {
+        Context.current().heartbeat();
+        const nodes = await prisma.dbNode.findMany({ where: { clusterId }, include: { server: { select: { status: true } } } });
+        if (nodes.every((n) => n.server.status === 'deleted')) return;
+        if (Date.now() > deadline) throw nonRetryable('nodes did not delete in 15 minutes');
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    },
+
+    async dbFinalizeDelete(clusterId) {
+      const c = await prisma.dbCluster.findUnique({ where: { id: clusterId } });
+      if (!c) return;
+      if (c.publicIpId) await ips.release(c.publicIpId).catch(() => undefined);
+      if (c.firewallId) await prisma.firewall.delete({ where: { id: c.firewallId } }).catch(() => undefined);
+      // Backups stay in the platform bucket for seven days after deletion (pgBackRest retention), then expire.
+      await prisma.dbCluster.update({ where: { id: clusterId }, data: { status: 'deleted', deletedAt: new Date(), publicIpId: null, firewallId: null, meteredSince: null, adminPassword: '', backupSecretKey: null } });
+    },
+
+    async emitDb(name, clusterId, payload) {
+      const c = await prisma.dbCluster.findUnique({ where: { id: clusterId }, include: { project: { select: { teamId: true } }, publicIp: { select: { address: true } } } });
+      await events.emit(name, { databaseId: clusterId, name: c?.name, engine: c?.engine, status: c?.status, host: c?.publicIp?.address, ...payload }, { teamId: c?.project.teamId, resource: `database:${clusterId}` });
     },
 
     async completeAction(actionId) {

@@ -87,6 +87,10 @@ export class RatingService {
         return 'lb_node';
       case 'object_storage':
         return 'storage_gb';
+      case 'database': {
+        const c = await this.prisma.dbCluster.findUnique({ where: { id: resourceId }, select: { sizeId: true } });
+        return c ? `db-${c.sizeId}` : null;
+      }
       case 'bandwidth':
         return 'bandwidth_gb';
       case 'backup':

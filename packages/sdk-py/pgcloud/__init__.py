@@ -53,6 +53,7 @@ class Pgcloud:
         self.load_balancers = _LoadBalancers(self)
         self.domains = _Domains(self)
         self.buckets = _Buckets(self)
+        self.databases = _Databases(self)
         self.storage_keys = _StorageKeys(self)
         self.certificates = _Certificates(self)
         self.billing = _Billing(self)
@@ -370,6 +371,55 @@ class _StorageKeys(_Res):
 
     def revoke(self, id: str):
         return self.c.request("DELETE", f"/v1/storage-keys/{id}")
+
+
+class _Databases(_Res):
+    def list(self):
+        return self.c.request("GET", "/v1/databases", query={"project": self.c.project})["data"]
+
+    def get(self, id: str):
+        return self.c.request("GET", f"/v1/databases/{id}")
+
+    def create(self, name: str, engine: str, size: str, nodes: int = 1, trusted_sources=None, **kw):
+        body = {"name": name, "engine": engine, "size": size, "nodes": nodes, "project": self.c.project, **kw}
+        if trusted_sources:
+            body["trustedSources"] = list(trusted_sources)
+        return self.c.request("POST", "/v1/databases", {k: v for k, v in body.items() if v is not None})
+
+    def update(self, id: str, **fields):
+        return self.c.request("PATCH", f"/v1/databases/{id}", fields)
+
+    def delete(self, id: str):
+        return self.c.request("DELETE", f"/v1/databases/{id}")
+
+    def add_user(self, id: str, name: str):
+        return self.c.request("POST", f"/v1/databases/{id}/users", {"name": name})
+
+    def reset_password(self, id: str, user_id: str):
+        return self.c.request("POST", f"/v1/databases/{id}/users/{user_id}/reset-password", {})
+
+    def delete_user(self, id: str, user_id: str):
+        return self.c.request("DELETE", f"/v1/databases/{id}/users/{user_id}")
+
+    def add_database(self, id: str, name: str):
+        return self.c.request("POST", f"/v1/databases/{id}/dbs", {"name": name})
+
+    def delete_database(self, id: str, db_id: str):
+        return self.c.request("DELETE", f"/v1/databases/{id}/dbs/{db_id}")
+
+    def backups(self, id: str):
+        return self.c.request("GET", f"/v1/databases/{id}/backups")["data"]
+
+    def backup_now(self, id: str):
+        return self.c.request("POST", f"/v1/databases/{id}/backups", {})
+
+    def wait_until_active(self, id: str, timeout: float = 900.0, interval: float = 5.0):
+        deadline = time.monotonic() + timeout
+        while True:
+            c = self.get(id)
+            if c["status"] in ("active", "failed") or time.monotonic() > deadline:
+                return c
+            time.sleep(interval)
 
 
 class _Billing(_Res):

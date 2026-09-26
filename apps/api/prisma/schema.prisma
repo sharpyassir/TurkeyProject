@@ -134,6 +134,7 @@ model Project {
   dnsZones      DnsZone[]
   buckets       Bucket[]
   storageKeys   StorageKey[]
+  dbClusters    DbCluster[]
   apiTokens ApiToken[]
   usage     UsageRecord[]
   deployments Deployment[]
@@ -229,6 +230,7 @@ model Region {
   volumes   Volume[]
   loadBalancers LoadBalancer[]
   buckets   Bucket[]
+  dbClusters DbCluster[]
 }
 
 enum HostStatus {
@@ -290,6 +292,7 @@ model Size {
   sortOrder Int     @default(0)
   servers   Server[]
   prices    Price[]
+  dbClusters DbCluster[]
 }
 
 enum ImageKind {
@@ -362,6 +365,7 @@ model Server {
   lbTargets LoadBalancerTarget[]
 
   @@index([managedBy])
+  dbNode    DbNode?
 }
 
 enum ActionType {
@@ -472,6 +476,7 @@ model PublicIp {
   loadBalancer LoadBalancer?
   /// False while a reverse DNS change waits to reach the nameservers.
   reverseDnsSynced Boolean @default(true)
+  dbCluster    DbCluster?
 }
 
 enum FirewallDirection {
@@ -563,6 +568,7 @@ enum ResourceType {
   volume
   load_balancer
   object_storage
+  database
   app
   backup
 }
@@ -1239,4 +1245,126 @@ model StorageKey {
   project Project @relation(fields: [projectId], references: [id])
 
   @@index([projectId])
+}
+
+// ───────────────────────── Managed databases ─────────────────────────
+
+enum DbEngine {
+  postgres
+  valkey
+  mysql
+}
+
+enum DbClusterStatus {
+  creating
+  active
+  updating
+  failed
+  deleting
+  deleted
+}
+
+enum DbBackupStatus {
+  running
+  completed
+  failed
+}
+
+/// A managed database cluster: one or three platform owned node VMs (Server rows with
+/// managedBy = "db:<id>"), a VIP that follows the primary, users and databases we apply,
+/// nightly backups to a platform bucket. The control plane is the only writer of node config.
+model DbCluster {
+  id              String          @id @default(cuid())
+  projectId       String
+  regionId        String
+  name            String
+  engine          DbEngine
+  version         String
+  status          DbClusterStatus @default(creating)
+  statusMessage   String?
+  nodes           Int             @default(1)
+  sizeId          String
+  port            Int
+  adminUser       String
+  adminPassword   String
+  /// CIDRs allowed to reach the database port; empty means anywhere (password and TLS still apply).
+  trustedSources  String[]        @default([])
+  publicIpId      String?         @unique
+  firewallId      String?
+  vmSecret        String
+  configVersion   Int             @default(1)
+  backupBucket    String?
+  backupAccessKey String?
+  backupSecretKey String?
+  backupHourUtc   Int             @default(2)
+  meteredSince    DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  project     Project      @relation(fields: [projectId], references: [id])
+  region      Region       @relation(fields: [regionId], references: [id])
+  size        Size         @relation(fields: [sizeId], references: [id])
+  publicIp    PublicIp?    @relation(fields: [publicIpId], references: [id], onDelete: SetNull)
+  nodeServers DbNode[]
+  users       DbUser[]
+  databases   DbDatabase[]
+  backups     DbBackup[]
+
+  @@index([projectId])
+}
+
+model DbNode {
+  id             String    @id @default(cuid())
+  clusterId      String
+  serverId       String    @unique
+  index          Int
+  /// primary | replica | unknown, as last reported by the node
+  role           String    @default("unknown")
+  appliedVersion Int       @default(0)
+  lastSeenAt     DateTime?
+  lagBytes       BigInt?
+
+  cluster DbCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  server  Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+model DbUser {
+  id        String   @id @default(cuid())
+  clusterId String
+  name      String
+  password  String
+  createdAt DateTime @default(now())
+
+  cluster DbCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, name])
+}
+
+model DbDatabase {
+  id        String   @id @default(cuid())
+  clusterId String
+  name      String
+  createdAt DateTime @default(now())
+
+  cluster DbCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, name])
+}
+
+model DbBackup {
+  id          String         @id @default(cuid())
+  clusterId   String
+  /// scheduled | manual
+  kind        String         @default("scheduled")
+  status      DbBackupStatus @default(running)
+  sizeBytes   BigInt?
+  label       String?
+  startedAt   DateTime       @default(now())
+  completedAt DateTime?
+  error       String?
+
+  cluster DbCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
 }

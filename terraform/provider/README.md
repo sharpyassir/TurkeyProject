@@ -11,6 +11,7 @@ Manage pgcloud from Terraform or OpenTofu. Built on terraform-plugin-framework a
 | resource | `pgcloud_dns_record` | one record; `name` relative to the zone |
 | resource | `pgcloud_bucket` | S3 compatible bucket; `public` toggles anonymous read |
 | resource | `pgcloud_storage_key` | S3 access key pair, secret in state |
+| resource | `pgcloud_database` | managed PostgreSQL cluster; connection outputs, `password` and `uri` sensitive |
 | resource | `pgcloud_firewall` | rules as `rule` blocks; a rule change replaces the firewall |
 | resource | `pgcloud_ssh_key` | public key on the account |
 | data | `pgcloud_sizes` | sizes with vCPU, memory, disk and transfer |

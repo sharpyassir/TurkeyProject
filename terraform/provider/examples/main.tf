@@ -80,6 +80,14 @@ resource "pgcloud_storage_key" "ci" {
   name = "ci"
 }
 
+resource "pgcloud_database" "main" {
+  name            = "app-db"
+  engine          = "postgres"
+  size            = "s-1vcpu-2gb"
+  nodes           = 3
+  trusted_sources = ["${pgcloud_server.web.ipv4_address}/32"]
+}
+
 output "address" {
   value = pgcloud_server.web.ipv4_address
 }

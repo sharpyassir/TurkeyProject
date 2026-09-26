@@ -67,7 +67,7 @@ func (p *pgcloudProvider) Configure(ctx context.Context, req provider.ConfigureR
 }
 
 func (p *pgcloudProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewServerResource, NewVolumeResource, NewLoadBalancerResource, NewDomainResource, NewDnsRecordResource, NewBucketResource, NewStorageKeyResource, NewFirewallResource, NewSshKeyResource}
+	return []func() resource.Resource{NewServerResource, NewVolumeResource, NewLoadBalancerResource, NewDomainResource, NewDnsRecordResource, NewBucketResource, NewStorageKeyResource, NewDatabaseResource, NewFirewallResource, NewSshKeyResource}
 }
 
 func (p *pgcloudProvider) DataSources(_ context.Context) []func() datasource.DataSource {

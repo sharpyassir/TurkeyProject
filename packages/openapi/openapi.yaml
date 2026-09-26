@@ -37,6 +37,7 @@ tags:
   - name: load-balancers
   - name: dns
   - name: object-storage
+  - name: databases
   - name: marketplace
   - name: billing
   - name: webhooks
@@ -558,6 +559,35 @@ paths:
   /storage-keys/{id}:
     delete: { tags: [object-storage], summary: Revoke an access key, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: Revoked } } }
 
+  /databases:
+    get: { tags: [databases], summary: List managed database clusters, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/DatabaseCluster" } } } } } } } } }
+    post:
+      tags: [databases]
+      summary: Create a cluster
+      description: One node, or three nodes with automatic failover. Returns 202; the cluster becomes `active` in a few minutes. Priced per node per month.
+      parameters: [{ $ref: "#/components/parameters/idempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, engine, size], properties: { name: { type: string }, engine: { type: string, enum: [postgres, valkey, mysql] }, version: { type: string }, size: { type: string, description: A server size id with at least 1 GB of memory }, nodes: { type: integer, enum: [1, 3], default: 1 }, region: { type: string }, project: { type: string }, trustedSources: { type: array, items: { type: string } }, backupHourUtc: { type: integer, minimum: 0, maximum: 23, default: 2 } } } } } }
+      responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/DatabaseCluster" } } } } }
+  /databases/engines:
+    get: { tags: [databases], summary: Engines and versions on offer, responses: { "200": { description: OK } } }
+  /databases/{id}:
+    get: { tags: [databases], summary: Get a cluster with connection details and secrets, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DatabaseCluster" } } } }, "404": { $ref: "#/components/responses/NotFound" } } }
+    patch: { tags: [databases], summary: Change trusted sources or the backup hour, parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { trustedSources: { type: array, items: { type: string } }, backupHourUtc: { type: integer } } } } } }, responses: { "202": { description: Accepted } } }
+    delete: { tags: [databases], summary: Delete a cluster and its nodes, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted } } }
+  /databases/{id}/users:
+    post: { tags: [databases], summary: Add a user (password returned once), parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } } }, responses: { "201": { description: Created } } }
+  /databases/{id}/users/{userId}:
+    delete: { tags: [databases], summary: Delete a user, parameters: [{ $ref: "#/components/parameters/id" }, { name: userId, in: path, required: true, schema: { type: string } }], responses: { "200": { description: Deleted } } }
+  /databases/{id}/users/{userId}/reset-password:
+    post: { tags: [databases], summary: Reset a user's password (returned once), parameters: [{ $ref: "#/components/parameters/id" }, { name: userId, in: path, required: true, schema: { type: string } }], responses: { "200": { description: OK } } }
+  /databases/{id}/dbs:
+    post: { tags: [databases], summary: Add a database, parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } } }, responses: { "201": { description: Created } } }
+  /databases/{id}/dbs/{dbId}:
+    delete: { tags: [databases], summary: Remove a database from the cluster, parameters: [{ $ref: "#/components/parameters/id" }, { name: dbId, in: path, required: true, schema: { type: string } }], responses: { "200": { description: Deleted } } }
+  /databases/{id}/backups:
+    get: { tags: [databases], summary: List backups, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK } } }
+    post: { tags: [databases], summary: Take a backup now, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted } } }
+
   /apps:
     get: { tags: [marketplace], security: [], summary: List marketplace apps, parameters: [{ name: category, in: query, schema: { type: string } }], responses: { "200": { description: OK } } }
   /apps/categories:
@@ -730,7 +760,7 @@ components:
         expiresInDays: { type: integer }
     Scope:
       type: string
-      enum: [servers:read, servers:write, servers:delete, images:read, snapshots:read, snapshots:write, volumes:read, volumes:write, dns:read, dns:write, storage:read, storage:write, network:read, network:write, apps:read, billing:read, billing:write, iam:read, iam:write]
+      enum: [servers:read, servers:write, servers:delete, images:read, snapshots:read, snapshots:write, volumes:read, volumes:write, dns:read, dns:write, storage:read, storage:write, databases:read, databases:write, network:read, network:write, apps:read, billing:read, billing:write, iam:read, iam:write]
     Size:
       type: object
       properties:
@@ -783,6 +813,26 @@ components:
         region: { type: string, description: Defaults to the platform region }
         project: { type: string }
         serverId: { type: string, description: Attach right after creation }
+    DatabaseCluster:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        engine: { type: string, enum: [postgres, valkey, mysql] }
+        version: { type: string }
+        status: { type: string, enum: [creating, active, updating, failed, deleting, deleted] }
+        statusMessage: { type: string, nullable: true }
+        nodes: { type: integer }
+        size: { type: object, properties: { id: { type: string }, vcpu: { type: integer }, memoryMb: { type: integer }, diskGb: { type: integer } } }
+        port: { type: integer }
+        poolerPort: { type: integer, nullable: true }
+        trustedSources: { type: array, items: { type: string } }
+        backupHourUtc: { type: integer }
+        connection: { type: object, description: Secrets only on GET by id, properties: { host: { type: string, nullable: true }, privateHost: { type: string, nullable: true }, port: { type: integer }, database: { type: string }, user: { type: string }, password: { type: string }, ssl: { type: boolean }, uri: { type: string, nullable: true }, privateUri: { type: string, nullable: true }, appUri: { type: string, nullable: true } } }
+        users: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string }, password: { type: string } } } }
+        databases: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string } } } }
+        nodeStatus: { type: array, items: { type: object, properties: { index: { type: integer }, status: { type: string }, role: { type: string }, appliedVersion: { type: integer }, lagBytes: { type: integer, nullable: true }, lastSeenAt: { type: string, nullable: true } } } }
+        createdAt: { type: string, format: date-time }
     Bucket:
       type: object
       properties:

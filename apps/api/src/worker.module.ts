@@ -12,10 +12,11 @@ import { MailModule } from './common/mail/mail.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { TemporalModule } from './common/temporal/temporal.module';
 import { LbModule } from './modules/lb/lb.module';
+import { DatabasesModule } from './modules/databases/db.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 
 /** Dependency graph for the worker process: no HTTP, no controllers. */
 @Module({
-  imports: [PrismaModule, NatsModule, RedisModule, MailModule, DriversModule, IamModule, EventsModule, SchedulerModule, NetworkModule, BillingModule, MonitoringModule, TemporalModule, ApprovalsModule, LbModule],
+  imports: [PrismaModule, NatsModule, RedisModule, MailModule, DriversModule, IamModule, EventsModule, SchedulerModule, NetworkModule, BillingModule, MonitoringModule, TemporalModule, ApprovalsModule, LbModule, DatabasesModule],
 })
 export class WorkerModule {}

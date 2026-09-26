@@ -101,6 +101,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Scheduler: least-loaded placement, anti-affinity, capacity from heartbeats | ✅ |
 | Network: public IP pool, host-enforced firewalls | ✅ (VPCs, LBs, DNS: phase 2) |
 | Storage: snapshots | ✅ (backups: phase 2) |
+| Managed databases: PostgreSQL clusters (1 or 3 nodes with Patroni failover), VIP that follows the primary, pgBouncer, TLS, users and databases, trusted sources, nightly pgBackRest backups to object storage with WAL archiving, per node pricing, console, CLI, SDKs, Terraform | ✅ (Valkey and MySQL: engines wired, agents to do) |
 | Object storage: S3 compatible buckets on Ceph RGW (fake in dev), access keys, presigned upload and download, bucket browser in the console, per GB pricing, CLI, SDKs, Terraform | ✅ |
 | DNS: hosted zones with every record type, PowerDNS backend with a fake for dev, zone file export, reverse DNS for public IPs, CLI, SDKs, Terraform | ✅ |
 | Load balancers: managed HAProxy nodes with a shared IP (keepalived), forwarding rules, health checks, sticky sessions, Let's Encrypt and uploaded certificates, tag based targets, CLI, SDKs, Terraform | ✅ |
@@ -117,7 +118,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Payments: Moyasar checkout (mada, Visa, Mastercard, Apple Pay) in SAR or USD, credit top up, invoice pay, invoice PDF, built in test page | ✅ |
 | Monitoring: per minute metrics from the host agent, graphs on the server page, alert rules with email and webhook, incidents | ✅ |
 | SDKs: TypeScript (types generated from OpenAPI) and Python, both with tests | ✅ |
-| Terraform provider: server, volume, load balancer, domain, DNS record, bucket, storage key, firewall, SSH key resources; sizes and images data sources | ✅ (registry publishing: to do) |
+| Terraform provider: server, volume, load balancer, domain, DNS record, bucket, storage key, database, firewall, SSH key resources; sizes and images data sources | ✅ (registry publishing: to do) |
 
 ### Local dev without Docker
 

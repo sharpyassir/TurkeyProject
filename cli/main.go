@@ -100,6 +100,8 @@ func main() {
 		err = cmdDomains(rest)
 	case "buckets", "storage":
 		err = cmdBuckets(rest)
+	case "databases", "db":
+		err = cmdDatabases(rest)
 	case "tokens":
 		err = cmdTokens(rest)
 	case "firewalls":
@@ -129,6 +131,8 @@ ACCOUNT   login · logout · whoami · billing [invoices|payments|topup AMOUNT|p
 AGENTS    approvals [ls | approve ID | deny ID --reason TEXT]   (requests parked by agent tokens)
 LBS       load-balancers [ls | create NAME --rule http:80:80 [--rule https:443:80:CERT_ID] [--server ID ...] [--tag T] [--nodes 2] [--wait] | get ID | add ID SERVER_ID | remove ID SERVER_ID | delete ID]
           certificates [ls | add NAME --le example.com,www.example.com | add NAME --cert FILE --key FILE | delete ID]
+DATABASES databases [ls | create NAME --size S [--engine postgres] [--nodes 1|3] [--trusted CIDR,...] [--wait] | get ID | users ID [ls | add NAME | rm USER_ID] | dbs ID [ls | add NAME | rm DB_ID]
+                     | trusted ID CIDR,... | backups ID [ls | now] | delete ID]
 STORAGE   buckets [ls | create NAME [--public] | get NAME | ls NAME [--prefix P] | upload NAME FILE [--key K] | download NAME KEY [--out FILE] | rm NAME KEY | public NAME on|off | delete NAME]
           buckets keys [ls | create NAME | revoke ID]
 DNS       domains [ls | add NAME [--ip A.B.C.D] | get NAME | zone-file NAME | delete NAME]
@@ -1223,6 +1227,153 @@ func cmdCertificates(args []string) error {
 		return nil
 	}
 	return errors.New("usage: pgcloud certificates [ls | add ... | delete ID]")
+}
+
+func cmdDatabases(args []string) error {
+	if len(args) == 0 || args[0] == "ls" {
+		return cmdList("/v1/databases", nil, []string{"name", "engine", "status", "nodes", "id"})
+	}
+	usage := errors.New("usage: pgcloud databases [ls | create NAME --size S [--engine postgres] [--nodes 1|3] [--trusted CIDRS] [--wait] | get ID | users ID ... | dbs ID ... | trusted ID CIDRS | backups ID [ls|now] | delete ID]")
+	var c map[string]any
+	switch args[0] {
+	case "create":
+		if len(args) < 2 {
+			return usage
+		}
+		size, rest := flag(args[2:], "--size")
+		engine, rest := flag(rest, "--engine")
+		nodes, rest := flag(rest, "--nodes")
+		trusted, rest := flag(rest, "--trusted")
+		wait := hasFlag(rest, "--wait")
+		if size == "" {
+			return errors.New("--size is required (a server size with at least 1 GB of memory)")
+		}
+		body := map[string]any{"name": args[1], "engine": or(engine, "postgres"), "size": size}
+		if nodes != "" {
+			var n int
+			fmt.Sscanf(nodes, "%d", &n)
+			body["nodes"] = n
+		}
+		if trusted != "" {
+			body["trustedSources"] = strings.Split(trusted, ",")
+		}
+		if err := call(http.MethodPost, "/v1/databases", body, &c); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ database %s is being created (%s)\n", c["name"], c["id"])
+		if wait {
+			id := c["id"].(string)
+			for i := 0; i < 300; i++ {
+				time.Sleep(5 * time.Second)
+				if err := call(http.MethodGet, "/v1/databases/"+id, nil, &c); err != nil {
+					return err
+				}
+				if c["status"] == "active" || c["status"] == "failed" {
+					break
+				}
+			}
+			fmt.Fprintf(stdout, "  status: %v %v\n", c["status"], orEmpty(c["statusMessage"]))
+			if conn, ok := c["connection"].(map[string]any); ok && c["status"] == "active" {
+				fmt.Fprintf(stdout, "  %v\n", conn["uri"])
+			}
+		}
+	case "get":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodGet, "/v1/databases/"+args[1], nil, &c); err != nil {
+			return err
+		}
+		if jsonOut {
+			return printJSON(c)
+		}
+		conn, _ := c["connection"].(map[string]any)
+		fmt.Fprintf(stdout, "%s  %v %v  %v  nodes=%v  config v%v\n", c["name"], c["engine"], c["version"], c["status"], c["nodes"], c["configVersion"])
+		fmt.Fprintf(stdout, "  host %v (private %v) port %v pooler %v\n  admin %v / %v\n  uri %v\n", conn["host"], conn["privateHost"], conn["port"], orEmpty(c["poolerPort"]), conn["user"], conn["password"], conn["uri"])
+		if ns, ok := c["nodeStatus"].([]any); ok {
+			for _, n := range ns {
+				m := n.(map[string]any)
+				fmt.Fprintf(stdout, "  node %v  %v  %v\n", m["index"], m["status"], m["role"])
+			}
+		}
+	case "users", "dbs":
+		if len(args) < 2 {
+			return usage
+		}
+		kind := args[0]
+		if len(args) < 3 || args[2] == "ls" {
+			if err := call(http.MethodGet, "/v1/databases/"+args[1], nil, &c); err != nil {
+				return err
+			}
+			rows := []map[string]any{}
+			for _, u := range c[map[string]string{"users": "users", "dbs": "databases"}[kind]].([]any) {
+				rows = append(rows, u.(map[string]any))
+			}
+			table(rows, []string{"name", "id"})
+			return nil
+		}
+		switch args[2] {
+		case "add":
+			if len(args) < 4 {
+				return usage
+			}
+			var r map[string]any
+			if err := call(http.MethodPost, "/v1/databases/"+args[1]+"/"+kind, map[string]any{"name": args[3]}, &r); err != nil {
+				return err
+			}
+			if kind == "users" {
+				fmt.Fprintf(stdout, "✓ user %v created, password (shown once): %v\n", r["name"], r["password"])
+			} else {
+				fmt.Fprintf(stdout, "✓ database %v created\n", r["name"])
+			}
+		case "rm", "delete":
+			if len(args) < 4 {
+				return usage
+			}
+			if err := call(http.MethodDelete, "/v1/databases/"+args[1]+"/"+kind+"/"+args[3], nil, nil); err != nil {
+				return err
+			}
+			fmt.Fprintln(stdout, "✓ deleted")
+		default:
+			return usage
+		}
+	case "trusted":
+		if len(args) < 3 {
+			return usage
+		}
+		list := []string{}
+		if args[2] != "none" {
+			list = strings.Split(args[2], ",")
+		}
+		if err := call(http.MethodPatch, "/v1/databases/"+args[1], map[string]any{"trustedSources": list}, &c); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ trusted sources: %v\n", c["trustedSources"])
+	case "backups":
+		if len(args) < 2 {
+			return usage
+		}
+		if len(args) > 2 && args[2] == "now" {
+			var r map[string]any
+			if err := call(http.MethodPost, "/v1/databases/"+args[1]+"/backups", map[string]any{}, &r); err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "✓ backup %v started\n", r["id"])
+			return nil
+		}
+		return cmdList("/v1/databases/"+args[1]+"/backups", nil, []string{"label", "kind", "status", "sizeBytes", "startedAt"})
+	case "delete":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodDelete, "/v1/databases/"+args[1], nil, nil); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "✓ deleting")
+	default:
+		return usage
+	}
+	return nil
 }
 
 func cmdBuckets(args []string) error {

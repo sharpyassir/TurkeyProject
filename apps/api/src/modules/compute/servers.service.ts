@@ -114,7 +114,8 @@ export class ServersService {
     }
 
     // Quotas
-    const usage = await this.prisma.server.aggregate({ where: { projectId: project.id, deletedAt: null, status: { notIn: ['deleted', 'failed'] } }, _count: true, _sum: { vcpu: true, memoryMb: true } });
+    // Platform owned nodes (load balancers, databases) do not count against the customer's server quota.
+    const usage = await this.prisma.server.aggregate({ where: { projectId: project.id, deletedAt: null, managedBy: null, status: { notIn: ['deleted', 'failed'] } }, _count: true, _sum: { vcpu: true, memoryMb: true } });
     if (usage._count >= project.quotaServers) throw ApiError.quota(`Project server quota (${project.quotaServers}) reached`);
     if ((usage._sum.vcpu ?? 0) + size.vcpu > project.quotaVcpu) throw ApiError.quota(`Project vCPU quota (${project.quotaVcpu}) reached`);
     if ((usage._sum.memoryMb ?? 0) + size.memoryMb > project.quotaMemoryMb) throw ApiError.quota(`Project memory quota (${project.quotaMemoryMb} MB) reached`);

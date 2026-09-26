@@ -385,6 +385,35 @@ server.registerTool('create_storage_key', {
   inputSchema: { name: z.string(), project: z.string().optional() },
 }, async (input) => run(() => api('POST', '/v1/storage-keys', input)));
 
+server.registerTool('list_databases', {
+  title: 'List managed databases',
+  description: 'Managed database clusters in the project. Pass id to get one cluster with its connection string and passwords (hand those to the user, do not echo them needlessly).',
+  inputSchema: { id: z.string().optional(), project: z.string().optional() },
+}, async ({ id, project }) => run(() => id ? api('GET', `/v1/databases/${id}`) : api('GET', `/v1/databases${project ? `?project=${encodeURIComponent(project)}` : ''}`)));
+
+server.registerTool('create_database', {
+  title: 'Create a managed database',
+  description: 'Creates a PostgreSQL cluster we operate (pgvector included): 1 node, or 3 nodes with automatic failover. size is a server size id with at least 1 GB of memory; billed per node per month. Ready in a few minutes; poll list_databases with the id until status is active.',
+  inputSchema: { name: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/), engine: z.enum(['postgres', 'valkey', 'mysql']).optional(), size: z.string(), nodes: z.union([z.literal(1), z.literal(3)]).optional(), trustedSources: z.array(z.string()).optional(), project: z.string().optional() },
+}, async (input) => run(() => api('POST', '/v1/databases', { ...input, engine: input.engine ?? 'postgres' })));
+
+server.registerTool('database_admin', {
+  title: 'Manage users, databases, trusted sources or backups of a cluster',
+  description: 'action add_user or add_database needs name; delete_user needs userId; delete_database needs dbId; set_trusted_sources needs trustedSources; backup_now takes nothing; delete_cluster destroys the cluster.',
+  inputSchema: { databaseId: z.string(), action: z.enum(['add_user', 'delete_user', 'add_database', 'delete_database', 'set_trusted_sources', 'backup_now', 'delete_cluster']), name: z.string().optional(), userId: z.string().optional(), dbId: z.string().optional(), trustedSources: z.array(z.string()).optional() },
+}, async ({ databaseId, action, name, userId, dbId, trustedSources }) => run(async () => {
+  const base = `/v1/databases/${databaseId}`;
+  switch (action) {
+    case 'add_user': return api('POST', `${base}/users`, { name });
+    case 'delete_user': return api('DELETE', `${base}/users/${userId}`);
+    case 'add_database': return api('POST', `${base}/dbs`, { name });
+    case 'delete_database': return api('DELETE', `${base}/dbs/${dbId}`);
+    case 'set_trusted_sources': return api('PATCH', base, { trustedSources });
+    case 'backup_now': return api('POST', `${base}/backups`, {});
+    case 'delete_cluster': return api('DELETE', base);
+  }
+}));
+
 /* ───────────────────────── start ───────────────────────── */
 
 const transport = new StdioServerTransport();

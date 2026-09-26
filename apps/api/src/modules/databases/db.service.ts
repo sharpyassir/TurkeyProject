@@ -1,0 +1,381 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
+import { isIP } from 'node:net';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { TemporalService } from '../../common/temporal/temporal.service';
+import type { Actor } from '../../common/auth/actor';
+import { ApiError } from '../../common/errors/api-error';
+import { loadConfig } from '../../config/config';
+import { IamService } from '../iam/iam.service';
+import { EventsService } from '../events/events.service';
+import { SpendService } from '../billing/spend.service';
+import { ServersService } from '../compute/servers.service';
+import { FirewallsService } from '../network/firewalls.service';
+import { IpsService } from '../network/ips.service';
+import { OBJECT_STORAGE_PROVIDER, ObjectStorageProvider } from '../storage/objects/objects.provider';
+import { renderDbCloudInit } from './cloud-init';
+import { CreateDatabaseDto, DbNameDto, ENGINE_PORTS, ENGINE_VERSIONS, UpdateDatabaseDto } from './db.dto';
+
+const NODE_IMAGE = 'ubuntu-24-04';
+/** Owner of backup buckets: not a customer project, so they are neither listed nor billed. */
+const PLATFORM_PROJECT = 'platform';
+const PRIVATE_NET = '10.0.0.0/8';
+
+const dbInclude = {
+  size: true,
+  publicIp: { select: { address: true } },
+  nodeServers: { include: { server: { select: { id: true, name: true, status: true, privateIp: true, publicIps: { select: { address: true } } } } }, orderBy: { index: 'asc' as const } },
+  users: { orderBy: { createdAt: 'asc' as const } },
+  databases: { orderBy: { createdAt: 'asc' as const } },
+} satisfies Prisma.DbClusterInclude;
+type DbRow = Prisma.DbClusterGetPayload<{ include: typeof dbInclude }>;
+
+/**
+ * Managed databases. A cluster is one or three platform owned node VMs (Server rows with
+ * managedBy = "db:<id>") plus a VIP that keepalived keeps on the primary. The service owns
+ * the desired state; workflows create the nodes and push config; a minute job reads roles,
+ * lag and backups back from the nodes. Postgres runs Patroni with etcd on the nodes,
+ * pgBouncer in front and pgBackRest to a platform bucket for nightly backups.
+ */
+@Injectable()
+export class DatabasesService {
+  private readonly log = new Logger(DatabasesService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly iam: IamService,
+    private readonly temporal: TemporalService,
+    private readonly events: EventsService,
+    private readonly spend: SpendService,
+    private readonly servers: ServersService,
+    private readonly firewalls: FirewallsService,
+    private readonly ips: IpsService,
+    @Inject(OBJECT_STORAGE_PROVIDER) private readonly storage: ObjectStorageProvider,
+  ) {}
+
+  async list(actor: Actor, project?: string) {
+    const p = await this.iam.resolveProject(actor, project);
+    const rows = await this.prisma.dbCluster.findMany({ where: { projectId: p.id, deletedAt: null }, include: dbInclude, orderBy: { createdAt: 'desc' } });
+    return { data: rows.map((c) => this.present(c, false)) };
+  }
+
+  async get(actor: Actor, id: string, project?: string) {
+    return this.present(await this.own(actor, id, project), true);
+  }
+
+  async create(actor: Actor, dto: CreateDatabaseDto) {
+    const project = await this.iam.resolveProject(actor, dto.project);
+    const region = await this.prisma.region.findUnique({ where: { id: dto.region ?? loadConfig().DEFAULT_REGION } });
+    if (!region?.available) throw ApiError.invalid(`Unknown or unavailable region "${dto.region}"`);
+    if (dto.engine !== 'postgres') throw ApiError.invalid(`${dto.engine} is not available yet; postgres is`);
+    const version = dto.version ?? ENGINE_VERSIONS[dto.engine][0];
+    if (!ENGINE_VERSIONS[dto.engine].includes(version)) throw ApiError.invalid(`Unknown ${dto.engine} version "${version}"; available: ${ENGINE_VERSIONS[dto.engine].join(', ')}`);
+    const size = await this.prisma.size.findUnique({ where: { id: dto.size } });
+    if (!size?.available || size.memoryMb < 1024) throw ApiError.invalid(`Unknown size "${dto.size}" or too small for a database (1 GB of memory at least)`);
+    if (await this.prisma.dbCluster.findFirst({ where: { projectId: project.id, name: dto.name, deletedAt: null } })) throw ApiError.conflict('name_taken', `A database named "${dto.name}" already exists in this project`);
+    const trusted = validateCidrs(dto.trustedSources ?? []);
+    const nodes = dto.nodes ?? 1;
+
+    const team = await this.prisma.team.findUniqueOrThrow({ where: { id: actor.teamId } });
+    await this.spend.assertCanSpend(actor, project.id, (await this.spend.monthlyPriceMinor('database', `db-${size.id}`, team.currency)) * nodes);
+
+    // Everything below allocates resources, so check capacity first: free IPs for the VIP and the nodes.
+    const freeIps = await this.prisma.publicIp.count({ where: { regionId: region.id, status: 'free' } });
+    if (freeIps < nodes + 1) throw ApiError.quota('Not enough public addresses in the region for this cluster right now');
+
+    const vip = await this.ips.reserve(region.id, project.id);
+    const port = ENGINE_PORTS[dto.engine];
+    const fw = await this.firewalls.create(actor, project.id, { name: `db-${dto.name}`, rules: firewallRules(port, trusted) });
+    const vmSecret = randomBytes(24).toString('base64url');
+    const cluster = await this.prisma.dbCluster.create({
+      data: {
+        projectId: project.id, regionId: region.id, name: dto.name, engine: dto.engine, version, nodes, sizeId: size.id, port,
+        adminUser: 'pgcloud_admin', adminPassword: password(), trustedSources: trusted, publicIpId: vip.id, firewallId: fw.id, vmSecret, backupHourUtc: dto.backupHourUtc ?? 2,
+        databases: { create: { name: 'defaultdb' } },
+        users: { create: { name: 'app', password: password() } },
+      },
+    });
+    // Backups go to a platform owned bucket with a key of their own.
+    try {
+      await this.storage.ensureUser(PLATFORM_PROJECT);
+      const bucket = `pgcloud-db-${cluster.id.toLowerCase()}`;
+      await this.storage.createBucket(PLATFORM_PROJECT, bucket);
+      const key = await this.storage.createKey(PLATFORM_PROJECT);
+      await this.prisma.dbCluster.update({ where: { id: cluster.id }, data: { backupBucket: bucket, backupAccessKey: key.accessKey, backupSecretKey: key.secretKey } });
+    } catch (err) {
+      this.log.warn(`backup bucket for ${cluster.id} not ready: ${(err as Error).message}`);
+    }
+    for (let i = 0; i < nodes; i++) {
+      const s = await this.servers.create(actor, { name: `db-${dto.name}-${i}`, size: size.id, image: NODE_IMAGE, project: project.id, region: region.id, firewalls: [fw.id], tags: ['managed-database'], userData: renderDbCloudInit({ engine: dto.engine, vmSecret }) });
+      await this.prisma.server.update({ where: { id: s.id }, data: { managedBy: `db:${cluster.id}` } });
+      await this.prisma.dbNode.create({ data: { clusterId: cluster.id, serverId: s.id, index: i } });
+    }
+    await this.temporal.start('createDatabase', [{ clusterId: cluster.id }], `createDatabase-${cluster.id}`);
+    await this.events.emit('database.create_requested', { databaseId: cluster.id, name: dto.name, engine: dto.engine, nodes, size: size.id }, { actor, resource: `database:${cluster.id}` });
+    return this.get(actor, cluster.id, dto.project);
+  }
+
+  async update(actor: Actor, id: string, dto: UpdateDatabaseDto, project?: string) {
+    const c = await this.own(actor, id, project);
+    if (!['active', 'updating', 'failed'].includes(c.status)) throw ApiError.invalidState(`Database is ${c.status}; wait for it to settle`);
+    const trusted = dto.trustedSources !== undefined ? validateCidrs(dto.trustedSources) : undefined;
+    await this.prisma.dbCluster.update({ where: { id }, data: { trustedSources: trusted, backupHourUtc: dto.backupHourUtc, status: 'updating', statusMessage: null, configVersion: { increment: 1 } } });
+    if (trusted && c.firewallId) await this.firewalls.replaceRules(actor, c.projectId, c.firewallId, firewallRules(c.port, trusted)).catch((err) => this.log.warn(`firewall update for ${id}: ${(err as Error).message}`));
+    await this.pushLater(id, actor);
+    return this.get(actor, id, project);
+  }
+
+  async remove(actor: Actor, id: string, project?: string) {
+    const c = await this.own(actor, id, project);
+    if (c.status === 'deleting') return { id, status: 'deleting' };
+    await this.prisma.dbCluster.update({ where: { id }, data: { status: 'deleting', statusMessage: null } });
+    await this.temporal.start('deleteDatabase', [{ clusterId: id }], `deleteDatabase-${id}`);
+    await this.events.emit('database.delete_requested', { databaseId: id }, { actor, resource: `database:${id}` });
+    return { id, status: 'deleting' };
+  }
+
+  // ---- users and databases ----
+
+  async addUser(actor: Actor, id: string, dto: DbNameDto, project?: string) {
+    const c = await this.own(actor, id, project);
+    if (['postgres', 'pgcloud_admin', 'replicator'].includes(dto.name)) throw ApiError.invalid('That user name is reserved');
+    if (c.users.some((u) => u.name === dto.name)) throw ApiError.conflict('name_taken', `User ${dto.name} already exists`);
+    if (c.users.length >= 50) throw ApiError.quota('User limit (50) reached');
+    const u = await this.prisma.dbUser.create({ data: { clusterId: id, name: dto.name, password: password() } });
+    await this.bump(id, actor);
+    return { id: u.id, name: u.name, password: u.password, createdAt: u.createdAt };
+  }
+
+  async resetUserPassword(actor: Actor, id: string, userId: string, project?: string) {
+    const c = await this.own(actor, id, project);
+    const u = c.users.find((x) => x.id === userId);
+    if (!u) throw ApiError.notFound('user', userId);
+    const updated = await this.prisma.dbUser.update({ where: { id: userId }, data: { password: password() } });
+    await this.bump(id, actor);
+    return { id: updated.id, name: updated.name, password: updated.password };
+  }
+
+  async deleteUser(actor: Actor, id: string, userId: string, project?: string) {
+    const c = await this.own(actor, id, project);
+    if (!c.users.some((x) => x.id === userId)) throw ApiError.notFound('user', userId);
+    await this.prisma.dbUser.delete({ where: { id: userId } });
+    await this.bump(id, actor);
+    return { id: userId, deleted: true };
+  }
+
+  async addDatabase(actor: Actor, id: string, dto: DbNameDto, project?: string) {
+    const c = await this.own(actor, id, project);
+    if (['postgres', 'template0', 'template1'].includes(dto.name)) throw ApiError.invalid('That database name is reserved');
+    if (c.databases.some((d) => d.name === dto.name)) throw ApiError.conflict('name_taken', `Database ${dto.name} already exists`);
+    if (c.databases.length >= 100) throw ApiError.quota('Database limit (100) reached');
+    const d = await this.prisma.dbDatabase.create({ data: { clusterId: id, name: dto.name } });
+    await this.bump(id, actor);
+    return { id: d.id, name: d.name, createdAt: d.createdAt };
+  }
+
+  async deleteDatabase(actor: Actor, id: string, dbId: string, project?: string) {
+    const c = await this.own(actor, id, project);
+    if (!c.databases.some((x) => x.id === dbId)) throw ApiError.notFound('database', dbId);
+    // The record goes; the data stays on the cluster until the customer drops it, so a slip is recoverable.
+    await this.prisma.dbDatabase.delete({ where: { id: dbId } });
+    await this.bump(id, actor);
+    return { id: dbId, deleted: true };
+  }
+
+  // ---- backups ----
+
+  async listBackups(actor: Actor, id: string, project?: string) {
+    await this.own(actor, id, project);
+    const data = await this.prisma.dbBackup.findMany({ where: { clusterId: id }, orderBy: { startedAt: 'desc' }, take: 30 });
+    return { data: data.map((b) => ({ ...b, sizeBytes: b.sizeBytes == null ? null : Number(b.sizeBytes) })) };
+  }
+
+  async startBackup(actor: Actor | null, id: string, kind: 'manual' | 'scheduled', project?: string) {
+    const c = actor ? await this.own(actor, id, project) : await this.prisma.dbCluster.findUniqueOrThrow({ where: { id }, include: dbInclude });
+    if (!['active', 'updating'].includes(c.status)) throw ApiError.invalidState(`Database is ${c.status}`);
+    if (await this.prisma.dbBackup.findFirst({ where: { clusterId: id, status: 'running', startedAt: { gt: new Date(Date.now() - 6 * 3600_000) } } })) throw ApiError.invalidState('A backup is already running');
+    const b = await this.prisma.dbBackup.create({ data: { clusterId: id, kind, label: `${kind}-${new Date().toISOString().slice(0, 16)}` } });
+    const primary = c.nodeServers.find((n) => n.role === 'primary') ?? c.nodeServers[0];
+    const ip = primary?.server.publicIps[0]?.address;
+    if (!ip) return { id: b.id, status: 'running' };
+    try {
+      const r = await fetch(`http://${ip}:9009/backup`, { method: 'POST', headers: { 'X-Pgcloud-Secret': c.vmSecret, 'content-type': 'application/json' }, body: JSON.stringify({ id: b.id }), signal: AbortSignal.timeout(8000) });
+      if (!r.ok) throw new Error(`node answered ${r.status}`);
+    } catch (err) {
+      // Nodes unreachable (or fake): the minute job will not find a result and marks it failed after six hours.
+      this.log.debug(`backup ${b.id} not accepted yet: ${(err as Error).message}`);
+    }
+    if (actor) await this.events.emit('database.backup_requested', { databaseId: id, backupId: b.id }, { actor, resource: `database:${id}` });
+    return { id: b.id, status: 'running' };
+  }
+
+  // ---- called by workflows and jobs ----
+
+  /** Renders the node configuration and POSTs it to every node. */
+  async pushConfig(id: string): Promise<{ applied: number; nodes: number }> {
+    const c = await this.prisma.dbCluster.findUnique({ where: { id }, include: { ...dbInclude, publicIp: { include: { block: true } } } });
+    if (!c || c.deletedAt) return { applied: 0, nodes: 0 };
+    const cfg = loadConfig();
+    const nodes = c.nodeServers.map((n) => ({ index: n.index, name: `${c.name}-${n.index}`, ip: n.server.privateIp ?? n.server.publicIps[0]?.address ?? '127.0.0.1' }));
+    let applied = 0;
+    for (const n of c.nodeServers) {
+      const ip = n.server.publicIps[0]?.address;
+      if (!ip || n.server.status !== 'active') continue;
+      const body = {
+        version: c.configVersion,
+        engine: c.engine,
+        cluster: { name: `db-${c.name}-${c.id.slice(-6)}`, vrid: (hash(c.id) % 254) + 1, vip: c.publicIp?.address, prefix: c.publicIp ? IpsService.prefixOf(c.publicIp.block.cidr) : 24, nodes: nodes.map((x) => ({ ...x, isSelf: x.index === n.index })) },
+        admin: { user: c.adminUser, password: c.adminPassword },
+        replicationPassword: c.vmSecret,
+        users: c.users.map((u) => ({ name: u.name, password: u.password })),
+        databases: c.databases.map((d) => d.name),
+        trustedSources: c.trustedSources.length ? c.trustedSources : undefined,
+        backup: c.backupBucket ? { endpoint: cfg.S3_ENDPOINT, region: cfg.S3_REGION, bucket: c.backupBucket, accessKey: c.backupAccessKey, secretKey: c.backupSecretKey } : null,
+        params: {},
+      };
+      try {
+        const r = await fetch(`http://${ip}:9009/config`, { method: 'POST', headers: { 'X-Pgcloud-Secret': c.vmSecret, 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(120_000) });
+        if (r.ok) {
+          applied++;
+          await this.prisma.dbNode.update({ where: { id: n.id }, data: { appliedVersion: c.configVersion, lastSeenAt: new Date() } });
+        } else {
+          const detail = await r.text().catch(() => '');
+          this.log.warn(`node ${n.server.name} rejected config v${c.configVersion}: ${r.status} ${detail.slice(0, 300)}`);
+          if (r.status === 500) throw ApiError.invalid(`Node ${n.index} could not apply the configuration: ${detail.slice(0, 300)}`);
+        }
+      } catch (err) {
+        if (err instanceof ApiError) throw err;
+        this.log.debug(`node ${n.server.name} unreachable: ${(err as Error).message}`);
+      }
+    }
+    return { applied, nodes: c.nodeServers.length };
+  }
+
+  /** Minute job: roles, lag and backup results from the nodes; retry unapplied config. */
+  async refreshAll() {
+    const clusters = await this.prisma.dbCluster.findMany({ where: { status: { in: ['active', 'updating'] }, deletedAt: null }, include: dbInclude });
+    for (const c of clusters) {
+      if (c.nodeServers.some((n) => n.appliedVersion < c.configVersion && n.server.status === 'active')) await this.pushConfig(c.id).catch((err) => this.log.warn(`push for ${c.id}: ${(err as Error).message}`));
+      const previousPrimary = c.nodeServers.find((n) => n.role === 'primary')?.index;
+      let newPrimary: number | undefined;
+      for (const n of c.nodeServers) {
+        const ip = n.server.publicIps[0]?.address;
+        if (!ip || n.server.status !== 'active') continue;
+        try {
+          const r = await fetch(`http://${ip}:9009/status`, { signal: AbortSignal.timeout(4000) }).then((x) => x.json() as Promise<{ version: number; role: string; lagBytes: number | null; backups: { id: string; status: string; sizeBytes?: number; completedAt?: number; error?: string | null }[] }>);
+          await this.prisma.dbNode.update({ where: { id: n.id }, data: { role: r.role, lagBytes: r.lagBytes ?? null, lastSeenAt: new Date(), appliedVersion: r.version } });
+          if (r.role === 'primary') newPrimary = n.index;
+          for (const b of r.backups ?? []) {
+            if (b.status === 'running') continue;
+            const row = await this.prisma.dbBackup.findUnique({ where: { id: b.id } });
+            if (!row || row.status !== 'running') continue;
+            await this.prisma.dbBackup.update({ where: { id: b.id }, data: { status: b.status === 'completed' ? 'completed' : 'failed', sizeBytes: b.sizeBytes ?? null, completedAt: b.completedAt ? new Date(b.completedAt * 1000) : new Date(), error: b.error ?? null } });
+            await this.emit(b.status === 'completed' ? 'database.backup_completed' : 'database.backup_failed', c, { backupId: b.id, sizeBytes: b.sizeBytes ?? null });
+          }
+        } catch {
+          /* unreachable: keep last known state */
+        }
+      }
+      if (newPrimary !== undefined && previousPrimary !== undefined && newPrimary !== previousPrimary) await this.emit('database.failover', c, { from: previousPrimary, to: newPrimary });
+      if (c.status === 'updating' && c.nodeServers.every((n) => n.appliedVersion >= c.configVersion)) await this.prisma.dbCluster.update({ where: { id: c.id }, data: { status: 'active' } });
+      // Backups that never reported within six hours count as failed.
+      await this.prisma.dbBackup.updateMany({ where: { clusterId: c.id, status: 'running', startedAt: { lt: new Date(Date.now() - 6 * 3600_000) } }, data: { status: 'failed', error: 'no result from the node', completedAt: new Date() } });
+    }
+  }
+
+  /** Hourly job: start the scheduled backup for clusters whose hour it is. */
+  async scheduledBackups(now = new Date()) {
+    const hour = now.getUTCHours();
+    const clusters = await this.prisma.dbCluster.findMany({ where: { status: 'active', deletedAt: null, backupHourUtc: hour }, select: { id: true } });
+    let started = 0;
+    for (const c of clusters) {
+      const recent = await this.prisma.dbBackup.findFirst({ where: { clusterId: c.id, kind: 'scheduled', startedAt: { gt: new Date(now.getTime() - 20 * 3600_000) } } });
+      if (recent) continue;
+      await this.startBackup(null, c.id, 'scheduled').then(() => started++).catch((err) => this.log.warn(`scheduled backup for ${c.id}: ${(err as Error).message}`));
+    }
+    return started;
+  }
+
+  // ---- helpers ----
+
+  private async own(actor: Actor, id: string, project?: string) {
+    const p = await this.iam.resolveProject(actor, project);
+    const c = await this.prisma.dbCluster.findFirst({ where: { id, projectId: p.id, deletedAt: null }, include: dbInclude });
+    if (!c) throw ApiError.notFound('database', id);
+    return c;
+  }
+
+  private async bump(id: string, actor: Actor) {
+    await this.prisma.dbCluster.update({ where: { id }, data: { configVersion: { increment: 1 }, status: 'updating' } });
+    await this.pushLater(id, actor);
+  }
+
+  private async pushLater(id: string, actor: Actor) {
+    await this.temporal.start('updateDatabase', [{ clusterId: id }], `updateDatabase-${id}-${Date.now()}`);
+    await this.events.emit('database.update_requested', { databaseId: id }, { actor, resource: `database:${id}` });
+  }
+
+  private async emit(name: string, c: { id: string; name: string; projectId: string }, payload: Record<string, unknown>) {
+    const teamId = (await this.prisma.project.findUnique({ where: { id: c.projectId }, select: { teamId: true } }))?.teamId;
+    await this.events.emit(name, { databaseId: c.id, name: c.name, ...payload }, { teamId, resource: `database:${c.id}` });
+  }
+
+  present(c: DbRow, withSecrets: boolean) {
+    const host = c.publicIp?.address ?? null;
+    const primary = c.nodeServers.find((n) => n.role === 'primary') ?? c.nodeServers[0];
+    const privateHost = primary?.server.privateIp ?? null;
+    const app = c.users[0];
+    const db = c.databases[0]?.name ?? 'defaultdb';
+    const uri = (h: string | null, user: string, pw: string) => (h ? `${c.engine === 'postgres' ? 'postgresql' : c.engine === 'mysql' ? 'mysql' : 'redis'}://${user}:${pw}@${h}:${c.port}/${db}${c.engine === 'postgres' ? '?sslmode=require' : ''}` : null);
+    return {
+      id: c.id, name: c.name, engine: c.engine, version: c.version, status: c.status, statusMessage: c.statusMessage, regionId: c.regionId, projectId: c.projectId,
+      nodes: c.nodes, size: { id: c.size.id, vcpu: c.size.vcpu, memoryMb: c.size.memoryMb, diskGb: c.size.diskGb }, port: c.port, poolerPort: c.engine === 'postgres' ? 6432 : null,
+      trustedSources: c.trustedSources, backupHourUtc: c.backupHourUtc, configVersion: c.configVersion,
+      connection: withSecrets ? { host, privateHost, port: c.port, database: db, user: c.adminUser, password: c.adminPassword, ssl: c.engine === 'postgres', uri: uri(host, c.adminUser, c.adminPassword), privateUri: uri(privateHost, c.adminUser, c.adminPassword), appUri: app ? uri(host, app.name, app.password) : null } : { host, privateHost, port: c.port, database: db },
+      users: c.users.map((u) => ({ id: u.id, name: u.name, ...(withSecrets ? { password: u.password } : {}), createdAt: u.createdAt })),
+      databases: c.databases.map((d) => ({ id: d.id, name: d.name, createdAt: d.createdAt })),
+      nodeStatus: c.nodeServers.map((n) => ({ index: n.index, status: n.server.status, role: n.role, appliedVersion: n.appliedVersion, lagBytes: n.lagBytes == null ? null : Number(n.lagBytes), lastSeenAt: n.lastSeenAt })),
+      createdAt: c.createdAt,
+    };
+  }
+}
+
+function firewallRules(port: number, trusted: string[]) {
+  const cidrs = trusted.length ? trusted : ['0.0.0.0/0', '::/0'];
+  return [
+    { direction: 'inbound' as const, protocol: 'tcp' as const, ports: '22', cidrs: [process.env.CONTROL_PLANE_CIDR ?? '0.0.0.0/0'], description: 'platform ssh' },
+    { direction: 'inbound' as const, protocol: 'tcp' as const, ports: String(port), cidrs },
+    ...(port === 5432 ? [{ direction: 'inbound' as const, protocol: 'tcp' as const, ports: '6432', cidrs, description: 'connection pooler' }] : []),
+    { direction: 'inbound' as const, protocol: 'tcp' as const, ports: '2379-2380', cidrs: [PRIVATE_NET], description: 'cluster consensus' },
+    { direction: 'inbound' as const, protocol: 'tcp' as const, ports: '8008', cidrs: [PRIVATE_NET], description: 'cluster api' },
+    { direction: 'inbound' as const, protocol: 'tcp' as const, ports: String(port), cidrs: [PRIVATE_NET], description: 'replication' },
+    { direction: 'inbound' as const, protocol: 'tcp' as const, ports: '9009', cidrs: [process.env.CONTROL_PLANE_CIDR ?? '0.0.0.0/0'], description: 'pgcloud database agent' },
+    { direction: 'outbound' as const, protocol: 'any' as const, cidrs: ['0.0.0.0/0'] },
+  ];
+}
+
+function validateCidrs(list: string[]) {
+  const out: string[] = [];
+  for (const raw of list) {
+    const v = raw.trim();
+    const [ip, prefix] = v.split('/');
+    const fam = isIP(ip);
+    if (!fam) throw ApiError.invalid(`"${raw}" is not an IP or CIDR`);
+    const max = fam === 4 ? 32 : 128;
+    const p = prefix === undefined ? max : Number(prefix);
+    if (!Number.isInteger(p) || p < 0 || p > max) throw ApiError.invalid(`"${raw}" has an invalid prefix length`);
+    out.push(`${ip}/${p}`);
+  }
+  return [...new Set(out)];
+}
+
+function password() {
+  return randomBytes(18).toString('base64url');
+}
+
+function hash(s: string) {
+  let h = 0;
+  for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h;
+}

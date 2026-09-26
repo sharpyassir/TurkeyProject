@@ -284,6 +284,49 @@ export async function deleteLoadBalancer(input: { lbId: string }): Promise<void>
   }
 }
 
+// ---- managed databases ----
+
+export async function createDatabase(input: { clusterId: string }): Promise<void> {
+  const { clusterId } = input;
+  try {
+    await slow.dbWaitNodes(clusterId);
+    await slow.dbPushConfig(clusterId);
+    await act.dbSetStatus(clusterId, 'active');
+    await act.emitDb('database.created', clusterId, {});
+  } catch (err) {
+    const message = describe(err);
+    await act.dbSetStatus(clusterId, 'failed', `create failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function updateDatabase(input: { clusterId: string }): Promise<void> {
+  const { clusterId } = input;
+  try {
+    const r = await slow.dbPushConfig(clusterId);
+    if (r.applied === r.nodes) await act.dbSetStatus(clusterId, 'active');
+    await act.emitDb('database.updated', clusterId, { applied: r.applied, nodes: r.nodes });
+  } catch (err) {
+    const message = describe(err);
+    await act.dbSetStatus(clusterId, 'active', `update failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function deleteDatabase(input: { clusterId: string }): Promise<void> {
+  const { clusterId } = input;
+  try {
+    await act.dbDeleteNodes(clusterId);
+    await slow.dbWaitNodesGone(clusterId);
+    await act.dbFinalizeDelete(clusterId);
+    await act.emitDb('database.deleted', clusterId, {});
+  } catch (err) {
+    const message = describe(err);
+    await act.dbSetStatus(clusterId, 'failed', `delete failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
 function describe(err: unknown): string {
   if (err && typeof err === 'object' && 'cause' in err && (err as { cause?: { message?: string } }).cause?.message) {
     return (err as { cause: { message: string } }).cause.message;

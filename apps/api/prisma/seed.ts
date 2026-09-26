@@ -38,6 +38,12 @@ async function main() {
     const exists = await prisma.price.findFirst({ where: { resourceType: 'server', sku: s.id, currency: 'USD', validTo: null } });
     if (!exists) await prisma.price.create({ data: { resourceType: 'server', sku: s.id, sizeId: s.id, currency: 'USD', monthlyMinor: s.usd, validFrom: PRICE_VALID_FROM } });
   }
+  // Managed database nodes: twice the plan price of the same size, per node.
+  for (const s of SIZES) {
+    const sku = `db-${s.id}`;
+    const exists = await prisma.price.findFirst({ where: { resourceType: 'database', sku, currency: 'USD', validTo: null } });
+    if (!exists) await prisma.price.create({ data: { resourceType: 'database', sku, sizeId: s.id, currency: 'USD', monthlyMinor: s.usd * 2, validFrom: PRICE_VALID_FROM } });
+  }
   for (const [sku, type, usd] of [
     ['public_ip', 'public_ip', 300],
     ['snapshot_gb', 'snapshot', 6],
@@ -108,7 +114,7 @@ async function main() {
     await prisma.credit.create({ data: { teamId: team.id, kind: 'promo', currency: 'SAR', amountMinor: 37500, remainingMinor: 37500, reason: 'dev seed ($100 at 3.75)' } });
     const raw = 'pgc_' + randomBytes(32).toString('base64url');
     await prisma.apiToken.create({
-      data: { teamId: team.id, userId: user.id, name: 'dev', prefix: raw.slice(0, 12), hash: createHash('sha256').update(raw).digest('hex'), scopes: ['servers:read', 'servers:write', 'servers:delete', 'images:read', 'snapshots:read', 'snapshots:write', 'volumes:read', 'volumes:write', 'dns:read', 'dns:write', 'storage:read', 'storage:write', 'network:read', 'network:write', 'apps:read', 'billing:read', 'billing:write', 'iam:read', 'iam:write'] },
+      data: { teamId: team.id, userId: user.id, name: 'dev', prefix: raw.slice(0, 12), hash: createHash('sha256').update(raw).digest('hex'), scopes: ['servers:read', 'servers:write', 'servers:delete', 'images:read', 'snapshots:read', 'snapshots:write', 'volumes:read', 'volumes:write', 'dns:read', 'dns:write', 'storage:read', 'storage:write', 'databases:read', 'databases:write', 'network:read', 'network:write', 'apps:read', 'billing:read', 'billing:write', 'iam:read', 'iam:write'] },
     });
     const admin = 'pgc_' + randomBytes(32).toString('base64url');
     await prisma.apiToken.create({ data: { teamId: team.id, userId: user.id, name: 'staff-admin', prefix: admin.slice(0, 12), hash: createHash('sha256').update(admin).digest('hex'), scopes: ['admin'] } });

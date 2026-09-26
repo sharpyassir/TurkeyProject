@@ -47,6 +47,7 @@ export interface Domain { id: string; name: string; status: string; statusMessag
 export interface Bucket { id: string; name: string; status: string; statusMessage: string | null; regionId: string; projectId: string; public: boolean; sizeBytes: number; objectCount: number; usageUpdatedAt: string | null; endpoint: string; url: string; createdAt: string }
 export interface StorageObject { key: string; size: number; lastModified: string; etag?: string }
 export interface StorageKey { id: string; name: string; accessKey: string; createdAt: string; lastUsedAt: string | null }
+export interface DatabaseCluster { id: string; name: string; engine: 'postgres' | 'valkey' | 'mysql'; version: string; status: string; statusMessage: string | null; nodes: number; size: { id: string; vcpu: number; memoryMb: number; diskGb: number }; port: number; poolerPort: number | null; trustedSources: string[]; backupHourUtc: number; connection: { host: string | null; privateHost: string | null; port: number; database: string; user?: string; password?: string; uri?: string | null; privateUri?: string | null; appUri?: string | null }; users: { id: string; name: string; password?: string }[]; databases: { id: string; name: string }[]; nodeStatus: { index: number; status: string; role: string; lagBytes: number | null }[]; createdAt: string }
 export interface SshKey { id: string; name: string; fingerprint: string; createdAt: string }
 export interface ApiToken { id: string; name: string; prefix: string; scopes: string[]; isAgent: boolean; spendCapMinor: number | null; spentThisMonthMinor: number; requireApprovalFor: string[]; expiresAt: string | null; lastUsedAt: string | null; createdAt: string }
 export interface MetricPoint { at: string; cpu: number; cpuMax?: number; memoryUsedMb: number; memoryTotalMb: number; netInBps: number; netOutBps: number; diskReadBps: number; diskWriteBps: number; diskUsedPercent?: number | null }
@@ -244,6 +245,29 @@ export class Pgcloud {
     list: () => this.request<{ data: StorageKey[]; endpoint: string; region: string }>('GET', '/v1/storage-keys', undefined, { project: this.opts.project }),
     create: (name: string) => this.request<StorageKey & { secretKey: string; endpoint: string; region: string }>('POST', '/v1/storage-keys', { name, project: this.opts.project }),
     revoke: (id: string) => this.request<{ id: string; revoked: boolean }>('DELETE', `/v1/storage-keys/${id}`),
+  };
+
+  readonly databases = {
+    list: () => this.request<List<DatabaseCluster>>('GET', '/v1/databases', undefined, { project: this.opts.project }),
+    get: (id: string) => this.request<DatabaseCluster>('GET', `/v1/databases/${id}`),
+    create: (body: { name: string; engine: 'postgres' | 'valkey' | 'mysql'; size: string; nodes?: 1 | 3; version?: string; region?: string; project?: string; trustedSources?: string[]; backupHourUtc?: number }) => this.request<DatabaseCluster>('POST', '/v1/databases', { project: this.opts.project, ...body }),
+    update: (id: string, body: { trustedSources?: string[]; backupHourUtc?: number }) => this.request<DatabaseCluster>('PATCH', `/v1/databases/${id}`, body),
+    delete: (id: string) => this.request<{ id: string; status: string }>('DELETE', `/v1/databases/${id}`),
+    addUser: (id: string, name: string) => this.request<{ id: string; name: string; password: string }>('POST', `/v1/databases/${id}/users`, { name }),
+    resetPassword: (id: string, userId: string) => this.request<{ id: string; name: string; password: string }>('POST', `/v1/databases/${id}/users/${userId}/reset-password`, {}),
+    deleteUser: (id: string, userId: string) => this.request<{ id: string; deleted: boolean }>('DELETE', `/v1/databases/${id}/users/${userId}`),
+    addDatabase: (id: string, name: string) => this.request<{ id: string; name: string }>('POST', `/v1/databases/${id}/dbs`, { name }),
+    deleteDatabase: (id: string, dbId: string) => this.request<{ id: string; deleted: boolean }>('DELETE', `/v1/databases/${id}/dbs/${dbId}`),
+    backups: (id: string) => this.request<List<{ id: string; kind: string; status: string; sizeBytes: number | null; startedAt: string; completedAt: string | null }>>('GET', `/v1/databases/${id}/backups`),
+    backupNow: (id: string) => this.request<{ id: string; status: string }>('POST', `/v1/databases/${id}/backups`, {}),
+    waitUntilActive: async (id: string, timeoutMs = 900_000) => {
+      const until = Date.now() + timeoutMs;
+      for (;;) {
+        const c = await this.databases.get(id);
+        if (['active', 'failed'].includes(c.status) || Date.now() > until) return c;
+        await sleep(5000);
+      }
+    },
   };
 
   readonly billing = {
