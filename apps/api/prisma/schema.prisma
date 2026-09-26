@@ -139,6 +139,7 @@ model Project {
   storageKeys   StorageKey[]
   dbClusters    DbCluster[]
   kubeClusters  KubeCluster[]
+  platformApps  PlatformApp[]
   apiTokens ApiToken[]
   usage     UsageRecord[]
   deployments Deployment[]
@@ -236,6 +237,8 @@ model Region {
   buckets   Bucket[]
   dbClusters DbCluster[]
   kubeClusters KubeCluster[]
+  platformApps PlatformApp[]
+  appHosts     AppHost[]
 }
 
 enum HostStatus {
@@ -380,6 +383,7 @@ model Server {
   @@index([managedBy])
   dbNode    DbNode?
   kubeNode  KubeNode?
+  appHost   AppHost?
 }
 
 enum ActionType {
@@ -589,6 +593,7 @@ enum ResourceType {
   managed_server
   support
   kubernetes
+  app_instance
 }
 
 /// Raw per-minute usage from host agents (TimescaleDB hypertable on `at`, created in
@@ -879,6 +884,7 @@ model GithubInstallation {
 
   team        Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
   deployments Deployment[]
+  platformApps PlatformApp[]
 
   @@index([teamId])
 }
@@ -1531,4 +1537,105 @@ model KubeNode {
   server  Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
 
   @@index([clusterId])
+}
+
+/// ---------------------------------------------------------------------------
+/// App Platform: containers on shared, platform owned hosts
+/// ---------------------------------------------------------------------------
+enum AppHostStatus {
+  provisioning
+  active
+  draining
+  failed
+}
+
+enum PlatformAppStatus {
+  creating
+  building
+  live
+  failed
+  stopped
+  deleting
+  deleted
+}
+
+enum AppDeployStatus {
+  queued
+  building
+  live
+  failed
+}
+
+/// A platform owned server that runs customer app containers behind Caddy.
+model AppHost {
+  id            String        @id @default(cuid())
+  regionId      String
+  serverId      String        @unique
+  status        AppHostStatus @default(provisioning)
+  /// Memory available to apps after the host's own reserve.
+  capacityMb    Int
+  vmSecret      String
+  configVersion Int           @default(1)
+  createdAt     DateTime      @default(now())
+
+  region Region        @relation(fields: [regionId], references: [id])
+  server Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  apps   PlatformApp[]
+}
+
+model PlatformApp {
+  id             String            @id @default(cuid())
+  projectId      String
+  regionId       String
+  hostId         String?
+  /// Hostname label under APPS_DOMAIN; unique across the platform.
+  slug           String            @unique
+  name           String
+  status         PlatformAppStatus @default(creating)
+  statusMessage  String?
+  repoUrl        String
+  branch         String            @default("main")
+  repoFullName   String?
+  installationId String?
+  /// Customer token for private repositories without the GitHub App.
+  gitToken       String?
+  port           Int               @default(3000)
+  envVars        Json              @default("{}")
+  /// app-xs | app-s | app-m | app-l
+  size           String            @default("app-xs")
+  instances      Int               @default(1)
+  healthPath     String?
+  customDomains  String[]          @default([])
+  lastCommit     String?
+  lastDeployAt   DateTime?
+  buildLog       String?
+  meteredSince   DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  deletedAt      DateTime?
+
+  project      Project             @relation(fields: [projectId], references: [id])
+  region       Region              @relation(fields: [regionId], references: [id])
+  host         AppHost?            @relation(fields: [hostId], references: [id], onDelete: SetNull)
+  installation GithubInstallation? @relation(fields: [installationId], references: [id], onDelete: SetNull)
+  deploys      AppDeploy[]
+
+  @@index([projectId])
+  @@index([repoFullName, branch])
+}
+
+model AppDeploy {
+  id         String          @id @default(cuid())
+  appId      String
+  status     AppDeployStatus @default(queued)
+  /// create | push | manual | config
+  trigger    String
+  commit     String?
+  log        String?
+  startedAt  DateTime        @default(now())
+  finishedAt DateTime?
+
+  app PlatformApp @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@index([appId, startedAt])
 }

@@ -379,3 +379,56 @@ export async function deleteKubernetes(input: { clusterId: string }): Promise<vo
     throw ApplicationFailure.nonRetryable(message);
   }
 }
+
+// ---- app platform ----
+
+export async function createPlatformApp(input: { appId: string; deployId: string }): Promise<void> {
+  const { appId, deployId } = input;
+  try {
+    const hostId = await act.appPlace(appId);
+    await slow.appWaitHost(hostId);
+    await act.appUpsertDns(appId);
+    await act.appSetStatus(appId, 'building');
+    await act.appPushHost(hostId);
+    const result = await slow.appWaitDeploy(appId, deployId);
+    if (result === 'failed') {
+      await act.appSetStatus(appId, 'failed', 'first build failed; see the build log');
+      await act.emitApp('app.deploy_failed', appId, { deployId });
+      return;
+    }
+    await act.appSetStatus(appId, 'live');
+    await act.emitApp('app.created', appId, { deployId });
+  } catch (err) {
+    const message = describe(err);
+    await act.appSetStatus(appId, 'failed', `create failed: ${message}`);
+    await act.emitApp('app.deploy_failed', appId, { deployId, message });
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function deployPlatformApp(input: { appId: string; deployId: string }): Promise<void> {
+  const { appId, deployId } = input;
+  try {
+    const hostId = await act.appPlace(appId);
+    await slow.appWaitHost(hostId);
+    await act.appUpsertDns(appId);
+    await act.appPushHost(hostId);
+    await slow.appWaitDeploy(appId, deployId);
+  } catch (err) {
+    const message = describe(err);
+    await act.appSetStatus(appId, 'failed', `deploy failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}
+
+export async function deletePlatformApp(input: { appId: string }): Promise<void> {
+  const { appId } = input;
+  try {
+    await act.appFinalizeDelete(appId);
+    await act.emitApp('app.deleted', appId, {});
+  } catch (err) {
+    const message = describe(err);
+    await act.appSetStatus(appId, 'failed', `delete failed: ${message}`);
+    throw ApplicationFailure.nonRetryable(message);
+  }
+}

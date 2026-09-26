@@ -412,6 +412,36 @@ server.registerTool('support_ticket', {
   }
 }));
 
+server.registerTool('list_platform_apps', {
+  title: 'List App Platform apps',
+  description: 'Apps running on the App Platform (containers on shared hosts) with status, URL, size, instances and recent deploys. Pass id for one app with its environment and domains.',
+  inputSchema: { id: z.string().optional(), project: z.string().optional() },
+}, async ({ id, project }) => run(() => id ? api('GET', `/v1/app-platform/apps/${id}`) : api('GET', `/v1/app-platform/apps${project ? `?project=${encodeURIComponent(project)}` : ''}`)));
+
+server.registerTool('create_platform_app', {
+  title: 'Create an App Platform app',
+  description: 'Push code, get a URL. Builds the repository (Dockerfile, or a detected Node, Python, Go or static project) and runs it in containers on shared hosts with TLS at https://<name>.<apps domain>. Cheaper than a server for small apps: sizes app-xs (512 MB), app-s (1 GB), app-m (2 GB), app-l (4 GB), billed per instance. Poll list_platform_apps with the id until status is live; on failed, read platform_app_admin logs.',
+  inputSchema: { name: z.string().regex(/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/), repoUrl: z.string().url().optional(), installationId: z.string().optional(), repo: z.string().optional(), branch: z.string().optional(), port: z.number().int().optional(), size: z.enum(['app-xs', 'app-s', 'app-m', 'app-l']).optional(), instances: z.number().int().min(1).max(5).optional(), env: z.record(z.string()).optional(), healthPath: z.string().optional(), project: z.string().optional() },
+}, async (input) => run(() => api('POST', '/v1/app-platform/apps', input)));
+
+server.registerTool('platform_app_admin', {
+  title: 'Manage an App Platform app',
+  description: 'deploy starts a new build; logs returns the build or runtime log; update changes branch, port, size, instances, env (whole set) or healthPath and deploys; stop and start pause and resume billing; add_domain and remove_domain manage custom domains; delete removes the app.',
+  inputSchema: { id: z.string(), action: z.enum(['deploy', 'logs', 'update', 'stop', 'start', 'add_domain', 'remove_domain', 'delete']), type: z.enum(['build', 'runtime']).optional(), domain: z.string().optional(), update: z.object({ branch: z.string().optional(), port: z.number().int().optional(), size: z.enum(['app-xs', 'app-s', 'app-m', 'app-l']).optional(), instances: z.number().int().optional(), env: z.record(z.string()).optional(), healthPath: z.string().optional() }).optional() },
+}, async ({ id, action, type, domain, update }) => run(async () => {
+  const base = `/v1/app-platform/apps/${id}`;
+  switch (action) {
+    case 'deploy': return api('POST', `${base}/deploy`, {});
+    case 'logs': return api('GET', `${base}/logs?type=${type ?? 'build'}`);
+    case 'update': return api('PATCH', base, update ?? {});
+    case 'stop': return api('POST', `${base}/stop`, {});
+    case 'start': return api('POST', `${base}/start`, {});
+    case 'add_domain': return api('POST', `${base}/domains`, { domain });
+    case 'remove_domain': return api('DELETE', `${base}/domains/${domain}`);
+    case 'delete': return api('DELETE', base);
+  }
+}));
+
 server.registerTool('list_kubernetes', {
   title: 'List Kubernetes clusters',
   description: 'Managed Kubernetes clusters in the project. Pass id for one cluster with its node pools, node readiness, endpoint, and the load balancers and volumes its Services and claims created. The kubeconfig comes from kubernetes_admin.',

@@ -14,10 +14,11 @@ import { TemporalModule } from './common/temporal/temporal.module';
 import { LbModule } from './modules/lb/lb.module';
 import { DatabasesModule } from './modules/databases/db.module';
 import { KubernetesModule } from './modules/kubernetes/k8s.module';
+import { AppPlatformModule } from './modules/app-platform/app.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 
 /** Dependency graph for the worker process: no HTTP, no controllers. */
 @Module({
-  imports: [PrismaModule, NatsModule, RedisModule, MailModule, DriversModule, IamModule, EventsModule, SchedulerModule, NetworkModule, BillingModule, MonitoringModule, TemporalModule, ApprovalsModule, LbModule, DatabasesModule, KubernetesModule],
+  imports: [PrismaModule, NatsModule, RedisModule, MailModule, DriversModule, IamModule, EventsModule, SchedulerModule, NetworkModule, BillingModule, MonitoringModule, TemporalModule, ApprovalsModule, LbModule, DatabasesModule, KubernetesModule, AppPlatformModule],
 })
 export class WorkerModule {}

@@ -17,6 +17,7 @@ import { ObjectsService } from '../modules/storage/objects/objects.service';
 import { BackupsService } from '../modules/storage/backups.service';
 import { DatabasesService } from '../modules/databases/db.service';
 import { KubernetesService } from '../modules/kubernetes/k8s.service';
+import { AppPlatformService } from '../modules/app-platform/app.service';
 
 /**
  * Periodic jobs. Each takes a Redis lock so only one API replica runs it.
@@ -44,6 +45,7 @@ export class JobsService {
     private readonly backups: BackupsService,
     private readonly databases: DatabasesService,
     private readonly kubernetes: KubernetesService,
+    private readonly appPlatform: AppPlatformService,
   ) {}
 
   @Cron('50 * * * * *') // every minute at :50: database roles, lag, backup results, config retries
@@ -54,6 +56,11 @@ export class JobsService {
   @Cron('35 * * * * *') // every minute at :35: kubernetes node state, config retries and the cloud controller
   kubernetesRefresh() {
     return this.locked('k8s-refresh', 50_000, () => this.kubernetes.refreshAll());
+  }
+
+  @Cron('25 * * * * *') // every minute at :25: app hosts that finished booting and build results
+  appPlatformRefresh() {
+    return this.locked('apps-refresh', 50_000, () => this.appPlatform.refreshAll());
   }
 
   @Cron('0 5 * * * *') // five past every hour: scheduled database backups for clusters whose hour it is

@@ -24,3 +24,4 @@ partner conversations.
 | pgcloud-managed-server.png | Managed server: the tier switch next to backups and the managed care card with the agent's last report (updates, reboot state, disk, memory, SSH bans, failed services) |
 | pgcloud-support.png, pgcloud-admin-support.png | Support: plan cards with response targets and the ticket list; back office queue with the thread and answer box |
 | pgcloud-kubernetes.png, pgcloud-kubernetes-cluster.png | Managed Kubernetes: cluster list with the create form, and one cluster with endpoint, control plane, pools with node readiness, and the load balancer and volume its manifests created |
+| pgcloud-app-platform.png, pgcloud-app-platform-app.png | App Platform: app list with the create form, and one app with source, domains, logs, configuration and deploy history |

@@ -56,6 +56,7 @@ class Pgcloud:
         self.databases = _Databases(self)
         self.support = _Support(self)
         self.kubernetes = _Kubernetes(self)
+        self.app_platform = _AppPlatform(self)
         self.storage_keys = _StorageKeys(self)
         self.certificates = _Certificates(self)
         self.billing = _Billing(self)
@@ -391,6 +392,62 @@ class _StorageKeys(_Res):
 
     def revoke(self, id: str):
         return self.c.request("DELETE", f"/v1/storage-keys/{id}")
+
+
+class _AppPlatform(_Res):
+    """App Platform: containers on shared hosts, sized and billed per instance."""
+
+    def sizes(self):
+        return self.c.request("GET", "/v1/app-platform/sizes")["data"]
+
+    def list(self):
+        return self.c.request("GET", "/v1/app-platform/apps", query={"project": self.c.project})["data"]
+
+    def get(self, id: str):
+        return self.c.request("GET", f"/v1/app-platform/apps/{id}")
+
+    def create(self, name: str, repo_url: str | None = None, **kw):
+        """Give repo_url, or installationId and repo for the GitHub App. Other keys: branch, port, size, instances, env, healthPath, gitToken."""
+        body = {"name": name, "project": self.c.project, **kw}
+        if repo_url:
+            body["repoUrl"] = repo_url
+        return self.c.request("POST", "/v1/app-platform/apps", body)
+
+    def update(self, id: str, **fields):
+        return self.c.request("PATCH", f"/v1/app-platform/apps/{id}", fields)
+
+    def deploy(self, id: str):
+        return self.c.request("POST", f"/v1/app-platform/apps/{id}/deploy", {})
+
+    def stop(self, id: str):
+        return self.c.request("POST", f"/v1/app-platform/apps/{id}/stop", {})
+
+    def start(self, id: str):
+        return self.c.request("POST", f"/v1/app-platform/apps/{id}/start", {})
+
+    def delete(self, id: str):
+        return self.c.request("DELETE", f"/v1/app-platform/apps/{id}")
+
+    def logs(self, id: str, type: str = "build"):
+        return self.c.request("GET", f"/v1/app-platform/apps/{id}/logs", query={"type": type})
+
+    def add_domain(self, id: str, domain: str):
+        return self.c.request("POST", f"/v1/app-platform/apps/{id}/domains", {"domain": domain})
+
+    def remove_domain(self, id: str, domain: str):
+        return self.c.request("DELETE", f"/v1/app-platform/apps/{id}/domains/{domain}")
+
+    def wait_until_live(self, id: str, timeout: float = 1500.0, interval: float = 5.0):
+        until = time.time() + timeout
+        while True:
+            a = self.get(id)
+            if a["status"] == "live":
+                return a
+            if a["status"] == "failed":
+                raise PgcloudError(500, "app_failed", a.get("statusMessage") or "Build failed")
+            if time.time() > until:
+                raise PgcloudError(504, "timeout", f"App {id} is still {a['status']}")
+            time.sleep(interval)
 
 
 class _Kubernetes(_Res):

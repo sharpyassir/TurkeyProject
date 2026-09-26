@@ -51,7 +51,7 @@ export class RatingService {
       // Percent prices (backups, managed tier) are a share of the server's own plan price.
       let monthlyMinor = 0;
       if (price && price.unit === 'percent') monthlyMinor = Math.round(((await this.planPriceFor(g.resourceId, hourEnd)) * fx * price.monthlyMinor) / 100);
-      else if (price) monthlyMinor = Math.round((g.unit === 'gb_minute' || g.unit === 'node_minute' ? price.monthlyMinor * (quantity / Math.max(minutes, 1)) : price.monthlyMinor) * fx);
+      else if (price) monthlyMinor = Math.round((g.unit === 'gb_minute' || g.unit === 'node_minute' || g.unit === 'instance_minute' ? price.monthlyMinor * (quantity / Math.max(minutes, 1)) : price.monthlyMinor) * fx);
 
       const charged = await this.prisma.usageRecord.aggregate({
         where: { resourceType: g.resourceType, resourceId: g.resourceId, hourStart: { gte: startOfMonth(hourStart), lt: hourStart } },
@@ -99,6 +99,10 @@ export class RatingService {
         return 'managed_pct';
       case 'kubernetes':
         return 'k8s-ha';
+      case 'app_instance': {
+        const a = await this.prisma.platformApp.findUnique({ where: { id: resourceId }, select: { size: true } });
+        return a ? a.size : null;
+      }
       case 'support': {
         const t = await this.prisma.team.findUnique({ where: { id: resourceId }, select: { supportPlan: true } });
         return t && t.supportPlan !== 'free' ? `support-${t.supportPlan}` : null;

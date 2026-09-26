@@ -39,6 +39,7 @@ tags:
   - name: object-storage
   - name: databases
   - name: kubernetes
+  - name: app-platform
   - name: marketplace
   - name: billing
   - name: support
@@ -587,6 +588,45 @@ paths:
   /storage-keys/{id}:
     delete: { tags: [object-storage], summary: Revoke an access key, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: Revoked } } }
 
+  /app-platform/sizes:
+    get: { tags: [app-platform], summary: Container sizes, responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, properties: { id: { type: string }, memoryMb: { type: integer }, cpus: { type: number } } } } } } } } } } }
+  /app-platform/apps:
+    get: { tags: [app-platform], summary: List apps, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/PlatformApp" } } } } } } } } }
+    post:
+      tags: [app-platform]
+      summary: Create an app
+      description: |
+        Push code, get a URL. Returns `202` with status `creating`; the platform picks a shared host (or starts one), builds the repository
+        (a Dockerfile at the root, or a generated one for Node, Python, Go and static projects), runs `instances` containers of `size`
+        and serves them at `https://<name>.<apps domain>` with TLS. Name the repository with `repoUrl` (and `gitToken` for a private one)
+        or with `installationId` and `repo` from the GitHub App, which also redeploys on every push. Poll until `live`; on `failed`, read the build log.
+      parameters: [{ $ref: "#/components/parameters/idempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, description: Hostname label, unique across the platform }, repoUrl: { type: string, format: uri }, installationId: { type: string }, repo: { type: string, example: acme/app }, gitToken: { type: string }, branch: { type: string, default: main }, port: { type: integer, default: 3000 }, size: { type: string, enum: [app-xs, app-s, app-m, app-l], default: app-xs }, instances: { type: integer, minimum: 1, maximum: 5, default: 1 }, env: { type: object, additionalProperties: { type: string } }, healthPath: { type: string }, region: { type: string }, project: { type: string } } } } } }
+      responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/PlatformApp" } } } }, "409": { description: Name taken (`name_taken`) } }
+  /app-platform/apps/{id}:
+    get: { tags: [app-platform], summary: Get an app, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PlatformApp" } } } }, "404": { $ref: "#/components/responses/NotFound" } } }
+    patch:
+      tags: [app-platform]
+      summary: Change configuration and deploy again
+      description: "`env` replaces the whole set. A bigger size or more instances checks the spend limit and the host's room."
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { branch: { type: string }, port: { type: integer }, size: { type: string, enum: [app-xs, app-s, app-m, app-l] }, instances: { type: integer, minimum: 1, maximum: 5 }, env: { type: object, additionalProperties: { type: string } }, healthPath: { type: string }, gitToken: { type: string } } } } } }
+      responses: { "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/PlatformApp" } } } } }
+    delete: { tags: [app-platform], summary: Delete an app, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted } } }
+  /app-platform/apps/{id}/deploy:
+    post: { tags: [app-platform], summary: Build and deploy the branch head now, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "202": { description: Accepted } } }
+  /app-platform/apps/{id}/stop:
+    post: { tags: [app-platform], summary: Stop the instances and the charge, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK } } }
+  /app-platform/apps/{id}/start:
+    post: { tags: [app-platform], summary: Start a stopped app, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK } } }
+  /app-platform/apps/{id}/deploys:
+    get: { tags: [app-platform], summary: Deploy history, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: OK } } }
+  /app-platform/apps/{id}/logs:
+    get: { tags: [app-platform], summary: Build or runtime log, description: Fetched live from the host when reachable; the build log is cached on the app otherwise. Capped at 32 KB., parameters: [{ $ref: "#/components/parameters/id" }, { name: type, in: query, schema: { type: string, enum: [build, runtime], default: build } }], responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { id: { type: string }, type: { type: string }, log: { type: string }, live: { type: boolean }, updatedAt: { type: string, format: date-time } } } } } } } }
+  /app-platform/apps/{id}/domains:
+    post: { tags: [app-platform], summary: Attach a custom domain, description: Point a CNAME at the app hostname; the certificate is issued on the first request., parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [domain], properties: { domain: { type: string } } } } } }, responses: { "200": { description: OK }, "409": { description: Domain attached to another app (`domain_taken`) } } }
+  /app-platform/apps/{id}/domains/{domain}:
+    delete: { tags: [app-platform], summary: Detach a custom domain, parameters: [{ $ref: "#/components/parameters/id" }, { name: domain, in: path, required: true, schema: { type: string } }], responses: { "200": { description: OK } } }
   /kubernetes/versions:
     get: { tags: [kubernetes], summary: Kubernetes versions on offer, responses: { "200": { description: OK } } }
   /kubernetes/clusters:
@@ -1071,6 +1111,32 @@ components:
         backupsEnabled: { type: boolean }
         managed: { type: boolean }
         managedHealth: { type: [string, "null"], enum: [ok, warn, stale, pending, null] }
+        projectId: { type: string }
+        createdAt: { type: string, format: date-time }
+    PlatformApp:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [creating, building, live, failed, stopped, deleting, deleted] }
+        statusMessage: { type: [string, "null"] }
+        url: { type: string }
+        hostname: { type: string }
+        customDomains: { type: array, items: { type: string } }
+        region: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        repoUrl: { type: string }
+        repo: { type: [string, "null"] }
+        source: { type: string, enum: [github_app, url] }
+        branch: { type: string }
+        port: { type: integer }
+        size: { type: object, properties: { id: { type: string }, memoryMb: { type: integer }, cpus: { type: number } } }
+        instances: { type: integer }
+        healthPath: { type: [string, "null"] }
+        env: { type: object, additionalProperties: { type: string } }
+        hostIp: { type: [string, "null"] }
+        lastCommit: { type: [string, "null"] }
+        lastDeployAt: { type: [string, "null"], format: date-time }
+        deploys: { type: array, items: { type: object, properties: { id: { type: string }, status: { type: string, enum: [queued, building, live, failed] }, trigger: { type: string }, commit: { type: [string, "null"] }, startedAt: { type: string, format: date-time }, finishedAt: { type: [string, "null"], format: date-time } } } }
         projectId: { type: string }
         createdAt: { type: string, format: date-time }
     KubePoolInput:

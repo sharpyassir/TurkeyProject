@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Inject, Param, Post, Req, forwardRef } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsInt, IsString } from 'class-validator';
 import type { Request } from 'express';
@@ -6,6 +6,7 @@ import { CurrentActor, Public, RequireScopes } from '../../common/auth/decorator
 import type { Actor } from '../../common/auth/actor';
 import { GithubService } from './github.service';
 import { DeployService } from '../deploy/deploy.service';
+import { AppPlatformService } from '../app-platform/app.service';
 
 class ConnectDto { @IsInt() installationId: number; @IsString() state: string; }
 
@@ -13,7 +14,7 @@ class ConnectDto { @IsInt() installationId: number; @IsString() state: string; }
 @ApiBearerAuth()
 @Controller('v1/github')
 export class GithubController {
-  constructor(private readonly github: GithubService, private readonly deploys: DeployService) {}
+  constructor(private readonly github: GithubService, private readonly deploys: DeployService, @Inject(forwardRef(() => AppPlatformService)) private readonly apps: AppPlatformService) {}
 
   /** Is the GitHub App configured on this installation of pgcloud? */
   @Get('app')
@@ -58,8 +59,10 @@ export class GithubController {
       return { ok: true };
     }
     if (event === 'push' && payload.installation && payload.repository && payload.ref?.startsWith('refs/heads/')) {
-      const n = await this.deploys.onAppPush(payload.installation.id, payload.repository.full_name, payload.ref.slice('refs/heads/'.length), payload.after);
-      return { ok: true, deploying: n };
+      const branch = payload.ref.slice('refs/heads/'.length);
+      const n = await this.deploys.onAppPush(payload.installation.id, payload.repository.full_name, branch, payload.after);
+      const apps = await this.apps.onPush(payload.installation.id, payload.repository.full_name, branch, payload.after);
+      return { ok: true, deploying: n + apps };
     }
     return { ok: true, ignored: event };
   }

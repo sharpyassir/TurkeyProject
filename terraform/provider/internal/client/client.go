@@ -460,3 +460,49 @@ func (c *Client) WaitKubernetes(ctx context.Context, id string, timeout time.Dur
 		}
 	}
 }
+
+// PlatformApp is an App Platform app as the API presents it.
+type PlatformApp struct {
+	ID            string            `json:"id"`
+	Name          string            `json:"name"`
+	Status        string            `json:"status"`
+	StatusMessage *string           `json:"statusMessage"`
+	URL           string            `json:"url"`
+	RepoURL       string            `json:"repoUrl"`
+	Branch        string            `json:"branch"`
+	Port          int               `json:"port"`
+	Instances     int               `json:"instances"`
+	Env           map[string]string `json:"env"`
+	Size          struct {
+		ID string `json:"id"`
+	} `json:"size"`
+}
+
+// WaitApp polls until the app is live or failed.
+func (c *Client) WaitApp(ctx context.Context, id string, timeout time.Duration) (*PlatformApp, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		var a PlatformApp
+		if err := c.Do(ctx, http.MethodGet, "/v1/app-platform/apps/"+id, nil, &a); err != nil {
+			return nil, err
+		}
+		switch a.Status {
+		case "live", "stopped":
+			return &a, nil
+		case "failed":
+			msg := "build failed"
+			if a.StatusMessage != nil {
+				msg = *a.StatusMessage
+			}
+			return &a, fmt.Errorf("app %s: %s", id, msg)
+		}
+		if time.Now().After(deadline) {
+			return &a, fmt.Errorf("app %s is still %s", id, a.Status)
+		}
+		select {
+		case <-ctx.Done():
+			return &a, ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+	}
+}

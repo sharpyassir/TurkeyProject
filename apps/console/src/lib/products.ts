@@ -41,7 +41,8 @@ export const PRODUCTS: Product[] = [
 
   // Core Cloud
   { slug: 'servers', name: 'Servers', group: 'Core Cloud', href: '/servers', blurb: 'KVM virtual machines in Saudi Arabia, billed hourly and capped monthly.' },
-  { slug: 'deploys', name: 'Git Deploy', group: 'Core Cloud', href: '/deploys', blurb: 'Link a GitHub repo; we build and run it, and redeploy on every push.' },
+  { slug: 'app-platform', name: 'App Platform', group: 'Core Cloud', href: '/app-platform', blurb: 'Push code, get a URL: containers on shared hosts with TLS, sized per instance, redeployed on every push.' },
+  { slug: 'deploys', name: 'Git Deploy', group: 'Core Cloud', href: '/deploys', blurb: 'Link a GitHub repo; we build and run it on your own server, and redeploy on every push.' },
   { slug: 'kubernetes', name: 'Kubernetes', group: 'Core Cloud', href: '/kubernetes', blurb: 'Clusters we bootstrap and keep healthy: node pools as servers, load balancers and volumes from Services and claims.' },
   { slug: 'public-ips', name: 'Public IPs', group: 'Core Cloud', href: '/public-ips', blurb: 'IPv4 addresses from our own blocks. Floating IPs come in phase 2.' },
   { slug: 'vpc', name: 'VPC', group: 'Core Cloud', phase: 2, blurb: 'Isolated private networks per project (VXLAN / EVPN).' },

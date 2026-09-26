@@ -1,10 +1,11 @@
 import { Logger } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import type { DbClusterStatus, KubeClusterStatus, LoadBalancerStatus, ServerStatus, VolumeStatus } from '@prisma/client';
+import type { DbClusterStatus, KubeClusterStatus, PlatformAppStatus, LoadBalancerStatus, ServerStatus, VolumeStatus } from '@prisma/client';
 import { LoadBalancersService } from '../modules/lb/lb.service';
 import { DatabasesService } from '../modules/databases/db.service';
 import { KubernetesService } from '../modules/kubernetes/k8s.service';
+import { AppPlatformService } from '../modules/app-platform/app.service';
 import { TemporalService } from '../common/temporal/temporal.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { HYPERVISOR_DRIVER, HypervisorDriver } from '../drivers/hypervisor.driver';
@@ -67,6 +68,14 @@ export interface Activities {
   k8sWaitNodesGone(clusterId: string): Promise<void>;
   k8sFinalizeDelete(clusterId: string): Promise<void>;
   emitK8s(name: string, clusterId: string, payload: Record<string, unknown>): Promise<void>;
+  appPlace(appId: string): Promise<string>;
+  appWaitHost(hostId: string): Promise<void>;
+  appPushHost(hostId: string): Promise<void>;
+  appWaitDeploy(appId: string, deployId: string): Promise<'live' | 'failed'>;
+  appSetStatus(appId: string, status: PlatformAppStatus, message?: string): Promise<void>;
+  appUpsertDns(appId: string): Promise<void>;
+  appFinalizeDelete(appId: string): Promise<void>;
+  emitApp(name: string, appId: string, payload: Record<string, unknown>): Promise<void>;
   dbFinalizeDelete(clusterId: string): Promise<void>;
   emitDb(name: string, clusterId: string, payload: Record<string, unknown>): Promise<void>;
   completeAction(actionId: string): Promise<void>;
@@ -85,6 +94,7 @@ export function createActivities(app: INestApplicationContext): Activities {
   const lbs = app.get(LoadBalancersService);
   const dbs = app.get(DatabasesService);
   const k8s = app.get(KubernetesService);
+  const apps = app.get(AppPlatformService);
   const temporal = app.get(TemporalService);
 
   /** Loads a server with everything the driver needs. Throws non-retryable if gone. */
@@ -557,6 +567,73 @@ export function createActivities(app: INestApplicationContext): Activities {
     async emitK8s(name, clusterId, payload) {
       const c = await prisma.kubeCluster.findUnique({ where: { id: clusterId }, include: { project: { select: { teamId: true } }, publicIp: { select: { address: true } } } });
       await events.emit(name, { clusterId, name: c?.name, version: c?.version, status: c?.status, host: c?.publicIp?.address, ...payload }, { teamId: c?.project.teamId, resource: `kubernetes:${clusterId}` });
+    },
+
+    // ---- app platform ----
+
+    async appPlace(appId) {
+      return wrap(apps.placeApp(appId));
+    },
+
+    async appWaitHost(hostId) {
+      const deadline = Date.now() + 20 * 60_000;
+      for (;;) {
+        Context.current().heartbeat();
+        const h = await prisma.appHost.findUnique({ where: { id: hostId }, include: { server: { select: { status: true, statusMessage: true } } } });
+        if (!h) throw nonRetryable('app host vanished');
+        if (h.server.status === 'active') {
+          if (h.status !== 'active') await prisma.appHost.update({ where: { id: hostId }, data: { status: 'active' } });
+          return;
+        }
+        if (h.server.status === 'failed') {
+          await prisma.appHost.update({ where: { id: hostId }, data: { status: 'failed' } });
+          throw nonRetryable(`app host failed: ${h.server.statusMessage ?? 'unknown error'}`);
+        }
+        if (Date.now() > deadline) throw nonRetryable('app host did not become active in 20 minutes');
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    },
+
+    async appPushHost(hostId) {
+      await wrap(apps.pushHost(hostId));
+    },
+
+    /** Poll the host until the deploy is live or failed; the minute job also folds results in. */
+    async appWaitDeploy(appId, deployId) {
+      const deadline = Date.now() + 25 * 60_000;
+      for (;;) {
+        Context.current().heartbeat();
+        const a = await prisma.platformApp.findUnique({ where: { id: appId }, include: { host: { include: { server: { select: { status: true, publicIps: { select: { address: true } } } } } }, deploys: { where: { id: deployId } } } });
+        if (!a || !a.host) throw nonRetryable('app or host vanished');
+        const st = await apps.hostStatus(a.host).catch(() => null);
+        if (st) await apps.applyReport({ id: a.id, status: a.status, deploys: a.deploys }, st.apps[a.id]);
+        const d = await prisma.appDeploy.findUnique({ where: { id: deployId } });
+        if (d?.status === 'live' || d?.status === 'failed') return d.status;
+        if (Date.now() > deadline) throw nonRetryable('build did not finish in 25 minutes');
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    },
+
+    async appSetStatus(appId, status, message) {
+      const data: Record<string, unknown> = { status, statusMessage: message ?? null };
+      if (status === 'live') data.meteredSince = (await prisma.platformApp.findUnique({ where: { id: appId }, select: { meteredSince: true } }))?.meteredSince ?? new Date();
+      await prisma.platformApp.update({ where: { id: appId }, data }).catch(() => undefined);
+    },
+
+    async appUpsertDns(appId) {
+      await apps.upsertDns(appId).catch((e) => log.warn(`dns for app ${appId}: ${(e as Error).message}`));
+    },
+
+    async appFinalizeDelete(appId) {
+      const a = await prisma.platformApp.findUnique({ where: { id: appId } });
+      if (!a) return;
+      await prisma.platformApp.update({ where: { id: appId }, data: { status: 'deleted', deletedAt: new Date(), meteredSince: null, gitToken: null, envVars: {} } });
+      if (a.hostId) await apps.pushHost(a.hostId).catch((e) => log.warn(`delete push for ${appId}: ${(e as Error).message}`));
+      await apps.removeDns(a.slug).catch(() => undefined);
+    },
+
+    async emitApp(name, appId, payload) {
+      await apps.emit(name, appId, payload);
     },
 
     async emitDb(name, clusterId, payload) {

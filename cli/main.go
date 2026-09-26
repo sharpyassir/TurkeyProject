@@ -106,6 +106,8 @@ func main() {
 		err = cmdSupport(rest)
 	case "kubernetes", "k8s":
 		err = cmdKubernetes(rest)
+	case "app":
+		err = cmdApp(rest)
 	case "tokens":
 		err = cmdTokens(rest)
 	case "firewalls":
@@ -137,6 +139,7 @@ LBS       load-balancers [ls | create NAME --rule http:80:80 [--rule https:443:8
           certificates [ls | add NAME --le example.com,www.example.com | add NAME --cert FILE --key FILE | delete ID]
 DATABASES databases [ls | create NAME --size S [--engine postgres] [--nodes 1|3] [--trusted CIDR,...] [--wait] | get ID | users ID [ls | add NAME | rm USER_ID] | dbs ID [ls | add NAME | rm DB_ID]
                      | trusted ID CIDR,... | backups ID [ls | now] | delete ID]
+APPS      app [ls | create NAME REPO_URL [--branch B] [--port P] [--size app-xs] [--instances N] [--env K=V] [--git-token T] [--wait] | get ID | deploy ID | logs ID [--runtime] [--follow] | scale ID N | env ID K=V... | domains ID [add D | rm D] | stop ID | start ID | delete ID]
 KUBERNETES kubernetes [ls | create NAME [--size S] [--count N] [--version V] [--ha] [--wait] | get ID | kubeconfig ID | pools ID [add NAME --size S --count N | scale POOL_ID N | rm POOL_ID] | delete ID]
 STORAGE   buckets [ls | create NAME [--public] | get NAME | ls NAME [--prefix P] | upload NAME FILE [--key K] | download NAME KEY [--out FILE] | rm NAME KEY | public NAME on|off | delete NAME]
           buckets keys [ls | create NAME | revoke ID]
@@ -2110,4 +2113,216 @@ func waitKubernetes(id string) error {
 		time.Sleep(10 * time.Second)
 	}
 	return errors.New("timed out waiting for the cluster")
+}
+
+// cmdApp: the App Platform (containers on shared hosts).
+func cmdApp(args []string) error {
+	if len(args) == 0 || args[0] == "ls" {
+		return cmdList("/v1/app-platform/apps", nil, []string{"name", "status", "url", "branch", "instances", "id"})
+	}
+	usage := errors.New("usage: pgcloud app [ls | create NAME REPO_URL [--branch B] [--port P] [--size app-xs] [--instances N] [--env K=V] [--git-token T] [--wait] | get ID | deploy ID | logs ID [--runtime] [--follow] | scale ID N | env ID K=V... | domains ID [add D | rm D] | stop ID | start ID | delete ID]")
+	var a map[string]any
+	switch args[0] {
+	case "create":
+		if len(args) < 3 {
+			return usage
+		}
+		branch, rest := flag(args[3:], "--branch")
+		port, rest := flag(rest, "--port")
+		size, rest := flag(rest, "--size")
+		inst, rest := flag(rest, "--instances")
+		token, rest := flag(rest, "--git-token")
+		envs, rest := multi(rest, "--env")
+		wait := hasFlag(rest, "--wait")
+		body := map[string]any{"name": args[1], "repoUrl": args[2]}
+		if branch != "" {
+			body["branch"] = branch
+		}
+		if port != "" {
+			var p int
+			fmt.Sscanf(port, "%d", &p)
+			body["port"] = p
+		}
+		if size != "" {
+			body["size"] = size
+		}
+		if inst != "" {
+			var n int
+			fmt.Sscanf(inst, "%d", &n)
+			body["instances"] = n
+		}
+		if token != "" {
+			body["gitToken"] = token
+		}
+		if len(envs) > 0 {
+			env := map[string]string{}
+			for _, kv := range envs {
+				if i := strings.Index(kv, "="); i > 0 {
+					env[kv[:i]] = kv[i+1:]
+				}
+			}
+			body["env"] = env
+		}
+		if err := call(http.MethodPost, "/v1/app-platform/apps", body, &a); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ app %v is being built (%v); it will answer at %v\n", a["name"], a["id"], a["url"])
+		if wait {
+			return waitApp(a["id"].(string))
+		}
+		return nil
+	case "get":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodGet, "/v1/app-platform/apps/"+args[1], nil, &a); err != nil {
+			return err
+		}
+		if jsonOut {
+			return printJSON(a)
+		}
+		sz, _ := a["size"].(map[string]any)
+		fmt.Fprintf(stdout, "%v  %v %v\n  url %v\n  source %v@%v  commit %v\n  size %v x %v  port %v\n", a["name"], a["status"], orEmpty(a["statusMessage"]), a["url"], orEmpty(a["repo"]), a["branch"], orEmpty(a["lastCommit"]), sz["id"], a["instances"], a["port"])
+		for _, d := range toList(a["customDomains"]) {
+			fmt.Fprintf(stdout, "  domain %v\n", d)
+		}
+		for _, d := range toList(a["deploys"]) {
+			dd, _ := d.(map[string]any)
+			fmt.Fprintf(stdout, "  deploy %-8v %-7v %v %v\n", dd["status"], dd["trigger"], orEmpty(dd["commit"]), dd["startedAt"])
+		}
+		return nil
+	case "deploy":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodPost, "/v1/app-platform/apps/"+args[1]+"/deploy", map[string]any{}, &a); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "✓ deploy started")
+		return nil
+	case "logs":
+		if len(args) < 2 {
+			return usage
+		}
+		kind := "build"
+		if hasFlag(args[2:], "--runtime") {
+			kind = "runtime"
+		}
+		follow := hasFlag(args[2:], "--follow")
+		last := ""
+		for {
+			var l struct {
+				Log string `json:"log"`
+			}
+			if err := call(http.MethodGet, "/v1/app-platform/apps/"+args[1]+"/logs?type="+kind, nil, &l); err != nil {
+				return err
+			}
+			if jsonOut {
+				emit(l)
+				return nil
+			}
+			if l.Log != last {
+				fmt.Fprint(stdout, strings.TrimPrefix(l.Log, last))
+				last = l.Log
+			}
+			if !follow {
+				return nil
+			}
+			time.Sleep(4 * time.Second)
+		}
+	case "scale":
+		if len(args) < 3 {
+			return usage
+		}
+		var n int
+		fmt.Sscanf(args[2], "%d", &n)
+		if err := call(http.MethodPatch, "/v1/app-platform/apps/"+args[1], map[string]any{"instances": n}, &a); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ scaling to %d instances\n", n)
+		return nil
+	case "env":
+		if len(args) < 3 {
+			return usage
+		}
+		if err := call(http.MethodGet, "/v1/app-platform/apps/"+args[1], nil, &a); err != nil {
+			return err
+		}
+		env := map[string]any{}
+		if cur, ok := a["env"].(map[string]any); ok {
+			for k, v := range cur {
+				env[k] = v
+			}
+		}
+		for _, kv := range args[2:] {
+			if i := strings.Index(kv, "="); i > 0 {
+				if kv[i+1:] == "" {
+					delete(env, kv[:i])
+				} else {
+					env[kv[:i]] = kv[i+1:]
+				}
+			}
+		}
+		if err := call(http.MethodPatch, "/v1/app-platform/apps/"+args[1], map[string]any{"env": env}, &a); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ %d variables set; deploying\n", len(env))
+		return nil
+	case "domains":
+		if len(args) < 4 {
+			return usage
+		}
+		switch args[2] {
+		case "add":
+			if err := call(http.MethodPost, "/v1/app-platform/apps/"+args[1]+"/domains", map[string]any{"domain": args[3]}, &a); err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "✓ %s added; point a CNAME at %v\n", args[3], a["hostname"])
+		case "rm", "remove":
+			if err := call(http.MethodDelete, "/v1/app-platform/apps/"+args[1]+"/domains/"+args[3], nil, &a); err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "✓ %s removed\n", args[3])
+		default:
+			return usage
+		}
+		return nil
+	case "stop", "start":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodPost, "/v1/app-platform/apps/"+args[1]+"/"+args[0], map[string]any{}, &a); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ app %v is %v\n", a["name"], a["status"])
+		return nil
+	case "delete", "rm":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodDelete, "/v1/app-platform/apps/"+args[1], nil, &a); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "✓ app is being deleted")
+		return nil
+	}
+	return usage
+}
+
+func waitApp(id string) error {
+	for i := 0; i < 180; i++ {
+		var a map[string]any
+		if err := call(http.MethodGet, "/v1/app-platform/apps/"+id, nil, &a); err != nil {
+			return err
+		}
+		switch a["status"] {
+		case "live":
+			fmt.Fprintf(stdout, "✓ %v is live at %v\n", a["name"], a["url"])
+			return nil
+		case "failed":
+			return fmt.Errorf("app failed: %v (see: pgcloud app logs %s)", orEmpty(a["statusMessage"]), id)
+		}
+		time.Sleep(10 * time.Second)
+	}
+	return errors.New("timed out waiting for the app")
 }

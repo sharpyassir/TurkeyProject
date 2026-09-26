@@ -41,6 +41,11 @@ const schema = z.object({
   MAIL_FROM: z.string().default('pgcloud <no-reply@pgcloud.example>'),
   /** Where new support tickets and customer replies are mailed for the on duty engineer. Empty disables. */
   SUPPORT_INBOX: z.string().default(''),
+  /** App Platform: hostnames are <app>.<APPS_DOMAIN>; the zone must be hosted on the platform's DNS. */
+  APPS_DOMAIN: z.string().default('apps.pgcloud.example'),
+  /** Server size for shared app hosts; the platform adds one when a region is full. */
+  APP_HOST_SIZE: z.string().default('s-4vcpu-8gb'),
+  ACME_EMAIL: z.string().default('hostmaster@pgcloud.example'),
   MAIL_API_KEY: z.string().optional(),
   /** When true, team owners must enable two factor sign in before using the console. */
   REQUIRE_TOTP_FOR_OWNERS: z.coerce.boolean().default(false),

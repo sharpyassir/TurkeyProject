@@ -50,6 +50,7 @@ export interface Domain { id: string; name: string; status: string; statusMessag
 export interface Bucket { id: string; name: string; status: string; statusMessage: string | null; regionId: string; projectId: string; public: boolean; sizeBytes: number; objectCount: number; usageUpdatedAt: string | null; endpoint: string; url: string; createdAt: string }
 export interface StorageObject { key: string; size: number; lastModified: string; etag?: string }
 export interface StorageKey { id: string; name: string; accessKey: string; createdAt: string; lastUsedAt: string | null }
+export interface PlatformApp { id: string; name: string; status: string; statusMessage: string | null; url: string; hostname: string; customDomains: string[]; region: { id: string; name: string }; repoUrl: string; repo: string | null; source: 'github_app' | 'url'; branch: string; port: number; size: { id: string; memoryMb: number; cpus: number }; instances: number; healthPath: string | null; env: Record<string, string>; hostIp: string | null; lastCommit: string | null; lastDeployAt: string | null; deploys: { id: string; status: string; trigger: string; commit: string | null; startedAt: string; finishedAt: string | null }[]; projectId: string; createdAt: string }
 export interface KubeNode { id: string; name: string; role: 'control' | 'worker'; index: number; poolId: string | null; status: string; ready: boolean; kubeVersion: string | null; ip: string | null; privateIp: string | null; lastSeenAt: string | null }
 export interface KubePool { id: string; name: string; size: { id: string; vcpu: number; memoryMb: number; diskGb: number }; count: number; labels: Record<string, string>; taints: { key: string; value?: string; effect?: string }[]; nodes: KubeNode[] }
 export interface KubeCluster { id: string; name: string; version: string; status: string; statusMessage: string | null; ha: boolean; region: { id: string; name: string }; controlSize: { id: string; vcpu: number; memoryMb: number; diskGb: number }; endpoint: string | null; host: string | null; podCidr: string; serviceCidr: string; configVersion: number; pools: KubePool[]; controlPlane: KubeNode[]; cloud: { loadBalancers: { service: string; loadBalancerId: string; ip: string | null }[]; volumes: { claim: string; volumeId: string; node: string; sizeGb: number; mounted: boolean }[] }; workers: number; readyNodes: number; projectId: string; createdAt: string }
@@ -277,6 +278,35 @@ export class Pgcloud {
     open: (body: { subject: string; body: string; priority?: 'low' | 'normal' | 'high' | 'urgent'; resource?: string }) => this.request<Ticket>('POST', '/v1/support/tickets', body),
     reply: (id: string, body: string) => this.request<Ticket>('POST', `/v1/support/tickets/${id}/messages`, { body }),
     close: (id: string) => this.request<Ticket>('POST', `/v1/support/tickets/${id}/close`, {}),
+  };
+
+  /** App Platform: containers on shared hosts, sized and billed per instance. */
+  readonly appPlatform = {
+    sizes: () => this.request<List<{ id: string; memoryMb: number; cpus: number }>>('GET', '/v1/app-platform/sizes'),
+    list: () => this.request<List<PlatformApp>>('GET', '/v1/app-platform/apps', undefined, { project: this.opts.project }),
+    get: (id: string) => this.request<PlatformApp>('GET', `/v1/app-platform/apps/${id}`),
+    /** Returns 202 with status `creating`; poll `get` or use `waitUntilLive`. */
+    create: (body: { name: string; repoUrl?: string; installationId?: string; repo?: string; gitToken?: string; branch?: string; port?: number; size?: 'app-xs' | 'app-s' | 'app-m' | 'app-l'; instances?: number; env?: Record<string, string>; healthPath?: string; region?: string; project?: string }) => this.request<PlatformApp>('POST', '/v1/app-platform/apps', { project: this.opts.project, ...body }),
+    /** Any change deploys again. `env` replaces the whole set. */
+    update: (id: string, body: { branch?: string; port?: number; size?: 'app-xs' | 'app-s' | 'app-m' | 'app-l'; instances?: number; env?: Record<string, string>; healthPath?: string; gitToken?: string }) => this.request<PlatformApp>('PATCH', `/v1/app-platform/apps/${id}`, body),
+    deploy: (id: string) => this.request<PlatformApp>('POST', `/v1/app-platform/apps/${id}/deploy`, {}),
+    stop: (id: string) => this.request<PlatformApp>('POST', `/v1/app-platform/apps/${id}/stop`, {}),
+    start: (id: string) => this.request<PlatformApp>('POST', `/v1/app-platform/apps/${id}/start`, {}),
+    delete: (id: string) => this.request<{ id: string; status: string }>('DELETE', `/v1/app-platform/apps/${id}`),
+    deploys: (id: string) => this.request<List<{ id: string; status: string; trigger: string; commit: string | null; startedAt: string; finishedAt: string | null; log: string | null }>>('GET', `/v1/app-platform/apps/${id}/deploys`),
+    logs: (id: string, type: 'build' | 'runtime' = 'build') => this.request<{ id: string; type: string; log: string; live: boolean; updatedAt: string }>('GET', `/v1/app-platform/apps/${id}/logs`, undefined, { type }),
+    addDomain: (id: string, domain: string) => this.request<PlatformApp>('POST', `/v1/app-platform/apps/${id}/domains`, { domain }),
+    removeDomain: (id: string, domain: string) => this.request<PlatformApp>('DELETE', `/v1/app-platform/apps/${id}/domains/${domain}`),
+    waitUntilLive: async (id: string, timeoutMs = 25 * 60_000, intervalMs = 5000) => {
+      const until = Date.now() + timeoutMs;
+      for (;;) {
+        const a = await this.request<PlatformApp>('GET', `/v1/app-platform/apps/${id}`);
+        if (a.status === 'live') return a;
+        if (a.status === 'failed') throw new PgcloudError(500, 'app_failed', a.statusMessage ?? 'Build failed');
+        if (Date.now() > until) throw new PgcloudError(504, 'timeout', `App ${id} is still ${a.status}`);
+        await new Promise((r) => setTimeout(r, intervalMs));
+      }
+    },
   };
 
   readonly kubernetes = {
