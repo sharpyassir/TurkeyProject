@@ -18,7 +18,7 @@ All three send an idempotency key on every write and surface API errors with the
 ## Base URL and auth
 
 ```
-https://api.pgcloud.example/v1
+https://api.progrid.sa/v1
 Authorization: Bearer pgc_...
 ```
 

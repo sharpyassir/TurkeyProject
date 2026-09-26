@@ -13,7 +13,7 @@ The monthly price divided by 672 gives the hourly rate. There is no minimum term
 
 ## Dollars or riyals
 
-Prices are set in US dollars. If your team's currency is Saudi riyals, every price you see and every invoice is converted at the exchange rate stored at that hour, and the rate is shown next to the price. Dollar prices stay stable; the riyals figures move with the rate.
+Prices are set in Saudi riyals and exclude VAT; every checkout shows the total with 15 percent VAT before you pay. If your team's currency is US dollars, prices and invoices are converted at the pegged rate of 3.75 riyals per dollar.
 
 ## Credit and invoices
 

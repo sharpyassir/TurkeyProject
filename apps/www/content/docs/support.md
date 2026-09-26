@@ -9,7 +9,7 @@ order: 16
 
 | | Free | Developer | Standard | Premium |
 |---|---|---|---|---|
-| Price per month | 0 | 24 USD | 99 USD | 499 USD |
+| Price per month | 0 | 90 SAR | 375 SAR | 1,875 SAR |
 | Urgent | | | 1 hour | 30 minutes |
 | High | | 8 hours | 4 hours | 2 hours |
 | Normal | 2 days | 24 hours | 8 hours | 4 hours |

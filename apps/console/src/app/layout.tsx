@@ -3,7 +3,7 @@ import './globals.css';
 import { Shell } from '@/components/shell';
 
 export const metadata: Metadata = {
-  title: 'pgcloud console',
+  title: 'Progrid console',
   description: 'The developer cloud for Saudi Arabia',
 };
 

@@ -13,7 +13,7 @@ web console, CLI, Terraform, SDKs and AI agents.
 apps/
   api/          Control plane — NestJS + Prisma modular monolith (TypeScript)
   console/      Web console — Next.js (TR / AR / EN, RTL-ready)
-  www/          Marketing site — Next.js (pgcloud.example), pricing pulled live from the API
+  www/          Marketing site — Next.js (progrid.sa), pricing pulled live from the API
 cli/            `pgcloud` CLI — single Go binary (login, servers, ssh, deploy, tokens); `cli/install.sh`
 agents/
   host-agent/   Go service on every Proxmox node: takes jobs from NATS, calls the
@@ -80,7 +80,7 @@ curl -X POST localhost:4000/v1/servers \
 
 | Phase | Months | Scope |
 |---|---|---|
-| MVP | 1–3 | accounts, teams, SSH keys; servers (create/resize/reboot/delete); images + snapshots; public IPs + firewalls; 15 marketplace apps; hourly billing, SAR/USD invoices; API v1 + console; back-office; abuse checks |
+| MVP | 1–3 | accounts, teams, SSH keys; servers (create/resize/reboot/delete); images + snapshots; public IPs + firewalls; 15 marketplace apps; hourly billing, riyal price book with a USD view, 15% VAT at checkout; API v1 + console; back-office; abuse checks |
 | 2 | 4–9 | VPCs, volumes, backups, LBs, DNS; CLI, SDKs, Terraform; MCP server, agent-safe tokens, console assistant; webhooks; status page |
 | 3 | 10–18 | managed DBs, object storage, Kubernetes; vendor marketplace; inference gateway; GPU servers; second region |
 
@@ -102,7 +102,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Network: public IP pool, host-enforced firewalls | ✅ (VPCs, LBs, DNS: phase 2) |
 | Storage: snapshots | ✅ (backups: phase 2) |
 | Managed databases: PostgreSQL (Patroni failover, pgBouncer, pgBackRest with WAL archiving), Valkey (Sentinel, ACL users, RDB backups) and MySQL (GTID replication, XtraBackup); 1 or 3 nodes, VIP that follows the primary, TLS, users and databases, trusted sources, nightly backups to object storage, per node pricing, console, CLI, SDKs, Terraform | ✅ |
-| Managed servers: opt in care tier with an in VM agent (unattended updates with reboot at 04:00, fail2ban, sshd and sysctl hardening, five minute health reports with warning and recovery events), daily backups included, 30 percent of the plan, console, CLI, SDKs, Terraform | ✅ |
+| Managed servers: opt in care tier with an in VM agent (unattended updates with reboot at 04:00, fail2ban, sshd and sysctl hardening, five minute health reports with warning and recovery events), daily backups included, sold as Managed Start, Business and Pro plans on top of Standard, Pro and Business hardware, console, CLI, SDKs, Terraform | ✅ |
 | Support plans: free, developer, standard and premium with first response targets per priority, ticket system with email to owners, back office queue sorted by due time, billed monthly through the meter, console, CLI, SDKs, MCP | ✅ |
 | Managed Kubernetes: kubeadm clusters on platform owned nodes, 1 or 3 control plane nodes behind a shared address, worker pools with labels and taints that scale, node agent that bootstraps and joins, cloud controller turning LoadBalancer Services into platform load balancers and pgcloud-block claims into attached volumes, kubeconfig download, console, CLI, SDKs, MCP, Terraform | ✅ |
 | App Platform: push code, get a URL; shared platform owned hosts with an agent that builds from the repository (Dockerfile or detected Node, Python, Go, static), runs sized instances with Docker limits behind Caddy with TLS, rolling deploys with health checks, GitHub App push redeploys, env vars, custom domains, build and runtime logs, stop and start, per instance pricing, console, CLI, SDKs, MCP, Terraform | ✅ |
@@ -118,6 +118,7 @@ start / resize / rebuild / snapshot / delete; metering → hourly rating → inv
 | Host agent (Go) for Proxmox VE | ✅ builds; needs a real node to test |
 | Console: login, servers, one-click apps, billing; EN/TR/AR with RTL | ✅ minimal |
 | Account security: TOTP two factor (required for owners), email verification, password reset, rate limits | ✅ |
+| Hardware plan for launch: Hetzner Falkenstein auction servers, Storage Box backups, OVH Eco failover, capacity math ([docs/hardware-plan.md](docs/hardware-plan.md)) | ✅ |
 | Hosting: Dockerfiles, production compose with Caddy TLS and backups, Ansible for the management host and Proxmox nodes, deploy workflow ([docs/hosting.md](docs/hosting.md)) | ✅ |
 | Payments: Moyasar checkout (mada, Visa, Mastercard, Apple Pay) in SAR or USD, credit top up, invoice pay, invoice PDF, built in test page | ✅ |
 | Monitoring: per minute metrics from the host agent, graphs on the server page, alert rules with email and webhook, incidents | ✅ |

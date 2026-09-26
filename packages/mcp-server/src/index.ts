@@ -162,7 +162,7 @@ server.registerTool('create_server', {
   description: 'Create a server. Returns immediately with status "new"; it becomes "active" in about a minute. Call get_server to check. The token\'s monthly spending cap is enforced; a spend_limit_reached error means the plan is too expensive for the remaining cap.',
   inputSchema: {
     name: z.string().regex(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/).describe('Hostname label, lowercase letters, digits and hyphens'),
-    size: z.string().default('s-1vcpu-1gb').describe('Size id from list_sizes'),
+    size: z.string().default('s-1vcpu-2gb').describe('Size id from list_sizes'),
     image: z.string().default('ubuntu-24-04').describe('Image id or marketplace app slug from list_images'),
     project: z.string().optional(),
     userData: z.string().optional().describe('cloud-init user data'),

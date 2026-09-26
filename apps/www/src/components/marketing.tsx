@@ -27,7 +27,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0b1220]/80 text-white backdrop-blur">
       <div className="container-x flex h-16 items-center gap-8">
-        <a href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight"><Logo /> pgcloud</a>
+        <a href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight"><Logo /> Progrid</a>
         <nav className="hidden items-center gap-7 text-sm text-slate-300 md:flex">
           {links.map(([h, l]) => <a key={h} href={h} className="hover:text-white">{l}</a>)}
         </nav>
@@ -195,29 +195,37 @@ export function Agents() {
 
 /* ───────────────────────── Pricing ───────────────────────── */
 
-interface Price { sku: string; monthlyMinor: number; hourlyMinor: number; size?: { vcpu: number; memoryMb: number; diskGb: number; transferTb: number } | null }
-interface PriceList { currency: 'USD' | 'SAR'; baseCurrency: 'USD'; fxRate: number; data: Price[] }
+interface Price { sku: string; resourceType: string; monthlyMinor: number; hourlyMinor: number; size?: { id: string; name?: string; vcpu: number; memoryMb: number; diskGb: number; transferTb: number } | null }
+interface PriceList { currency: 'USD' | 'SAR'; baseCurrency: 'USD' | 'SAR'; fxRate: number; usdToSar?: number; data: Price[] }
+const VAT = 0.15;
 const FALLBACK: Price[] = [
-  { sku: 's-1vcpu-512mb', monthlyMinor: 400, hourlyMinor: 1, size: { vcpu: 1, memoryMb: 512, diskGb: 10, transferTb: 0.5 } },
-  { sku: 's-1vcpu-1gb', monthlyMinor: 600, hourlyMinor: 1, size: { vcpu: 1, memoryMb: 1024, diskGb: 25, transferTb: 1 } },
-  { sku: 's-1vcpu-2gb', monthlyMinor: 1200, hourlyMinor: 2, size: { vcpu: 1, memoryMb: 2048, diskGb: 50, transferTb: 2 } },
-  { sku: 's-2vcpu-4gb', monthlyMinor: 2400, hourlyMinor: 4, size: { vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4 } },
-  { sku: 's-4vcpu-8gb', monthlyMinor: 4800, hourlyMinor: 7, size: { vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 5 } },
-  { sku: 's-8vcpu-16gb', monthlyMinor: 9600, hourlyMinor: 14, size: { vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 6 } },
+  { sku: 's-1vcpu-2gb', resourceType: 'server', monthlyMinor: 2900, hourlyMinor: 4, size: { id: 's-1vcpu-2gb', name: 'Starter', vcpu: 1, memoryMb: 2048, diskGb: 40, transferTb: 2 } },
+  { sku: 's-2vcpu-4gb', resourceType: 'server', monthlyMinor: 6500, hourlyMinor: 10, size: { id: 's-2vcpu-4gb', name: 'Standard', vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4 } },
+  { sku: 's-4vcpu-8gb', resourceType: 'server', monthlyMinor: 12500, hourlyMinor: 19, size: { id: 's-4vcpu-8gb', name: 'Pro', vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 6 } },
+  { sku: 's-8vcpu-16gb', resourceType: 'server', monthlyMinor: 23900, hourlyMinor: 36, size: { id: 's-8vcpu-16gb', name: 'Business', vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 8 } },
+  { sku: 'managed-s-2vcpu-4gb', resourceType: 'managed_server', monthlyMinor: 13400, hourlyMinor: 20, size: { id: 's-2vcpu-4gb', name: 'Standard', vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4 } },
+  { sku: 'managed-s-4vcpu-8gb', resourceType: 'managed_server', monthlyMinor: 22400, hourlyMinor: 33, size: { id: 's-4vcpu-8gb', name: 'Pro', vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 6 } },
+  { sku: 'managed-s-8vcpu-16gb', resourceType: 'managed_server', monthlyMinor: 36000, hourlyMinor: 54, size: { id: 's-8vcpu-16gb', name: 'Business', vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 8 } },
+  { sku: 'snapshot_gb', resourceType: 'snapshot', monthlyMinor: 25, hourlyMinor: 0 },
 ];
+const MANAGED_NAMES: Record<string, string> = { 's-2vcpu-4gb': 'Managed Start', 's-4vcpu-8gb': 'Managed Business', 's-8vcpu-16gb': 'Managed Pro' };
 
 export function Pricing() {
   const c = useCopy(); const lang = useLang();
-  const [currency, setCurrency] = useState<'USD' | 'SAR'>('USD');
-  const [list, setList] = useState<PriceList>({ currency: 'USD', baseCurrency: 'USD', fxRate: 1, data: FALLBACK });
+  const [currency, setCurrency] = useState<'USD' | 'SAR'>('SAR');
+  const [list, setList] = useState<PriceList>({ currency: 'SAR', baseCurrency: 'SAR', fxRate: 1, data: FALLBACK });
   useEffect(() => {
     fetch(`${API}/v1/pricing?currency=${currency}`)
       .then((r) => r.json())
-      .then((d: PriceList) => setList({ ...d, data: d.data.filter((p) => p.size).sort((a, b) => a.monthlyMinor - b.monthlyMinor) }))
-      .catch(() => setList({ currency: 'USD', baseCurrency: 'USD', fxRate: 1, data: FALLBACK }));
+      .then((d: PriceList) => setList({ ...d, data: d.data.filter((p) => p.size || p.sku === 'snapshot_gb').sort((a, b) => a.monthlyMinor - b.monthlyMinor) }))
+      .catch(() => setList({ currency, baseCurrency: 'SAR', fxRate: currency === 'SAR' ? 1 : 1 / 3.75, data: FALLBACK.map((p) => ({ ...p, monthlyMinor: currency === 'SAR' ? p.monthlyMinor : Math.round(p.monthlyMinor / 3.75), hourlyMinor: currency === 'SAR' ? p.hourlyMinor : Math.round(p.hourlyMinor / 3.75) })) }));
   }, [currency]);
   const cur = list.currency;
-  const fmt = (m: number, digits = 2) => new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-US', { style: 'currency', currency: cur, maximumFractionDigits: digits }).format(m / 100);
+  const fmt = (m: number, digits = 2) => new Intl.NumberFormat(lang === 'ar' ? 'ar-SA' : 'en-US', { style: 'currency', currency: cur, maximumFractionDigits: digits }).format(m / 100);
+  const plans = list.data.filter((p) => p.resourceType === 'server' && p.size);
+  const managed = list.data.filter((p) => p.resourceType === 'managed_server' && p.size).map((m) => ({ ...m, base: plans.find((p) => p.sku === m.size!.id) }));
+  const snapshot = list.data.find((p) => p.sku === 'snapshot_gb')?.monthlyMinor ?? 25;
+  const ram = (mb: number) => (mb >= 1024 ? `${mb / 1024} GB` : `${mb} MB`);
   return (
     <section id="pricing" className="py-20">
       <div className="container-x">
@@ -228,31 +236,56 @@ export function Pricing() {
             <p className="lead">{c.pricing.lead}<code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm" dir="ltr">{c.pricing.leadCode}</code>.</p>
           </div>
           <div className="flex rounded-lg border border-slate-300 p-1 text-sm">
-            {(['USD', 'SAR'] as const).map((c) => <button key={c} onClick={() => setCurrency(c)} className={`rounded-md px-4 py-1.5 ${currency === c ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>{c}</button>)}
+            {(['SAR', 'USD'] as const).map((cc) => <button key={cc} onClick={() => setCurrency(cc)} className={`rounded-md px-4 py-1.5 ${currency === cc ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>{cc}</button>)}
           </div>
         </div>
-        <div className="mt-10 overflow-hidden rounded-2xl border border-slate-200">
+        <h3 className="mt-10 text-lg font-semibold">{c.pricing.unmanagedH3}</h3>
+        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
               <tr>{c.pricing.cols.map((h, i) => <th key={h} className={`px-5 py-3 ${i >= 4 ? 'text-end' : 'text-start'}`}>{h}</th>)}</tr>
             </thead>
             <tbody>
-              {list.data.map((p) => (
+              {plans.map((p) => (
                 <tr key={p.sku} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-5 py-3 font-medium">{p.size!.vcpu}</td>
-                  <td className="px-5 py-3">{p.size!.memoryMb >= 1024 ? `${p.size!.memoryMb / 1024} GB` : `${p.size!.memoryMb} MB`}</td>
-                  <td className="px-5 py-3">{p.size!.diskGb} GB</td>
-                  <td className="px-5 py-3">{p.size!.transferTb} TB</td>
+                  <td className="px-5 py-3 font-medium">{p.size!.name || p.sku}{p.size!.id === 's-2vcpu-4gb' && <span className="ms-2 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">{c.pricing.popular}</span>}</td>
+                  <td className="px-5 py-3">{p.size!.vcpu}</td>
+                  <td className="px-5 py-3">{ram(p.size!.memoryMb)}</td>
+                  <td className="px-5 py-3">{p.size!.diskGb} GB NVMe</td>
                   <td className="px-5 py-3 text-end font-semibold">{fmt(p.monthlyMinor)}</td>
-                  <td className="px-5 py-3 text-end text-slate-500">{fmt(p.hourlyMinor, 3)}</td>
+                  <td className="px-5 py-3 text-end text-slate-500">{fmt(Math.round(p.monthlyMinor * (1 + VAT)))}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        <h3 className="mt-10 text-lg font-semibold">{c.pricing.managedH3}</h3>
+        <p className="mt-1 text-sm text-slate-600">{c.pricing.managedLead}</p>
+        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+              <tr>{c.pricing.cols.map((h, i) => <th key={h} className={`px-5 py-3 ${i >= 4 ? 'text-end' : 'text-start'}`}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {managed.map((m) => {
+                const total = m.monthlyMinor + (m.base?.monthlyMinor ?? 0);
+                return (
+                  <tr key={m.sku} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="px-5 py-3 font-medium">{MANAGED_NAMES[m.size!.id] ?? m.sku}</td>
+                    <td className="px-5 py-3">{m.size!.vcpu}</td>
+                    <td className="px-5 py-3">{ram(m.size!.memoryMb)}</td>
+                    <td className="px-5 py-3">{m.size!.diskGb} GB NVMe</td>
+                    <td className="px-5 py-3 text-end font-semibold">{fmt(total)}</td>
+                    <td className="px-5 py-3 text-end text-slate-500">{fmt(Math.round(total * (1 + VAT)))}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         <p className="mt-3 text-xs text-slate-500">
-          {cur === 'SAR' ? c.pricing.noteTry(list.fxRate.toFixed(2)) : c.pricing.noteUsd}
-          {c.pricing.noteTail(cur === 'SAR' ? fmt(Math.round(6 * list.fxRate)) : '$0.06')}
+          {cur === 'SAR' ? c.pricing.noteTry((list.usdToSar ?? 3.75).toFixed(2)) : c.pricing.noteUsd}
+          {c.pricing.noteTail(fmt(snapshot))}
         </p>
       </div>
     </section>
@@ -324,7 +357,7 @@ export function Footer() {
   return (
     <footer className="border-t border-slate-200 bg-white py-14 text-sm">
       <div className="container-x grid gap-10 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="lg:col-span-1"><div className="flex items-center gap-2 font-bold"><Logo /> pgcloud</div><p className="mt-3 text-slate-500">{c.footer.tagline}</p><p className="mt-3 flex gap-2 text-slate-500">{LANGS.map((l) => <a key={l.code} href={l.path} className="hover:text-slate-900">{l.label}</a>)}</p></div>
+        <div className="lg:col-span-1"><div className="flex items-center gap-2 font-bold"><Logo /> Progrid</div><p className="mt-3 text-slate-500">{c.footer.tagline}</p><p className="mt-3 flex gap-2 text-slate-500">{LANGS.map((l) => <a key={l.code} href={l.path} className="hover:text-slate-900">{l.label}</a>)}</p></div>
         {cols.map(([h, ls]) => <div key={h}><div className="font-semibold">{h}</div><ul className="mt-3 space-y-2 text-slate-600">{ls.map((l) => <li key={l}><a href="#" className="hover:text-slate-900">{l}</a></li>)}</ul></div>)}
       </div>
       <div className="container-x mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-6 text-xs text-slate-500"><span>© {new Date().getFullYear()} {c.footer.copyright}</span><span>{c.footer.builtOn}</span></div>

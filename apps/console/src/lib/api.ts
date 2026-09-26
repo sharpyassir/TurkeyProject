@@ -43,7 +43,10 @@ export async function api<T>(path: string, init: RequestInit & { idempotent?: bo
 
 // ---- types (subset of packages/openapi) ----
 
-export interface Size { id: string; vcpu: number; memoryMb: number; diskGb: number; transferTb: number }
+export interface Size { id: string; name?: string; vcpu: number; memoryMb: number; diskGb: number; transferTb: number }
+export const VAT_RATE = 0.15;
+/** Amount with Saudi VAT added, for checkout style totals. */
+export function withVat(minor: number) { return Math.round(minor * (1 + VAT_RATE)); }
 export interface Image { id: string; kind: 'distribution' | 'marketplace'; name: string; distribution?: string; version?: string }
 export interface Server {
   id: string; name: string; status: string; statusMessage: string | null;

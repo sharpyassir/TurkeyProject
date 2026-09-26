@@ -3,6 +3,9 @@
  * See docs/adr/0004-metering-and-rating.md.
  */
 
+/** Every price in the book is in this currency. Progrid sells in riyals; other currencies are derived at the pegged rate. */
+export const BOOK_CURRENCY: 'USD' | 'SAR' = 'SAR';
+
 export interface RateInput {
   /** Minutes of usage inside this hour (0–60) */
   minutes: number;
@@ -26,7 +29,9 @@ export function displayPrice(monthlyMinor: number, hoursPerMonth: number) {
   return { monthlyMinor, hourlyMinor: Math.round(monthlyMinor / hoursPerMonth) };
 }
 
-/** Saudi VAT (15%) applies to riyal invoices and to teams in Saudi Arabia. */
+/** Saudi VAT (15%) applies to riyal invoices and to teams in Saudi Arabia. Prices are shown without it; checkout shows the total with it. */
+export const VAT_RATE = 0.15;
+
 export function taxRateFor(currency: 'USD' | 'SAR', country: string): number {
   return currency === 'SAR' || country === 'SA' ? 0.15 : 0;
 }

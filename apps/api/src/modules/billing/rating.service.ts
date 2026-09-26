@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ResourceType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { loadConfig } from '../../config/config';
-import { rateHour, startOfHour, startOfMonth } from './pricing';
+import { rateHour, startOfHour, startOfMonth, BOOK_CURRENCY } from './pricing';
 import { FxService } from './fx.service';
 
 /**
@@ -42,7 +42,7 @@ export class RatingService {
       const currency = currencyOf.get(g.projectId) ?? 'USD';
       const sku = await this.skuFor(g.resourceType, g.resourceId);
       const price = sku ? await this.priceFor(g.resourceType, sku, hourEnd) : null;
-      const fx = await this.fx.rate(currency, hourEnd); // USD book → team currency at the hour's rate
+      const fx = await this.fx.bookRate(currency, hourEnd); // price book → team currency at the hour's rate
 
       const minutes = g.unit === 'minute' ? g._count._all : g._count._all; // one event per minute either way
       const quantity = g._sum.quantity ?? 0;
@@ -95,8 +95,10 @@ export class RatingService {
         return 'bandwidth_gb';
       case 'backup':
         return 'backups_pct';
-      case 'managed_server':
-        return 'managed_pct';
+      case 'managed_server': {
+        const s = await this.prisma.server.findUnique({ where: { id: resourceId }, select: { sizeId: true } });
+        return s ? `managed-${s.sizeId}` : null;
+      }
       case 'kubernetes':
         return 'k8s-ha';
       case 'app_instance': {
@@ -112,17 +114,17 @@ export class RatingService {
     }
   }
 
-  /** Monthly USD plan price of the server a percent-priced resource (backups) belongs to. */
+  /** Monthly plan price of the server a percent-priced resource (backups) belongs to. */
   private async planPriceFor(serverId: string, hourEnd: Date) {
     const s = await this.prisma.server.findUnique({ where: { id: serverId }, select: { sizeId: true } });
     if (!s) return 0;
     return (await this.priceFor('server', s.sizeId, hourEnd))?.monthlyMinor ?? 0;
   }
 
-  /** Newest USD price that was valid at any point before the hour ended, so a price book change mid-hour still rates that hour. */
+  /** Newest book price that was valid at any point before the hour ended, so a price book change mid-hour still rates that hour. */
   private priceFor(resourceType: ResourceType, sku: string, hourEnd: Date) {
     return this.prisma.price.findFirst({
-      where: { resourceType, sku, currency: 'USD', validFrom: { lt: hourEnd }, OR: [{ validTo: null }, { validTo: { gte: hourEnd } }] },
+      where: { resourceType, sku, currency: BOOK_CURRENCY, validFrom: { lt: hourEnd }, OR: [{ validTo: null }, { validTo: { gte: hourEnd } }] },
       orderBy: { validFrom: 'desc' },
     });
   }

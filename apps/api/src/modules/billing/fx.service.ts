@@ -2,11 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Currency } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { loadConfig } from '../../config/config';
+import { BOOK_CURRENCY } from './pricing';
 
 /**
- * Exchange rates. Every price in the book is in USD. Riyal amounts are derived from the
- * USD amount at the rate in force at that moment. The riyal is pegged at 3.75, so the rate
- * rarely moves, but the machinery is the same for any future currency.
+ * Exchange rates. Every price in the book is in riyals (BOOK_CURRENCY). Dollar amounts are
+ * derived from the riyal amount at the USD to SAR rate in force at that moment. The riyal is
+ * pegged at 3.75, so the rate rarely moves, but the machinery is the same for any currency.
  *
  * Rate sources, in order: the latest FxRate row at or before `at`, then the
  * FX_USD_SAR environment fallback. `refresh()` pulls a fresh rate from FX_PROVIDER_URL
@@ -30,10 +31,17 @@ export class FxService {
     return rate;
   }
 
-  /** Convert a USD minor amount (cents) into `currency` minor units (halalas) at the rate for `at`. */
-  async convert(usdMinor: number, currency: Currency, at?: Date): Promise<number> {
-    if (currency === 'USD') return usdMinor;
-    return Math.round(usdMinor * (await this.rate(currency, at)));
+  /** Multiplier from the price book currency to `currency` at `at`: 1 for the book currency itself. */
+  async bookRate(currency: Currency, at?: Date): Promise<number> {
+    if (currency === BOOK_CURRENCY) return 1;
+    const usdToSar = await this.rate('SAR', at);
+    return BOOK_CURRENCY === 'SAR' ? 1 / usdToSar : usdToSar;
+  }
+
+  /** Convert a book minor amount (halalas) into `currency` minor units at the rate for `at`. */
+  async convert(bookMinor: number, currency: Currency, at?: Date): Promise<number> {
+    if (currency === BOOK_CURRENCY) return bookMinor;
+    return Math.round(bookMinor * (await this.bookRate(currency, at)));
   }
 
   async set(quote: Currency, rate: number, source: string) {

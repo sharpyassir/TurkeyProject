@@ -1,6 +1,6 @@
 ---
 title: Command line
-description: Install pgcloud on your computer and manage everything from the terminal.
+description: Install Progrid on your computer and manage everything from the terminal.
 section: Start here
 order: 2
 ---
@@ -10,7 +10,7 @@ The `pgcloud` command is a single binary for Linux, macOS and Windows with no de
 ## Install
 
 ```sh
-curl -fsSL https://get.pgcloud.example | sh
+curl -fsSL https://get.progrid.sa | sh
 ```
 
 On Windows, download the zip from the releases page and put `pgcloud.exe` on your `PATH`.
@@ -59,7 +59,7 @@ pgcloud servers ls --json | jq -r '.data[] | select(.status=="active") | .networ
 In CI, set `PGCLOUD_TOKEN` to an API token and `PGCLOUD_API_URL` if you use a different endpoint. The CLI reads those before the config file, so no login step is needed.
 
 ```yaml
-- run: curl -fsSL https://get.pgcloud.example | sh
+- run: curl -fsSL https://get.progrid.sa | sh
 - run: pgcloud deploy https://github.com/${{ github.repository }} --branch ${{ github.ref_name }}
   env:
     PGCLOUD_TOKEN: ${{ secrets.PGCLOUD_TOKEN }}

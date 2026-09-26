@@ -84,8 +84,9 @@ export default function ServerDetailPage() {
   const monthly = useMemo(() => {
     if (!server) return 0;
     const plan = priceOf(server.size.id)?.monthlyMinor ?? 0;
-    const pct = (server.backupsEnabled ? priceOf('backups_pct')?.monthlyMinor ?? 20 : 0) + (server.managed ? priceOf('managed_pct')?.monthlyMinor ?? 30 : 0);
-    return plan + (priceOf('public_ip')?.monthlyMinor ?? 0) + Math.round((plan * pct) / 100);
+    const managedPrice = server.managed ? priceOf(`managed-${server.size.id}`)?.monthlyMinor ?? 0 : 0;
+    const backupsPct = server.backupsEnabled && !server.managed ? priceOf('backups_pct')?.monthlyMinor ?? 20 : 0;
+    return plan + (priceOf('public_ip')?.monthlyMinor ?? 0) + managedPrice + Math.round((plan * backupsPct) / 100);
   }, [server, prices]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!server) return <p className="text-sm text-neutral-500">{error ?? t(locale, 'loading')}</p>;
@@ -128,7 +129,7 @@ export default function ServerDetailPage() {
             <Row k={t(locale, 'region')}>{server.region.name}</Row>
             <Row k={t(locale, 'privateIp')}>{server.networks.private[0]?.ipAddress ?? '—'}</Row>
             <Row k={t(locale, 'backups')}>{t(locale, server.backupsEnabled ? 'on' : 'off')} <button className="btn-ghost ms-2" disabled={busy} onClick={() => run(() => api(`/v1/servers/${id}`, { method: 'PATCH', body: JSON.stringify({ backups: !server.backupsEnabled }) }))}>{t(locale, server.backupsEnabled ? 'backupsOff' : 'backupsOn')}</button><div className="text-xs text-neutral-500">{tf(locale, 'backupsNote')(`${priceOf('backups_pct')?.monthlyMinor ?? 20}%`)}</div></Row>
-            <Row k={t(locale, 'managedTier')}>{t(locale, server.managed ? 'on' : 'off')} <button className="btn-ghost ms-2" disabled={busy} onClick={() => run(() => api(`/v1/servers/${id}`, { method: 'PATCH', body: JSON.stringify({ managed: !server.managed }) }))}>{t(locale, server.managed ? 'managedOff' : 'managedOn')}</button><div className="text-xs text-neutral-500">{tf(locale, 'managedNote')(`${priceOf('managed_pct')?.monthlyMinor ?? 30}%`)}</div></Row>
+            <Row k={t(locale, 'managedTier')}>{t(locale, server.managed ? 'on' : 'off')} <button className="btn-ghost ms-2" disabled={busy} onClick={() => run(() => api(`/v1/servers/${id}`, { method: 'PATCH', body: JSON.stringify({ managed: !server.managed }) }))}>{t(locale, server.managed ? 'managedOff' : 'managedOn')}</button><div className="text-xs text-neutral-500">{priceOf(`managed-${server.size.id}`) ? tf(locale, 'managedNote')(`${money((priceOf(server.size.id)?.monthlyMinor ?? 0) + (priceOf(`managed-${server.size.id}`)?.monthlyMinor ?? 0), currency, locale)}${t(locale, 'perMonth')}`) : t(locale, 'managedNotOnPlan')}</div></Row>
             <Row k={t(locale, 'created')}>{new Date(server.createdAt).toLocaleString(locale)}</Row>
             {server.tags.length > 0 && <Row k={t(locale, 'tags')}>{server.tags.join(', ')}</Row>}
           </section>

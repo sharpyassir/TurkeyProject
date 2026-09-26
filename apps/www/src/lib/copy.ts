@@ -17,7 +17,7 @@ export interface Copy {
   trust: [string, string, string][];
   products: { eyebrow: string; h2: string; lead: string; available: string; roadmap: string; groups: { name: string; desc: string; items: string[]; live: boolean; highlight?: boolean }[] };
   agents: { eyebrow: string; h2: string; lead: string; points: [string, string][]; codeCreate: string; codeCap: string; codeOver: string };
-  pricing: { eyebrow: string; h2: string; lead: string; leadCode: string; cols: [string, string, string, string, string, string]; noteTry: (rate: string) => string; noteUsd: string; noteTail: (snapshot: string) => string };
+  pricing: { eyebrow: string; h2: string; lead: string; leadCode: string; cols: [string, string, string, string, string, string]; popular: string; unmanagedH3: string; managedH3: string; managedLead: string; noteTry: (rate: string) => string; noteUsd: string; noteTail: (snapshot: string) => string };
   marketplace: { eyebrow: string; h2: string; lead: string };
   compare: { eyebrow: string; h2: string; cols: [string, string, string]; rows: [string, string, string, string][] };
   cta: { h2: string; lead: string; create: string; docs: string };
@@ -25,16 +25,16 @@ export interface Copy {
 }
 
 const en: Copy = {
-  meta: { title: 'pgcloud: the developer cloud for Saudi Arabia, built for people and AI agents', description: 'Get a server in 60 seconds. Hourly billing in dollars or riyals with ZATCA e-invoices, data that stays in Suudi Arabistan, one click apps, and API tokens your AI agents can use safely.' },
+  meta: { title: 'Progrid: the developer cloud for Saudi Arabia, built for people and AI agents', description: 'Get a server in 60 seconds. Hourly billing in dollars or riyals with ZATCA e-invoices, data that stays in Suudi Arabistan, one click apps, and API tokens your AI agents can use safely.' },
   nav: { products: 'Products', agents: 'For AI agents', pricing: 'Pricing', marketplace: 'Marketplace', docs: 'Docs', signIn: 'Sign in', startFree: 'Start free', menu: 'Menu' },
   hero: {
     badge: 'First region in Saudi Arabia, launching 2027',
     h1a: 'The developer cloud for Saudi Arabia. Built for people ', h1b: 'and AI agents',
     lead: 'Get a server in 60 seconds. Pay by the hour in dollars or riyals with a ZATCA compliant e-invoice. Your data stays in Saudi Arabia. And your AI agents get API tokens with a spending cap and a human in the loop.',
     ctaPrimary: 'Start with $100 in credit', ctaSecondary: 'See how agents deploy',
-    stats: [['60 s', 'to a running server'], ['$4 / mo', 'entry server, billed hourly'], ['100%', 'of your data stays in Saudi Arabia']],
+    stats: [['60 s', 'to a running server'], ['29 SAR / mo', 'Starter server, billed hourly'], ['100%', 'of your data stays in Saudi Arabia']],
   },
-  terminal: { ready: 'WordPress is ready at https://185.0.113.42 and billing at $0.036 per hour', orAgent: '# or let your agent do it, with a cap', capNote: '# $15 per month cap, delete needs approval' },
+  terminal: { ready: 'WordPress is ready at https://185.0.113.42 and billing at 0.04 SAR per hour', orAgent: '# or let your agent do it, with a cap', capNote: '# 50 SAR per month cap, delete needs approval' },
   trust: [
     ['🇸🇦', 'Region in Saudi Arabia', 'Low latency across Saudi Arabia and the Gulf'],
     ['$', 'Priced in dollars, paid in riyals or dollars', 'ZATCA e-invoices; mada, cards and Apple Pay through Moyasar'],
@@ -56,27 +56,28 @@ const en: Copy = {
   },
   agents: {
     eyebrow: 'For AI agents', h2: 'Let your agent deploy. Keep your hand on the budget.',
-    lead: 'Global clouds give agents the same all or nothing tokens people use. pgcloud tokens carry a monthly spending cap and a list of actions that must wait for a human. The API enforces it, not a prompt.',
+    lead: 'Global clouds give agents the same all or nothing tokens people use. Progrid tokens carry a monthly spending cap and a list of actions that must wait for a human. The API enforces it, not a prompt.',
     points: [
-      ['Spending cap per token', 'A $15 per month cap means the agent cannot create a $24 server. Ever.'],
+      ['Spending cap per token', 'A 50 SAR per month cap means the agent cannot create a 65 SAR server. Ever.'],
       ['Approval for destructive actions', 'Delete, resize down and rebuild wait in a queue until you tap approve.'],
       ['Scoped like a person, capped like a budget', 'servers:write without billing:read. Scoped to one project. Expires when you say.'],
-      ['Native MCP server', 'Add pgcloud to Claude Code or Cursor in one line. Every API endpoint becomes a tool.'],
+      ['Native MCP server', 'Add Progrid to Claude Code or Cursor in one line. Every API endpoint becomes a tool.'],
     ],
-    codeCreate: '# create a token for your coding agent', codeCap: '// $15 per month', codeOver: '# what the agent sees when it goes over the cap',
+    codeCreate: '# create a token for your coding agent', codeCap: '// 50 SAR per month', codeOver: '# what the agent sees when it goes over the cap',
   },
   pricing: {
-    eyebrow: 'Pricing', h2: 'Simple and predictable. Priced in dollars, paid in your currency.',
+    eyebrow: 'Pricing', h2: 'Simple and predictable. Priced in riyals, with VAT shown before you pay.',
     lead: 'Billed by the hour and never more than the monthly price. Bandwidth included. No surprise line items. The whole price list is one API call: ', leadCode: 'GET /v1/pricing',
-    cols: ['vCPU', 'Memory', 'Storage', 'Transfer', 'Monthly', 'Hourly'],
-    noteTry: (rate) => `Riyal prices are our dollar prices converted at ${rate} SAR per USD; the riyal is pegged to the dollar, so they do not move. `,
-    noteUsd: 'Saudi customers can pay in riyals at the pegged rate. ',
-    noteTail: (snapshot) => `VAT (15%) is added for Saudi customers. A public IP is included with every server. Snapshots cost ${snapshot} per GB per month. Backups cost 20% of the plan, and the managed tier 30% more. Support plans start at 24 USD a month. App Platform instances start at 5 USD a month.`,
+    cols: ['Plan', 'vCPU', 'Memory', 'NVMe storage', 'Monthly', 'With 15% VAT'],
+    popular: 'Most popular', unmanagedH3: 'Servers', managedH3: 'Managed servers', managedLead: 'The same hardware plus setup, OS updates, security hardening, daily backups and support.',
+    noteTry: (rate) => `Prices are in Saudi riyals and exclude VAT; the total with 15% VAT is shown at checkout. Dollar prices use the pegged rate of ${rate} SAR per USD. `,
+    noteUsd: 'Dollar prices are our riyal prices at the pegged rate; Saudi customers are billed in riyals with 15% VAT. ',
+    noteTail: (snapshot) => `A public IP is included with every server. Snapshots cost ${snapshot} per GB per month. Backups cost 20% of the plan and are included with managed servers. Support plans start at 90 SAR a month. App Platform instances start at 19 SAR a month.`,
   },
   marketplace: { eyebrow: 'Marketplace', h2: 'One click from idea to running app.', lead: 'Every app is a hardened image plus a setup script. Built from Git, scanned for CVEs and test deployed before it ships. Bring your own through the vendor program and keep 70% of the revenue.' },
   compare: {
-    eyebrow: 'Why pgcloud', h2: 'The developer experience of a global cloud. The invoices of a local one.',
-    cols: ['pgcloud', 'Global clouds', 'Local hosts'],
+    eyebrow: 'Why Progrid', h2: 'The developer experience of a global cloud. The invoices of a local one.',
+    cols: ['Progrid', 'Global clouds', 'Local hosts'],
     rows: [
       ['Region', 'Saudi Arabia', 'Germany or the Netherlands', 'Saudi Arabia'],
       ['Billing', 'Hourly, in dollars or riyals', 'Monthly or hourly, in dollars', 'Monthly, in riyals'],
@@ -96,19 +97,19 @@ const en: Copy = {
       ['Company', ['About', 'Pricing', 'Vendor program', 'Careers', 'Contact']],
       ['Legal', ['Terms', 'Privacy (PDPL)', 'SLA', 'Acceptable use']],
     ],
-    copyright: 'pgcloud. Working name, brand to be announced.', builtOn: 'Built on open source: Proxmox VE, Ceph, Temporal, NATS',
+    copyright: 'Progrid. All rights reserved.', builtOn: 'Built on open source: Proxmox VE, Ceph, Temporal, NATS',
   },
 };
 
 const tr: Copy = {
-  meta: { title: 'pgcloud: Suudi Arabistan için geliştirici bulutu, insanlar ve yapay zeka ajanları için', description: '60 saniyede sunucu. Dolar veya riyal ile saatlik faturalama ve ZATCA e-fatura, Suudi Arabistan’da kalan veri, tek tıkla uygulamalar ve yapay zeka ajanlarının güvenle kullanabileceği API tokenları.' },
+  meta: { title: 'Progrid: Suudi Arabistan için geliştirici bulutu, insanlar ve yapay zeka ajanları için', description: '60 saniyede sunucu. Dolar veya riyal ile saatlik faturalama ve ZATCA e-fatura, Suudi Arabistan’da kalan veri, tek tıkla uygulamalar ve yapay zeka ajanlarının güvenle kullanabileceği API tokenları.' },
   nav: { products: 'Ürünler', agents: 'Yapay zeka ajanları', pricing: 'Fiyatlar', marketplace: 'Uygulama Mağazası', docs: 'Belgeler', signIn: 'Giriş yap', startFree: 'Ücretsiz başla', menu: 'Menü' },
   hero: {
     badge: 'Suudi Arabistan’daki ilk bölge, 2027’de açılıyor',
     h1a: 'Suudi Arabistan için geliştirici bulutu. İnsanlar ', h1b: 've yapay zeka ajanları için',
     lead: '60 saniyede sunucunuz hazır. Dolar veya riyal ile saatlik ödeyin, ZATCA uyumlu e-fatura alın. Verileriniz Suudi Arabistan’da kalır. Yapay zeka ajanlarınız harcama limitli ve insan onaylı API tokenları kullanır.',
     ctaPrimary: '100 $ kredi ile başla', ctaSecondary: 'Ajanlar nasıl kurulum yapıyor',
-    stats: [['60 sn', 'çalışan bir sunucuya'], ['4 $ / ay', 'giriş sunucusu, saatlik faturalanır'], ['%100', 'veriniz Suudi Arabistan’da kalır']],
+    stats: [['60 sn', 'çalışan bir sunucuya'], ['29 SAR / ay', 'Starter sunucu, saatlik faturalanır'], ['%100', 'veriniz Suudi Arabistan’da kalır']],
   },
   terminal: { ready: 'WordPress https://185.0.113.42 adresinde hazır, saatlik ücret 0,036 $', orAgent: '# ya da limitli bir tokenla ajanınıza bırakın', capNote: '# aylık 15 $ limit, silme onay ister' },
   trust: [
@@ -132,27 +133,28 @@ const tr: Copy = {
   },
   agents: {
     eyebrow: 'Yapay zeka ajanları için', h2: 'Kurulumu ajanınız yapsın. Bütçe sizin elinizde kalsın.',
-    lead: 'Küresel bulutlar ajanlara insanların kullandığı ya hep ya hiç tokenlarını verir. pgcloud tokenları aylık harcama limiti ve insan onayı bekleyen işlem listesi taşır. Bunu bir istem değil, API uygular.',
+    lead: 'Küresel bulutlar ajanlara insanların kullandığı ya hep ya hiç tokenlarını verir. Progrid tokenları aylık harcama limiti ve insan onayı bekleyen işlem listesi taşır. Bunu bir istem değil, API uygular.',
     points: [
-      ['Token başına harcama limiti', 'Aylık 15 $ limit, ajanın 24 $’lık sunucu oluşturamayacağı anlamına gelir. Asla.'],
+      ['Token başına harcama limiti', 'Aylık 50 SAR limit, ajanın 65 SAR’lık sunucu oluşturamayacağı anlamına gelir. Asla.'],
       ['Yıkıcı işlemler için onay', 'Silme, küçültme ve yeniden kurma siz onaylayana kadar kuyrukta bekler.'],
       ['Bir insan gibi yetkili, bir bütçe gibi sınırlı', 'billing:read olmadan servers:write. Tek projeye kapsamlı. Siz dediğinizde süresi dolar.'],
-      ['Yerleşik MCP sunucusu', 'pgcloud’u Claude Code veya Cursor’a tek satırda ekleyin. Her API ucu bir araca dönüşür.'],
+      ['Yerleşik MCP sunucusu', 'Progrid’i Claude Code veya Cursor’a tek satırda ekleyin. Her API ucu bir araca dönüşür.'],
     ],
     codeCreate: '# kodlama ajanınız için token oluşturun', codeCap: '// aylık 15 $', codeOver: '# ajan limiti aştığında gördüğü yanıt',
   },
   pricing: {
-    eyebrow: 'Fiyatlar', h2: 'Basit ve öngörülebilir. Dolar bazlı fiyat, kendi para biriminizle ödeme.',
+    eyebrow: 'Fiyatlar', h2: 'Basit ve öngörülebilir. Riyal bazlı fiyat, KDV ödemeden önce gösterilir.',
     lead: 'Saatlik faturalanır ve aylık fiyatı asla aşmaz. Bant genişliği dahil. Sürpriz kalem yok. Tüm fiyat listesi tek API çağrısı: ', leadCode: 'GET /v1/pricing',
-    cols: ['vCPU', 'Bellek', 'Depolama', 'Trafik', 'Aylık', 'Saatlik'],
-    noteTry: (rate) => `Riyal fiyatları, dolar fiyatlarımızın ${rate} SAR/USD kuruyla çevrilmiş halidir; riyal dolara sabitlendiği için değişmez. `,
-    noteUsd: 'Suudi Arabistan’daki müşteriler sabit kurla riyal olarak ödeyebilir. ',
-    noteTail: (snapshot) => `Suudi Arabistan’daki müşteriler için %15 KDV eklenir. Her sunucuya bir genel IP dahildir. Anlık görüntüler GB başına aylık ${snapshot}. Yedekler plan fiyatının %20’si, yönetilen katman %30 daha. Destek planları aylık 24 USD’den başlar. Uygulama Platformu örnekleri aylık 5 USD’den başlar.`,
+    cols: ['Plan', 'vCPU', 'Bellek', 'NVMe depolama', 'Aylık', '%15 KDV dahil'],
+    popular: 'En popüler', unmanagedH3: 'Sunucular', managedH3: 'Yönetilen sunucular', managedLead: 'Aynı donanım artı kurulum, işletim sistemi güncellemeleri, güvenlik sıkılaştırma, günlük yedekler ve destek.',
+    noteTry: (rate) => `Fiyatlar Suudi riyali cinsindendir ve KDV hariçtir; %15 KDV dahil toplam ödeme sırasında gösterilir. Dolar fiyatları ${rate} SAR/USD sabit kuruyla hesaplanır. `,
+    noteUsd: 'Dolar fiyatları riyal fiyatlarımızın sabit kurla çevrilmiş halidir; Suudi Arabistan’daki müşteriler %15 KDV ile riyal olarak faturalanır. ',
+    noteTail: (snapshot) => `Her sunucuya bir genel IP dahildir. Anlık görüntüler GB başına aylık ${snapshot}. Yedekler plan fiyatının %20’sidir ve yönetilen sunucularda dahildir. Destek planları aylık 90 SAR’dan başlar. Uygulama Platformu örnekleri aylık 19 SAR’dan başlar.`,
   },
   marketplace: { eyebrow: 'Uygulama Mağazası', h2: 'Fikirden çalışan uygulamaya tek tık.', lead: 'Her uygulama sertleştirilmiş bir imaj ve bir kurulum betiğidir. Git’ten derlenir, CVE taramasından geçer ve yayınlanmadan önce deneme kurulumu yapılır. Kendi uygulamanızı satıcı programıyla getirin, gelirin %70’i sizde kalsın.' },
   compare: {
-    eyebrow: 'Neden pgcloud', h2: 'Küresel bir bulutun geliştirici deneyimi. Yerel bir bulutun faturaları.',
-    cols: ['pgcloud', 'Küresel bulutlar', 'Yerel sağlayıcılar'],
+    eyebrow: 'Neden Progrid', h2: 'Küresel bir bulutun geliştirici deneyimi. Yerel bir bulutun faturaları.',
+    cols: ['Progrid', 'Küresel bulutlar', 'Yerel sağlayıcılar'],
     rows: [
       ['Bölge', 'Suudi Arabistan', 'Almanya veya Hollanda', 'Suudi Arabistan'],
       ['Faturalama', 'Saatlik, dolar veya riyal', 'Aylık veya saatlik, dolar', 'Aylık, riyal'],
@@ -172,19 +174,19 @@ const tr: Copy = {
       ['Şirket', ['Hakkında', 'Fiyatlar', 'Satıcı programı', 'Kariyer', 'İletişim']],
       ['Hukuki', ['Koşullar', 'Gizlilik (PDPL)', 'SLA', 'Kabul edilebilir kullanım']],
     ],
-    copyright: 'pgcloud. Çalışma adı, marka duyurulacak.', builtOn: 'Açık kaynak üzerine: Proxmox VE, Ceph, Temporal, NATS',
+    copyright: 'Progrid. Tüm hakları saklıdır.', builtOn: 'Açık kaynak üzerine: Proxmox VE, Ceph, Temporal, NATS',
   },
 };
 
 const ar: Copy = {
-  meta: { title: 'pgcloud: سحابة المطورين في السعودية، للأشخاص ولوكلاء الذكاء الاصطناعي', description: 'خادم خلال 60 ثانية. فوترة بالساعة بالدولار أو الريال مع فاتورة إلكترونية، بيانات تبقى في السعودية، تطبيقات بنقرة واحدة، ورموز API يمكن لوكلاء الذكاء الاصطناعي استخدامها بأمان.' },
+  meta: { title: 'Progrid: سحابة المطورين في السعودية، للأشخاص ولوكلاء الذكاء الاصطناعي', description: 'خادم خلال 60 ثانية. فوترة بالساعة بالدولار أو الريال مع فاتورة إلكترونية، بيانات تبقى في السعودية، تطبيقات بنقرة واحدة، ورموز API يمكن لوكلاء الذكاء الاصطناعي استخدامها بأمان.' },
   nav: { products: 'المنتجات', agents: 'لوكلاء الذكاء الاصطناعي', pricing: 'الأسعار', marketplace: 'المتجر', docs: 'التوثيق', signIn: 'تسجيل الدخول', startFree: 'ابدأ مجانًا', menu: 'القائمة' },
   hero: {
     badge: 'أول منطقة في السعودية، تنطلق في 2027',
     h1a: 'سحابة المطورين في السعودية. مصممة للأشخاص ', h1b: 'ولوكلاء الذكاء الاصطناعي',
     lead: 'احصل على خادم خلال 60 ثانية. ادفع بالساعة بالدولار أو الريال مع فاتورة إلكترونية رسمية. بياناتك تبقى في السعودية. ووكلاء الذكاء الاصطناعي لديك يحصلون على رموز API بحد إنفاق وموافقة بشرية.',
     ctaPrimary: 'ابدأ برصيد 100 دولار', ctaSecondary: 'شاهد كيف ينشر الوكلاء',
-    stats: [['60 ث', 'حتى يعمل الخادم'], ['4 $ / شهر', 'خادم مبتدئ، يُفوتر بالساعة'], ['100%', 'من بياناتك تبقى في السعودية']],
+    stats: [['60 ث', 'حتى يعمل الخادم'], ['29 ر.س / شهر', 'خادم Starter، يُفوتر بالساعة'], ['100%', 'من بياناتك تبقى في السعودية']],
   },
   terminal: { ready: 'WordPress جاهز على https://185.0.113.42 والفوترة 0.036 $ في الساعة', orAgent: '# أو دع وكيلك يفعل ذلك، بحد إنفاق', capNote: '# حد 15 $ شهريًا، الحذف يحتاج موافقة' },
   trust: [
@@ -208,27 +210,28 @@ const ar: Copy = {
   },
   agents: {
     eyebrow: 'لوكلاء الذكاء الاصطناعي', h2: 'دع وكيلك ينشر. وأبقِ الميزانية بين يديك.',
-    lead: 'السحابات العالمية تمنح الوكلاء نفس الرموز المطلقة التي يستخدمها البشر. رموز pgcloud تحمل حد إنفاق شهري وقائمة إجراءات تنتظر موافقة إنسان. الـ API هو من يفرض ذلك، لا التعليمات.',
+    lead: 'السحابات العالمية تمنح الوكلاء نفس الرموز المطلقة التي يستخدمها البشر. رموز Progrid تحمل حد إنفاق شهري وقائمة إجراءات تنتظر موافقة إنسان. الـ API هو من يفرض ذلك، لا التعليمات.',
     points: [
-      ['حد إنفاق لكل رمز', 'حد 15 $ شهريًا يعني أن الوكيل لا يستطيع إنشاء خادم بـ 24 $. أبدًا.'],
+      ['حد إنفاق لكل رمز', 'حد 50 ريالًا شهريًا يعني أن الوكيل لا يستطيع إنشاء خادم بـ 65 ريالًا. أبدًا.'],
       ['موافقة على الإجراءات الخطرة', 'الحذف والتصغير وإعادة البناء تنتظر في قائمة حتى تضغط موافقة.'],
       ['صلاحيات كإنسان، وسقف كميزانية', 'servers:write بدون billing:read. محدود بمشروع واحد. ينتهي عندما تقرر.'],
-      ['خادم MCP مدمج', 'أضف pgcloud إلى Claude Code أو Cursor بسطر واحد. كل نقطة نهاية تصبح أداة.'],
+      ['خادم MCP مدمج', 'أضف Progrid إلى Claude Code أو Cursor بسطر واحد. كل نقطة نهاية تصبح أداة.'],
     ],
     codeCreate: '# أنشئ رمزًا لوكيل البرمجة الخاص بك', codeCap: '// 15 $ شهريًا', codeOver: '# ما يراه الوكيل عند تجاوز الحد',
   },
   pricing: {
-    eyebrow: 'الأسعار', h2: 'بسيطة ومتوقعة. الأسعار بالدولار، والدفع بعملتك.',
+    eyebrow: 'الأسعار', h2: 'بسيطة ومتوقعة. الأسعار بالريال، والضريبة تظهر قبل الدفع.',
     lead: 'تُفوتر بالساعة ولا تتجاوز السعر الشهري أبدًا. النطاق الترددي مشمول. لا بنود مفاجئة. قائمة الأسعار كاملة باستدعاء واحد: ', leadCode: 'GET /v1/pricing',
-    cols: ['vCPU', 'الذاكرة', 'التخزين', 'النقل', 'شهريًا', 'بالساعة'],
-    noteTry: (rate) => `أسعار الريال هي أسعارنا بالدولار محولة بسعر اليوم ${rate} ريال للدولار. فاتورتك تستخدم سعر يوم إصدارها. `,
-    noteUsd: 'يمكن للعملاء في السعودية الدفع بالريال بسعر صرف تاريخ الفاتورة. ',
-    noteTail: (snapshot) => `تُضاف ضريبة القيمة المضافة (15%) للعملاء في السعودية. عنوان IP عام مشمول مع كل خادم. اللقطات ${snapshot} لكل GB شهريًا. النسخ الاحتياطي 20% من سعر الخطة، والمستوى المُدار 30% إضافية. تبدأ خطط الدعم من 24 دولارًا شهريًا. تبدأ نسخ منصة التطبيقات من 5 دولارات شهريًا.`,
+    cols: ['الخطة', 'vCPU', 'الذاكرة', 'تخزين NVMe', 'شهريًا', 'شامل ضريبة 15%'],
+    popular: 'الأكثر طلبًا', unmanagedH3: 'الخوادم', managedH3: 'الخوادم المُدارة', managedLead: 'نفس العتاد مع الإعداد وتحديثات النظام والتحصين الأمني والنسخ الاحتياطي اليومي والدعم.',
+    noteTry: (rate) => `الأسعار بالريال السعودي ولا تشمل ضريبة القيمة المضافة؛ يظهر الإجمالي شاملًا الضريبة 15% عند الدفع. أسعار الدولار بسعر الصرف الثابت ${rate} ريال للدولار. `,
+    noteUsd: 'أسعار الدولار هي أسعارنا بالريال بسعر الصرف الثابت؛ يُفوتر العملاء في السعودية بالريال مع ضريبة 15%. ',
+    noteTail: (snapshot) => `عنوان IP عام مشمول مع كل خادم. اللقطات ${snapshot} لكل GB شهريًا. النسخ الاحتياطي 20% من سعر الخطة ومشمول في الخوادم المُدارة. تبدأ خطط الدعم من 90 ريالًا شهريًا. تبدأ نسخ منصة التطبيقات من 19 ريالًا شهريًا.`,
   },
   marketplace: { eyebrow: 'المتجر', h2: 'نقرة واحدة من الفكرة إلى تطبيق يعمل.', lead: 'كل تطبيق هو صورة محصّنة مع سكربت إعداد. يُبنى من Git ويُفحص للثغرات ويُنشر تجريبيًا قبل الإطلاق. أضف تطبيقك عبر برنامج الموردين واحتفظ بـ 70% من الإيرادات.' },
   compare: {
-    eyebrow: 'لماذا pgcloud', h2: 'تجربة مطورين كالسحابة العالمية. وفواتير كالسحابة المحلية.',
-    cols: ['pgcloud', 'السحابات العالمية', 'المستضيفون المحليون'],
+    eyebrow: 'لماذا Progrid', h2: 'تجربة مطورين كالسحابة العالمية. وفواتير كالسحابة المحلية.',
+    cols: ['Progrid', 'السحابات العالمية', 'المستضيفون المحليون'],
     rows: [
       ['المنطقة', 'السعودية', 'ألمانيا أو هولندا', 'السعودية'],
       ['الفوترة', 'بالساعة، بالدولار أو الريال', 'شهريًا أو بالساعة، بالدولار', 'شهريًا، بالريال'],
@@ -248,7 +251,7 @@ const ar: Copy = {
       ['الشركة', ['من نحن', 'الأسعار', 'برنامج الموردين', 'الوظائف', 'اتصل بنا']],
       ['قانوني', ['الشروط', 'الخصوصية (PDPL)', 'اتفاقية مستوى الخدمة', 'الاستخدام المقبول']],
     ],
-    copyright: 'pgcloud. اسم مؤقت، وسيُعلن عن العلامة التجارية.', builtOn: 'مبني على مصادر مفتوحة: Proxmox VE وCeph وTemporal وNATS',
+    copyright: 'Progrid. جميع الحقوق محفوظة.', builtOn: 'مبني على مصادر مفتوحة: Proxmox VE وCeph وTemporal وNATS',
   },
 };
 

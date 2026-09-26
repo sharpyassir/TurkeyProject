@@ -77,7 +77,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <ShellCtx.Provider value={{ locale, setLocale, authed, signOut }}>
       <header className="border-b border-neutral-200 dark:border-neutral-800">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
-          <Link href="/servers" className="me-2 font-semibold tracking-tight">pgcloud</Link>
+          <Link href="/servers" className="me-2 font-semibold tracking-tight">Progrid</Link>
           {authed && <DesktopNav />}
           <div className="ms-auto flex items-center gap-2">
             {authed ? (

@@ -33,24 +33,24 @@ const schema = z.object({
   MOYASAR_WEBHOOK_SECRET: z.string().optional(),
   MOYASAR_BASE_URL: z.string().url().default('https://api.moyasar.com'),
   /** Seller details printed on invoices. */
-  COMPANY_NAME: z.string().default('pgcloud'),
+  COMPANY_NAME: z.string().default('Progrid'),
   COMPANY_ADDRESS: z.string().default('Saudi Arabia'),
   COMPANY_TAX_ID: z.string().optional(),
   CONSOLE_URL: z.string().url().default('http://localhost:3000'),
   MAIL_PROVIDER: z.enum(['log', 'postmark', 'resend']).default('log'),
-  MAIL_FROM: z.string().default('pgcloud <no-reply@pgcloud.example>'),
+  MAIL_FROM: z.string().default('Progrid <no-reply@progrid.sa>'),
   /** Where new support tickets and customer replies are mailed for the on duty engineer. Empty disables. */
   SUPPORT_INBOX: z.string().default(''),
   /** App Platform: hostnames are <app>.<APPS_DOMAIN>; the zone must be hosted on the platform's DNS. */
-  APPS_DOMAIN: z.string().default('apps.pgcloud.example'),
+  APPS_DOMAIN: z.string().default('apps.progrid.sa'),
   /** Server size for shared app hosts; the platform adds one when a region is full. */
   APP_HOST_SIZE: z.string().default('s-4vcpu-8gb'),
-  ACME_EMAIL: z.string().default('hostmaster@pgcloud.example'),
+  ACME_EMAIL: z.string().default('hostmaster@progrid.sa'),
   MAIL_API_KEY: z.string().optional(),
   /** When true, team owners must enable two factor sign in before using the console. */
   REQUIRE_TOTP_FOR_OWNERS: z.coerce.boolean().default(false),
   OBJECT_STORAGE_PROVIDER: z.enum(['fake', 'rgw']).default('fake'),
-  /** Public S3 endpoint customers use, e.g. https://s3.sa1.pgcloud.example */
+  /** Public S3 endpoint customers use, e.g. https://s3.sa1.progrid.sa */
   S3_ENDPOINT: z.string().url().default('http://localhost:4000/_fake-s3'),
   S3_REGION: z.string().default('sa1'),
   RGW_ADMIN_URL: z.string().url().optional(),
@@ -60,8 +60,8 @@ const schema = z.object({
   PDNS_API_URL: z.string().url().default('http://localhost:8081'),
   PDNS_API_KEY: z.string().optional(),
   /** Comma separated, published as the NS set of every zone and shown to customers. */
-  DNS_NAMESERVERS: z.string().default('ns1.pgcloud.example,ns2.pgcloud.example'),
-  DNS_HOSTMASTER: z.string().default('hostmaster.pgcloud.example'),
+  DNS_NAMESERVERS: z.string().default('ns1.progrid.sa,ns2.progrid.sa'),
+  DNS_HOSTMASTER: z.string().default('hostmaster.progrid.sa'),
   FX_PROVIDER_URL: z.string().url().default('https://open.er-api.com/v6/latest/USD'),
 });
 

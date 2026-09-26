@@ -60,7 +60,7 @@ export class MeteringService {
     const planTeams = await this.prisma.team.findMany({ where: { supportPlan: { not: 'free' }, status: { not: 'suspended' } }, select: { id: true, projects: { select: { id: true }, orderBy: { createdAt: 'asc' }, take: 1 } } });
     const data: Prisma.UsageEventCreateManyInput[] = [
       ...servers.map((s) => ({ at, resourceType: 'server' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
-      ...servers.filter((s) => s.backupsEnabled).map((s) => ({ at, resourceType: 'backup' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
+      ...servers.filter((s) => s.backupsEnabled && !s.managed).map((s) => ({ at, resourceType: 'backup' as const, resourceId: s.id, projectId: s.projectId, hostId: s.hostId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...liveApps.map((a) => ({ at, resourceType: 'app_instance' as const, resourceId: a.id, projectId: a.projectId, quantity: a.instances, unit: 'instance_minute', meta: { source: 'fallback' } })),
       ...haClusters.map((k) => ({ at, resourceType: 'kubernetes' as const, resourceId: k.id, projectId: k.projectId, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),
       ...planTeams.filter((t) => t.projects.length).map((t) => ({ at, resourceType: 'support' as const, resourceId: t.id, projectId: t.projects[0].id, quantity: 1, unit: 'minute', meta: { source: 'fallback' } })),

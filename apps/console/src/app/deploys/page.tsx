@@ -162,7 +162,7 @@ function DeploysPage() {
         <div className="grid gap-3 sm:grid-cols-3">
           <input className="input" name="branch" placeholder={mode === 'github' ? 'Branch (default branch)' : 'main'} />
           <input className="input" name="port" type="number" placeholder="App port (3000)" min={1} max={65535} />
-          <select className="input" name="size" defaultValue=""><option value="">s-1vcpu-2gb (default)</option><option>s-1vcpu-1gb</option><option>s-2vcpu-4gb</option><option>s-4vcpu-8gb</option></select>
+          <select className="input" name="size" defaultValue=""><option value="">Starter, 1 vCPU 2 GB (default)</option><option value="s-2vcpu-4gb">Standard, 2 vCPU 4 GB</option><option value="s-4vcpu-8gb">Pro, 4 vCPU 8 GB</option><option value="s-8vcpu-16gb">Business, 8 vCPU 16 GB</option></select>
         </div>
         <textarea className="input font-mono text-xs" name="env" rows={3} placeholder={'Environment variables, one per line\nDATABASE_URL=postgres://…'} />
         {mode === 'url' && <input className="input" name="gitToken" type="password" placeholder="GitHub token for private repos (optional, never stored by us)" autoComplete="off" />}

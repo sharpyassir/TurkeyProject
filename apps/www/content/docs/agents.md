@@ -19,7 +19,7 @@ This token can read and create servers and deploys, may spend at most $15 per mo
 
 ## 2. Connect the MCP server
 
-The MCP server exposes pgcloud as tools to any MCP client.
+The MCP server exposes Progrid as tools to any MCP client.
 
 ```sh
 claude mcp add pgcloud -e PGCLOUD_TOKEN=pgc_... -- npx -y pgcloud-mcp
@@ -44,7 +44,7 @@ Agents poll the decision with `get_approval`, or simply carry on with other work
 Any language works. The token goes in the `Authorization` header:
 
 ```sh
-curl https://api.pgcloud.example/v1/servers \
+curl https://api.progrid.sa/v1/servers \
   -H "Authorization: Bearer pgc_..." \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: $(uuidgen)" \

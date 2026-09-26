@@ -125,10 +125,13 @@ export class ServersService {
     // Spend controls (team currency)
     const team = await this.prisma.team.findUniqueOrThrow({ where: { id: actor.teamId } });
     const planMonthly = await this.spend.monthlyPriceMinor('server', size.id, team.currency);
+    const managedMonthly = dto.managed ? await this.spend.monthlyPriceMinor('managed_server', `managed-${size.id}`, team.currency) : 0;
+    if (dto.managed && !managedMonthly) throw ApiError.invalid(`The managed tier is not offered on the ${size.name || size.id} plan; choose Standard or larger`);
+    // Managed includes daily backups; otherwise backups are a share of the plan.
     const monthly =
       planMonthly +
-      (dto.backups || dto.managed ? Math.round((planMonthly * (await this.spend.monthlyPriceMinor('backup', 'backups_pct', team.currency))) / 100) : 0) +
-      (dto.managed ? Math.round((planMonthly * (await this.spend.monthlyPriceMinor('managed_server', 'managed_pct', team.currency))) / 100) : 0) +
+      managedMonthly +
+      (dto.backups && !dto.managed ? Math.round((planMonthly * (await this.spend.monthlyPriceMinor('backup', 'backups_pct', team.currency))) / 100) : 0) +
       (await this.spend.monthlyPriceMinor('public_ip', 'public_ip', team.currency)) +
       (image.app?.priceMonthlyMinor ?? 0);
     await this.spend.assertCanSpend(actor, project.id, monthly);
@@ -213,8 +216,10 @@ export class ServersService {
     if (turningBackupsOn || turningManagedOn) {
       const team = await this.prisma.team.findUniqueOrThrow({ where: { id: actor.teamId } });
       const plan = await this.spend.monthlyPriceMinor('server', server.sizeId, team.currency);
-      const pct = (turningBackupsOn ? await this.spend.monthlyPriceMinor('backup', 'backups_pct', team.currency) : 0) + (turningManagedOn ? await this.spend.monthlyPriceMinor('managed_server', 'managed_pct', team.currency) : 0);
-      await this.spend.assertCanSpend(actor, server.projectId, Math.round((plan * pct) / 100));
+      const managedMonthly = turningManagedOn ? await this.spend.monthlyPriceMinor('managed_server', `managed-${server.sizeId}`, team.currency) : 0;
+      if (turningManagedOn && !managedMonthly) throw ApiError.invalid('The managed tier is not offered on this plan; resize to Standard or larger first');
+      const backupsPct = turningBackupsOn && !turningManagedOn && !server.managed ? await this.spend.monthlyPriceMinor('backup', 'backups_pct', team.currency) : 0;
+      await this.spend.assertCanSpend(actor, server.projectId, managedMonthly + Math.round((plan * backupsPct) / 100));
     }
     if (dto.name && dto.name !== server.name && (await this.prisma.server.findFirst({ where: { projectId: server.projectId, name: dto.name, deletedAt: null } }))) throw ApiError.conflict('name_taken', `A server named "${dto.name}" already exists in this project`);
     const managedToken = turningManagedOn ? server.managedToken ?? randomBytes(24).toString('base64url') : undefined;
@@ -401,7 +406,7 @@ export function present(s: ServerRow) {
     status: s.status,
     statusMessage: s.statusMessage,
     region: s.region,
-    size: { id: s.size.id, vcpu: s.size.vcpu, memoryMb: s.size.memoryMb, diskGb: s.size.diskGb, transferTb: s.size.transferTb },
+    size: { id: s.size.id, name: s.size.name, vcpu: s.size.vcpu, memoryMb: s.size.memoryMb, diskGb: s.size.diskGb, transferTb: s.size.transferTb },
     image: s.image,
     networks: {
       v4: s.publicIps.map((ip) => ({ ipAddress: ip.address, type: 'public', floating: ip.floating, reverseDns: ip.reverseDns })),

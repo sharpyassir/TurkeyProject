@@ -26,7 +26,7 @@ Turning managed off stops the charge and the reports at once. The agent stays in
 
 ## Pricing
 
-Managed costs 30 percent of the server's plan price, plus the usual 20 percent for backups, both charged by the hour with the server. A 4 GB server at 24 USD a month is 36 USD a month managed. Turning it off mid month only charges the hours it was on.
+Managed servers are sold as plans that include the hardware, setup, OS updates, security hardening, daily backups and support: Managed Start (2 vCPU, 4 GB, 80 GB) at 199 SAR a month, Managed Business (4 vCPU, 8 GB, 160 GB) at 349 SAR, and Managed Pro (8 vCPU, 16 GB, 320 GB) at 599 SAR, all excluding 15 percent VAT, which is shown at checkout. The Starter plan cannot be managed. Turning managed off mid month only charges the hours it was on; backups then cost 20 percent of the plan if you keep them.
 
 ## Status and reports
 

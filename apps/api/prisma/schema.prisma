@@ -290,6 +290,7 @@ enum ServerStatus {
 
 model Size {
   id        String  @id // "s-2vcpu-4gb"
+  name      String  @default("") // "Starter", "Standard", "Pro", "Business"
   vcpu      Int
   memoryMb  Int
   diskGb    Int

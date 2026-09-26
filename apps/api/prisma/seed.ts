@@ -10,17 +10,21 @@ const prisma = new PrismaClient();
 const PRICE_VALID_FROM = new Date(Date.UTC(2026, 0, 1));
 
 /**
- * Prices in USD cents. The ladder mirrors DigitalOcean's Basic Droplets (docs/competitors.md).
- * Riyal prices are never stored: FxService converts at the current USD→SAR rate.
+ * Progrid price book, in halalas (SAR minor units), excluding 15% VAT. Dollar prices are
+ * derived at the pegged rate and never stored. Plans mirror the launch price list.
  */
 const SIZES = [
-  { id: 's-1vcpu-512mb', vcpu: 1, memoryMb: 512, diskGb: 10, transferTb: 0.5, usd: 400 },
-  { id: 's-1vcpu-1gb', vcpu: 1, memoryMb: 1024, diskGb: 25, transferTb: 1, usd: 600 },
-  { id: 's-1vcpu-2gb', vcpu: 1, memoryMb: 2048, diskGb: 50, transferTb: 2, usd: 1200 },
-  { id: 's-2vcpu-2gb', vcpu: 2, memoryMb: 2048, diskGb: 60, transferTb: 3, usd: 1800 },
-  { id: 's-2vcpu-4gb', vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4, usd: 2400 },
-  { id: 's-4vcpu-8gb', vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 5, usd: 4800 },
-  { id: 's-8vcpu-16gb', vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 6, usd: 9600 },
+  { id: 's-1vcpu-2gb', name: 'Starter', vcpu: 1, memoryMb: 2048, diskGb: 40, transferTb: 2, sar: 2900 },
+  { id: 's-2vcpu-4gb', name: 'Standard', vcpu: 2, memoryMb: 4096, diskGb: 80, transferTb: 4, sar: 6500 },
+  { id: 's-4vcpu-8gb', name: 'Pro', vcpu: 4, memoryMb: 8192, diskGb: 160, transferTb: 6, sar: 12500 },
+  { id: 's-8vcpu-16gb', name: 'Business', vcpu: 8, memoryMb: 16384, diskGb: 320, transferTb: 8, sar: 23900 },
+];
+
+/** Managed VPS: same hardware plus setup, OS updates, hardening, backups and support. Total monthly price in halalas; the add on is total minus the plan. */
+const MANAGED = [
+  { sizeId: 's-2vcpu-4gb', name: 'Managed Start', sar: 19900 },
+  { sizeId: 's-4vcpu-8gb', name: 'Managed Business', sar: 34900 },
+  { sizeId: 's-8vcpu-16gb', name: 'Managed Pro', sar: 59900 },
 ];
 
 const DISTROS = [
@@ -33,43 +37,50 @@ const DISTROS = [
 async function main() {
   await prisma.region.upsert({ where: { id: 'sa1' }, update: {}, create: { id: 'sa1', name: 'Saudi Arabia 1', country: 'SA' } });
 
+  const BOOK = 'SAR' as const;
   for (const [i, s] of SIZES.entries()) {
-    await prisma.size.upsert({ where: { id: s.id }, update: {}, create: { id: s.id, vcpu: s.vcpu, memoryMb: s.memoryMb, diskGb: s.diskGb, transferTb: s.transferTb, sortOrder: i } });
-    const exists = await prisma.price.findFirst({ where: { resourceType: 'server', sku: s.id, currency: 'USD', validTo: null } });
-    if (!exists) await prisma.price.create({ data: { resourceType: 'server', sku: s.id, sizeId: s.id, currency: 'USD', monthlyMinor: s.usd, validFrom: PRICE_VALID_FROM } });
+    await prisma.size.upsert({ where: { id: s.id }, update: { name: s.name, vcpu: s.vcpu, memoryMb: s.memoryMb, diskGb: s.diskGb, transferTb: s.transferTb, available: true, sortOrder: i }, create: { id: s.id, name: s.name, vcpu: s.vcpu, memoryMb: s.memoryMb, diskGb: s.diskGb, transferTb: s.transferTb, sortOrder: i } });
+    await price('server', s.id, s.sar, 'hour', s.id);
+    // Managed database nodes: twice the plan price of the same size, per node.
+    await price('database', `db-${s.id}`, s.sar * 2, 'hour', s.id);
   }
-  // Managed database nodes: twice the plan price of the same size, per node.
-  for (const s of SIZES) {
-    const sku = `db-${s.id}`;
-    const exists = await prisma.price.findFirst({ where: { resourceType: 'database', sku, currency: 'USD', validTo: null } });
-    if (!exists) await prisma.price.create({ data: { resourceType: 'database', sku, sizeId: s.id, currency: 'USD', monthlyMinor: s.usd * 2, validFrom: PRICE_VALID_FROM } });
+  // Plans that are no longer sold stay for existing servers but cannot be chosen.
+  await prisma.size.updateMany({ where: { id: { notIn: SIZES.map((s) => s.id) } }, data: { available: false } });
+  for (const m of MANAGED) {
+    const base = SIZES.find((s) => s.id === m.sizeId)!;
+    await price('managed_server', `managed-${m.sizeId}`, m.sar - base.sar, 'hour', m.sizeId);
   }
-  for (const [sku, type, usd] of [
-    ['public_ip', 'public_ip', 300],
-    ['snapshot_gb', 'snapshot', 6],
-    ['volume_gb', 'volume', 10],
-    ['lb_node', 'load_balancer', 1200],
-    ['storage_gb', 'object_storage', 2],
-    ['bandwidth_gb', 'bandwidth', 1],
-    // Backups: 20% of the server's monthly price (DigitalOcean weekly backup model). Stored as
-    // percent in monthlyMinor with unit "percent"; RatingService applies it per server hour.
-    ['backups_pct', 'backup', 20],
-    // Managed tier: 30% of the server's monthly price, same percent mechanism.
-    ['managed_pct', 'managed_server', 30],
+  for (const [sku, type, sar, unit] of [
+    // A public IPv4 address is included with every server.
+    ['public_ip', 'public_ip', 0, 'hour'],
+    ['snapshot_gb', 'snapshot', 25, 'hour'],
+    ['volume_gb', 'volume', 40, 'hour'],
+    ['lb_node', 'load_balancer', 4500, 'hour'],
+    ['storage_gb', 'object_storage', 8, 'hour'],
+    ['bandwidth_gb', 'bandwidth', 4, 'hour'],
+    // Backups: 20% of the server's monthly price. Stored as percent with unit "percent"; RatingService applies it per server hour.
+    ['backups_pct', 'backup', 20, 'percent'],
     // Support plans: flat monthly, billed against the team's default project.
-    ['support-developer', 'support', 2400],
-    ['support-standard', 'support', 9900],
-    ['support-premium', 'support', 49900],
+    ['support-developer', 'support', 9000, 'month'],
+    ['support-standard', 'support', 37500, 'month'],
+    ['support-premium', 'support', 187500, 'month'],
     // Kubernetes: a single control plane is included; three control plane nodes carry a flat fee. Workers are billed as servers.
-    ['k8s-ha', 'kubernetes', 4000],
+    ['k8s-ha', 'kubernetes', 15000, 'hour'],
     // App Platform: per container instance per month.
-    ['app-xs', 'app_instance', 500],
-    ['app-s', 'app_instance', 1200],
-    ['app-m', 'app_instance', 2400],
-    ['app-l', 'app_instance', 4800],
+    ['app-xs', 'app_instance', 1900, 'hour'],
+    ['app-s', 'app_instance', 4500, 'hour'],
+    ['app-m', 'app_instance', 9000, 'hour'],
+    ['app-l', 'app_instance', 18000, 'hour'],
   ] as const) {
-    const exists = await prisma.price.findFirst({ where: { resourceType: type, sku, currency: 'USD', validTo: null } });
-    if (!exists) await prisma.price.create({ data: { resourceType: type, sku, currency: 'USD', monthlyMinor: usd, unit: sku.endsWith('_pct') ? 'percent' : sku.startsWith('support-') ? 'month' : 'hour', validFrom: PRICE_VALID_FROM } });
+    await price(type, sku, sar, unit);
+  }
+
+  /** Creates the current book row for a sku when none exists, and closes an old row whose amount differs. */
+  async function price(resourceType: Parameters<typeof prisma.price.create>[0]['data']['resourceType'], sku: string, monthlyMinor: number, unit: string, sizeId?: string) {
+    const cur = await prisma.price.findFirst({ where: { resourceType, sku, currency: BOOK, validTo: null } });
+    if (cur && cur.monthlyMinor === monthlyMinor) return;
+    if (cur) await prisma.price.update({ where: { id: cur.id }, data: { validTo: new Date() } });
+    await prisma.price.create({ data: { resourceType, sku, sizeId, currency: BOOK, monthlyMinor, unit, validFrom: cur ? new Date() : PRICE_VALID_FROM } });
   }
 
   // Starting exchange rate; the hourly job replaces it with the provider's rate.

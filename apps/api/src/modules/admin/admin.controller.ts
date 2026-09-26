@@ -6,6 +6,7 @@ import { CurrentActor, RequireScopes } from '../../common/auth/decorators';
 import type { Actor } from '../../common/auth/actor';
 import { TrustService } from '../trust/trust.service';
 import { EventsService } from '../events/events.service';
+import { BOOK_CURRENCY } from '../billing/pricing';
 import { RatingService } from '../billing/rating.service';
 import { InvoicesService } from '../billing/invoices.service';
 import { BackupsService } from '../storage/backups.service';
@@ -118,18 +119,18 @@ export class AdminController {
 
   @Get('prices')
   async prices() {
-    return { data: await this.prisma.price.findMany({ where: { currency: 'USD', validTo: null }, orderBy: [{ resourceType: 'asc' }, { monthlyMinor: 'asc' }] }) };
+    return { data: await this.prisma.price.findMany({ where: { currency: BOOK_CURRENCY, validTo: null }, orderBy: [{ resourceType: 'asc' }, { monthlyMinor: 'asc' }] }) };
   }
 
-  /** Changes a USD list price from now on: the old row is closed, a new one opens. Running hours keep the old rate. */
+  /** Changes a list price (in the book currency, riyals) from now on: the old row is closed, a new one opens. Running hours keep the old rate. */
   @Post('prices')
   async setPrice(@CurrentActor() actor: Actor, @Body() dto: PriceDto) {
-    const cur = await this.prisma.price.findFirst({ where: { sku: dto.sku, currency: 'USD', validTo: null } });
+    const cur = await this.prisma.price.findFirst({ where: { sku: dto.sku, currency: BOOK_CURRENCY, validTo: null } });
     if (!cur) throw ApiError.notFound('price', dto.sku);
     const now = new Date();
     const [, next] = await this.prisma.$transaction([
       this.prisma.price.update({ where: { id: cur.id }, data: { validTo: now } }),
-      this.prisma.price.create({ data: { resourceType: cur.resourceType, sku: cur.sku, sizeId: cur.sizeId, currency: 'USD', monthlyMinor: dto.monthlyMinor, unit: cur.unit, validFrom: now } }),
+      this.prisma.price.create({ data: { resourceType: cur.resourceType, sku: cur.sku, sizeId: cur.sizeId, currency: BOOK_CURRENCY, monthlyMinor: dto.monthlyMinor, unit: cur.unit, validFrom: now } }),
     ]);
     await this.events.emit('admin.price_set', { sku: dto.sku, from: cur.monthlyMinor, to: dto.monthlyMinor }, { actor });
     return next;

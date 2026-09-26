@@ -8,7 +8,7 @@ import { IamService } from '../iam/iam.service';
 import { InvoicesService } from './invoices.service';
 import { SpendService } from './spend.service';
 import { FxService } from './fx.service';
-import { displayPrice, startOfMonth } from './pricing';
+import { BOOK_CURRENCY, VAT_RATE, displayPrice, startOfMonth, taxRateFor } from './pricing';
 import { loadConfig } from '../../config/config';
 
 @ApiTags('billing')
@@ -61,13 +61,16 @@ export class PricingController {
 
   @Public() @Get()
   async prices(@Query('currency') currency: 'USD' | 'SAR' = loadConfig().DEFAULT_CURRENCY) {
-    const prices = await this.prisma.price.findMany({ where: { currency: 'USD', validTo: null }, include: { size: true } });
+    const prices = await this.prisma.price.findMany({ where: { currency: BOOK_CURRENCY, validTo: null }, include: { size: true } });
     const h = loadConfig().BILLING_HOURS_PER_MONTH;
-    const rate = await this.fx.rate(currency);
+    const rate = await this.fx.bookRate(currency);
     return {
       currency,
-      baseCurrency: 'USD',
+      baseCurrency: BOOK_CURRENCY,
       fxRate: rate,
+      usdToSar: await this.fx.rate('SAR'),
+      vatRate: taxRateFor(currency, 'SA') || VAT_RATE,
+      vatNote: 'Prices exclude VAT; Saudi customers pay 15% VAT, shown at checkout.',
       hoursPerMonth: h,
       data: prices.map((p) => {
         const monthly = p.unit === 'percent' ? p.monthlyMinor : Math.round(p.monthlyMinor * rate);

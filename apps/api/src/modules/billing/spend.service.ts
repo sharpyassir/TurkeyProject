@@ -3,6 +3,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { ApiError } from '../../common/errors/api-error';
 import { EventsService } from '../events/events.service';
 import { loadConfig } from '../../config/config';
+import { BOOK_CURRENCY } from './pricing';
 import { FxService } from './fx.service';
 import { startOfMonth } from './pricing';
 import type { Actor } from '../../common/auth/actor';
@@ -20,7 +21,7 @@ export class SpendService {
   /** Projected monthly cost of a resource in the team currency (USD book, converted at today's rate). */
   async monthlyPriceMinor(resourceType: 'server' | 'public_ip' | 'snapshot' | 'backup' | 'volume' | 'load_balancer' | 'object_storage' | 'database' | 'managed_server' | 'support' | 'kubernetes' | 'app_instance', sku: string, currency: 'USD' | 'SAR') {
     const price = await this.prisma.price.findFirst({
-      where: { resourceType, sku, currency: 'USD', validTo: null },
+      where: { resourceType, sku, currency: BOOK_CURRENCY, validTo: null },
       orderBy: { validFrom: 'desc' },
     });
     if (!price) return 0;

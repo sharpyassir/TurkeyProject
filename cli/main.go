@@ -573,7 +573,7 @@ func cmdServers(args []string) error {
 		userData, rest := flag(rest, "--user-data")
 		managed, rest := has(rest, "--managed")
 		wait, _ := has(rest, "--wait")
-		body := map[string]any{"name": name, "size": or(size, "s-1vcpu-1gb"), "image": or(image, "ubuntu-24-04")}
+		body := map[string]any{"name": name, "size": or(size, "s-1vcpu-2gb"), "image": or(image, "ubuntu-24-04")}
 		if project != "" {
 			body["project"] = project
 		}

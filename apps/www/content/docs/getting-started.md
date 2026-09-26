@@ -5,11 +5,11 @@ section: Start here
 order: 1
 ---
 
-pgcloud is a developer cloud built for Saudi Arabia. You get servers by the hour, one click apps, and API tokens that AI agents can use safely. Everything you can do in the console you can also do from the command line, the API, or an AI agent.
+Progrid is a developer cloud built for Saudi Arabia. You get servers by the hour, one click apps, and API tokens that AI agents can use safely. Everything you can do in the console you can also do from the command line, the API, or an AI agent.
 
 ## 1. Create an account
 
-Open the [console](https://console.pgcloud.example/login), choose **Create account**, and enter your name, a team name, your email, and a password of ten characters or more. New accounts start with credit so you can try things before adding a card.
+Open the [console](https://console.progrid.sa/login), choose **Create account**, and enter your name, a team name, your email, and a password of ten characters or more. New accounts start with credit so you can try things before adding a card.
 
 Confirm your email from the message we send. Servers cannot be created until the team owner has a confirmed address.
 

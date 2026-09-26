@@ -17,7 +17,7 @@ import { renderLbCloudInit } from './cloud-init';
 import { CreateCertificateDto, CreateLoadBalancerDto, TargetsDto, UpdateLoadBalancerDto } from './lb.dto';
 import { DEFAULT_HEALTH_CHECK, ForwardingRule, HealthCheck, StickySessions } from './lb.types';
 
-const NODE_SIZE = 's-1vcpu-1gb';
+const NODE_SIZE = 's-1vcpu-2gb';
 const NODE_IMAGE = 'ubuntu-24-04';
 
 const lbInclude = {

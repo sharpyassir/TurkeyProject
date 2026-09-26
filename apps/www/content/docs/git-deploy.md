@@ -19,7 +19,7 @@ Environment variables you enter are written to the server and passed to the cont
 
 ## Connect GitHub once
 
-Go to **Projects, Deploys** and choose **Connect GitHub**. GitHub asks which account or organization to install the pgcloud app on and which repositories it may see. You can change that list any time from GitHub. After that, every deploy is a matter of picking a repository from a list: private repositories work without any token, and every push to the chosen branch redeploys without touching repository settings.
+Go to **Projects, Deploys** and choose **Connect GitHub**. GitHub asks which account or organization to install the Progrid app on and which repositories it may see. You can change that list any time from GitHub. After that, every deploy is a matter of picking a repository from a list: private repositories work without any token, and every push to the chosen branch redeploys without touching repository settings.
 
 If you would rather not install the app, switch to **Repository URL** and paste the address. Private repositories then need a token with read access, which is stored on the server only.
 
