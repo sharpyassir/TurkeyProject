@@ -41,6 +41,9 @@ export type LoadBalancerStatus = 'creating' | 'active' | 'updating' | 'failed' |
 export interface LoadBalancer { id: string; name: string; status: LoadBalancerStatus; statusMessage: string | null; ip: string | null; regionId: string; projectId: string; algorithm: 'round_robin' | 'least_conn'; nodes: number; forwardingRules: ForwardingRule[]; healthCheck: Required<HealthCheck>; stickySessions: StickySessions | null; redirectHttpToHttps: boolean; proxyProtocol: boolean; tag: string | null; configVersion: number; nodeStatus: { index: number; status: string; appliedVersion: number; lastSeenAt: string | null }[]; targets: { serverId: string; name: string; status: string; healthy: boolean | null; lastCheckedAt: string | null }[]; createdAt: string }
 export interface CreateLoadBalancer { name: string; region?: string; project?: string; nodes?: number; algorithm?: 'round_robin' | 'least_conn'; forwardingRules: ForwardingRule[]; healthCheck?: HealthCheck; stickySessions?: StickySessions; redirectHttpToHttps?: boolean; proxyProtocol?: boolean; serverIds?: string[]; tag?: string }
 export interface Certificate { id: string; name: string; type: 'custom' | 'letsencrypt'; domains: string[]; notAfter: string | null; createdAt: string }
+export type DnsRecordType = 'A' | 'AAAA' | 'CNAME' | 'MX' | 'TXT' | 'NS' | 'SRV' | 'CAA';
+export interface DnsRecord { id: string; name: string; type: DnsRecordType; content: string; ttl: number; priority: number | null; updatedAt: string }
+export interface Domain { id: string; name: string; status: string; statusMessage: string | null; serial: number; synced: boolean; nameservers: string[]; recordCount: number; createdAt: string }
 export interface SshKey { id: string; name: string; fingerprint: string; createdAt: string }
 export interface ApiToken { id: string; name: string; prefix: string; scopes: string[]; isAgent: boolean; spendCapMinor: number | null; spentThisMonthMinor: number; requireApprovalFor: string[]; expiresAt: string | null; lastUsedAt: string | null; createdAt: string }
 export interface MetricPoint { at: string; cpu: number; cpuMax?: number; memoryUsedMb: number; memoryTotalMb: number; netInBps: number; netOutBps: number; diskReadBps: number; diskWriteBps: number; diskUsedPercent?: number | null }
@@ -202,6 +205,18 @@ export class Pgcloud {
     list: () => this.request<List<Certificate>>('GET', '/v1/certificates', undefined, { project: this.opts.project }),
     create: (body: { name: string; type: 'custom' | 'letsencrypt'; certPem?: string; keyPem?: string; domains?: string[]; project?: string }) => this.request<Certificate>('POST', '/v1/certificates', { project: this.opts.project, ...body }),
     delete: (id: string) => this.request<{ id: string; deleted: boolean }>('DELETE', `/v1/certificates/${id}`),
+  };
+
+  readonly domains = {
+    list: () => this.request<{ data: Domain[]; nameservers: string[] }>('GET', '/v1/domains', undefined, { project: this.opts.project }),
+    get: (name: string) => this.request<Domain & { records: DnsRecord[] }>('GET', `/v1/domains/${name}`),
+    create: (body: { name: string; ip?: string; project?: string }) => this.request<Domain & { records: DnsRecord[] }>('POST', '/v1/domains', { project: this.opts.project, ...body }),
+    delete: (name: string) => this.request<{ name: string; deleted: boolean }>('DELETE', `/v1/domains/${name}`),
+    zoneFile: (name: string) => this.request<string>('GET', `/v1/domains/${name}/zone-file`),
+    addRecord: (name: string, body: { name: string; type: DnsRecordType; content: string; ttl?: number; priority?: number }) => this.request<DnsRecord>('POST', `/v1/domains/${name}/records`, body),
+    updateRecord: (name: string, id: string, body: { name?: string; content?: string; ttl?: number; priority?: number }) => this.request<DnsRecord>('PATCH', `/v1/domains/${name}/records/${id}`, body),
+    deleteRecord: (name: string, id: string) => this.request<{ id: string; deleted: boolean }>('DELETE', `/v1/domains/${name}/records/${id}`),
+    setReverseDns: (publicIpId: string, hostname: string | null) => this.request<{ id: string; address: string; reverseDns: string | null; synced: boolean }>('PUT', `/v1/public-ips/${publicIpId}/reverse-dns`, { name: hostname }),
   };
 
   readonly billing = {

@@ -46,7 +46,7 @@ const en: Copy = {
     lead: 'One API behind the console, the CLI, Terraform and your agents. Every product is a workflow you can watch, not a spinner.',
     available: 'Available', roadmap: 'Roadmap',
     groups: [
-      { name: 'Core Cloud', desc: 'Servers, volumes, load balancers, public IPs, snapshots, firewalls and monitoring today. VPC and DNS are next.', items: ['Servers', 'Volumes', 'Load balancers', 'Snapshots', 'Public IPs', 'Firewalls', 'Monitoring'], live: true },
+      { name: 'Core Cloud', desc: 'Servers, volumes, load balancers, DNS, public IPs, snapshots, firewalls and monitoring today. VPC and object storage are next.', items: ['Servers', 'Volumes', 'Load balancers', 'DNS', 'Snapshots', 'Public IPs', 'Firewalls', 'Monitoring'], live: true },
       { name: 'Managed Agents', desc: 'Give Claude, Cursor or n8n a token with a monthly spending cap and approval rules instead of the keys to your account.', items: ['Agent tokens', 'MCP server', 'Approval queue'], live: true, highlight: true },
       { name: 'Marketplace', desc: '15 one click apps at launch, from WordPress to Odoo to an AI starter. Progrid apps as premium listings.', items: ['WordPress', 'n8n', 'Odoo', 'Coolify', 'Ollama + Open WebUI'], live: true },
       { name: 'Inference Engine', desc: 'One OpenAI compatible endpoint, billed per token. Partner models first, our own GPUs next.', items: ['Inference gateway', 'GPU servers'], live: false },
@@ -122,7 +122,7 @@ const tr: Copy = {
     lead: 'Konsolun, komut satırının, Terraform’un ve ajanlarınızın arkasında tek bir API. Her ürün izleyebileceğiniz bir iş akışıdır, dönen bir simge değil.',
     available: 'Kullanılabilir', roadmap: 'Yol haritası',
     groups: [
-      { name: 'Çekirdek Bulut', desc: 'Bugün sunucular, diskler, yük dengeleyiciler, genel IP’ler, anlık görüntüler, güvenlik duvarları ve izleme. Sırada VPC ve DNS var.', items: ['Sunucular', 'Diskler', 'Yük dengeleyiciler', 'Anlık görüntüler', 'Genel IP’ler', 'Güvenlik duvarları', 'İzleme'], live: true },
+      { name: 'Çekirdek Bulut', desc: 'Bugün sunucular, diskler, yük dengeleyiciler, DNS, genel IP’ler, anlık görüntüler, güvenlik duvarları ve izleme. Sırada VPC ve nesne depolama var.', items: ['Sunucular', 'Diskler', 'Yük dengeleyiciler', 'DNS', 'Anlık görüntüler', 'Genel IP’ler', 'Güvenlik duvarları', 'İzleme'], live: true },
       { name: 'Yönetilen Ajanlar', desc: 'Claude, Cursor veya n8n’e hesabınızın anahtarları yerine aylık harcama limiti ve onay kuralları olan bir token verin.', items: ['Ajan tokenları', 'MCP sunucusu', 'Onay kuyruğu'], live: true, highlight: true },
       { name: 'Uygulama Mağazası', desc: 'Açılışta WordPress’ten Odoo’ya ve bir yapay zeka başlangıç paketine kadar 15 tek tık uygulama. Progrid uygulamaları premium listeler olarak.', items: ['WordPress', 'n8n', 'Odoo', 'Coolify', 'Ollama + Open WebUI'], live: true },
       { name: 'Çıkarım Motoru', desc: 'OpenAI uyumlu tek uç nokta, token başına faturalama. Önce iş ortağı modeller, sonra kendi GPU’larımız.', items: ['Çıkarım geçidi', 'GPU sunucuları'], live: false },
@@ -198,7 +198,7 @@ const ar: Copy = {
     lead: 'واجهة API واحدة خلف لوحة التحكم وسطر الأوامر وTerraform ووكلائك. كل منتج هو سير عمل يمكنك متابعته، لا مؤشر انتظار.',
     available: 'متاح', roadmap: 'خارطة الطريق',
     groups: [
-      { name: 'السحابة الأساسية', desc: 'الخوادم والأقراص وموازنات الحمل وعناوين IP العامة واللقطات وجدران الحماية والمراقبة اليوم. الشبكات الخاصة وDNS لاحقًا.', items: ['الخوادم', 'الأقراص', 'موازنات الحمل', 'اللقطات', 'عناوين IP العامة', 'جدران الحماية', 'المراقبة'], live: true },
+      { name: 'السحابة الأساسية', desc: 'الخوادم والأقراص وموازنات الحمل وDNS وعناوين IP العامة واللقطات وجدران الحماية والمراقبة اليوم. الشبكات الخاصة والتخزين الكائني لاحقًا.', items: ['الخوادم', 'الأقراص', 'موازنات الحمل', 'DNS', 'اللقطات', 'عناوين IP العامة', 'جدران الحماية', 'المراقبة'], live: true },
       { name: 'الوكلاء المُدارون', desc: 'امنح Claude أو Cursor أو n8n رمزًا بحد إنفاق شهري وقواعد موافقة بدلًا من مفاتيح حسابك.', items: ['رموز الوكلاء', 'خادم MCP', 'قائمة الموافقات'], live: true, highlight: true },
       { name: 'المتجر', desc: '15 تطبيقًا بنقرة واحدة عند الإطلاق، من WordPress إلى Odoo إلى حزمة بداية للذكاء الاصطناعي. تطبيقات Progrid كقوائم مميزة.', items: ['WordPress', 'n8n', 'Odoo', 'Coolify', 'Ollama + Open WebUI'], live: true },
       { name: 'محرك الاستدلال', desc: 'نقطة نهاية واحدة متوافقة مع OpenAI، تُفوتر لكل رمز. نماذج الشركاء أولًا، ثم وحدات GPU الخاصة بنا.', items: ['بوابة الاستدلال', 'خوادم GPU'], live: false },

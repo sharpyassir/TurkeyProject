@@ -35,6 +35,7 @@ tags:
   - name: snapshots
   - name: volumes
   - name: load-balancers
+  - name: dns
   - name: marketplace
   - name: billing
   - name: webhooks
@@ -501,6 +502,32 @@ paths:
   /certificates/{id}:
     delete: { tags: [load-balancers], summary: Delete a certificate, parameters: [{ $ref: "#/components/parameters/id" }], responses: { "200": { description: Deleted }, "409": { description: In use by a load balancer } } }
 
+  /domains:
+    get: { tags: [dns], summary: List hosted zones, parameters: [{ $ref: "#/components/parameters/project" }], responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Domain" } }, nameservers: { type: array, items: { type: string } } } } } } } } }
+    post:
+      tags: [dns]
+      summary: Add a domain
+      description: Creates the zone on our nameservers. Set the domain's nameservers at the registrar to the ones returned. Free.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, example: example.com }, ip: { type: string, description: Creates an apex A record }, project: { type: string } } } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Domain" } } } }, "409": { description: Name taken } }
+  /domains/{name}:
+    get: { tags: [dns], summary: Get a zone with its records, parameters: [{ name: name, in: path, required: true, schema: { type: string } }], responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Domain" } } } }, "404": { $ref: "#/components/responses/NotFound" } } }
+    delete: { tags: [dns], summary: Delete a zone and its records, parameters: [{ name: name, in: path, required: true, schema: { type: string } }], responses: { "200": { description: Deleted } } }
+  /domains/{name}/zone-file:
+    get: { tags: [dns], summary: The zone in BIND format, parameters: [{ name: name, in: path, required: true, schema: { type: string } }], responses: { "200": { description: OK, content: { text/plain: { schema: { type: string } } } } } }
+  /domains/{name}/records:
+    post:
+      tags: [dns]
+      summary: Add a record
+      parameters: [{ name: name, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateDnsRecord" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/DnsRecord" } } } }, "409": { description: CNAME conflict } }
+  /domains/{name}/records/{id}:
+    patch: { tags: [dns], summary: Change a record, parameters: [{ name: name, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string }, content: { type: string }, ttl: { type: integer }, priority: { type: integer } } } } } }, responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DnsRecord" } } } } } }
+    delete: { tags: [dns], summary: Delete a record, parameters: [{ name: name, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/id" }], responses: { "200": { description: Deleted } } }
+  /public-ips/{id}/reverse-dns:
+    put: { tags: [dns], summary: Set reverse DNS (PTR) for a public IP, parameters: [{ $ref: "#/components/parameters/id" }], requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string, nullable: true, description: Hostname, or null to clear } } } } } }, responses: { "200": { description: OK } } }
+
   /apps:
     get: { tags: [marketplace], security: [], summary: List marketplace apps, parameters: [{ name: category, in: query, schema: { type: string } }], responses: { "200": { description: OK } } }
   /apps/categories:
@@ -673,7 +700,7 @@ components:
         expiresInDays: { type: integer }
     Scope:
       type: string
-      enum: [servers:read, servers:write, servers:delete, images:read, snapshots:read, snapshots:write, volumes:read, volumes:write, network:read, network:write, apps:read, billing:read, billing:write, iam:read, iam:write]
+      enum: [servers:read, servers:write, servers:delete, images:read, snapshots:read, snapshots:write, volumes:read, volumes:write, dns:read, dns:write, network:read, network:write, apps:read, billing:read, billing:write, iam:read, iam:write]
     Size:
       type: object
       properties:
@@ -726,6 +753,38 @@ components:
         region: { type: string, description: Defaults to the platform region }
         project: { type: string }
         serverId: { type: string, description: Attach right after creation }
+    Domain:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [pending, active, error, deleting, deleted] }
+        statusMessage: { type: string, nullable: true }
+        serial: { type: integer }
+        synced: { type: boolean, description: True when the nameservers serve the current serial }
+        nameservers: { type: array, items: { type: string } }
+        recordCount: { type: integer }
+        records: { type: array, items: { $ref: "#/components/schemas/DnsRecord" } }
+        createdAt: { type: string, format: date-time }
+    DnsRecord:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string, description: Relative to the zone; "@" is the apex }
+        type: { type: string, enum: [A, AAAA, CNAME, MX, TXT, NS, SRV, CAA] }
+        content: { type: string }
+        ttl: { type: integer }
+        priority: { type: integer, nullable: true, description: MX preference or SRV priority }
+        updatedAt: { type: string, format: date-time }
+    CreateDnsRecord:
+      type: object
+      required: [name, type, content]
+      properties:
+        name: { type: string, example: www }
+        type: { type: string, enum: [A, AAAA, CNAME, MX, TXT, NS, SRV, CAA] }
+        content: { type: string, description: "A: IPv4; CNAME/MX/NS: hostname; SRV: weight port target; CAA: flags tag value; TXT: text" }
+        ttl: { type: integer, minimum: 30, maximum: 604800, default: 3600 }
+        priority: { type: integer, description: MX and SRV }
     ForwardingRule:
       type: object
       required: [entryProtocol, entryPort, targetProtocol, targetPort]

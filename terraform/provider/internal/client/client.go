@@ -264,6 +264,23 @@ func (c *Client) WaitLoadBalancer(ctx context.Context, id string, timeout time.D
 	}
 }
 
+type DnsRecord struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Content  string `json:"content"`
+	TTL      int    `json:"ttl"`
+	Priority *int   `json:"priority"`
+}
+
+type Domain struct {
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	Status      string      `json:"status"`
+	Nameservers []string    `json:"nameservers"`
+	Records     []DnsRecord `json:"records"`
+}
+
 type FirewallRule struct {
 	Direction string   `json:"direction"`
 	Protocol  string   `json:"protocol"`

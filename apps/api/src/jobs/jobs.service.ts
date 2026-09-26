@@ -12,6 +12,7 @@ import { ApprovalsService } from '../modules/approvals/approvals.service';
 import { MetricsService } from '../modules/monitoring/metrics.service';
 import { AlertsService } from '../modules/monitoring/alerts.service';
 import { LoadBalancersService } from '../modules/lb/lb.service';
+import { DnsService } from '../modules/dns/dns.service';
 
 /**
  * Periodic jobs. Each takes a Redis lock so only one API replica runs it.
@@ -34,7 +35,13 @@ export class JobsService {
     private readonly metrics: MetricsService,
     private readonly alerts: AlertsService,
     private readonly lbs: LoadBalancersService,
+    private readonly dns: DnsService,
   ) {}
+
+  @Cron('20 * * * * *') // every minute at :20: push DNS zones and PTRs that are behind
+  resyncDns() {
+    return this.locked('dns-resync', 50_000, () => this.dns.resyncPending());
+  }
 
   @Cron('45 * * * * *') // every minute at :45: load balancer health and config retries
   refreshLoadBalancers() {

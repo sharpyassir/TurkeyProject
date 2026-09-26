@@ -338,6 +338,29 @@ server.registerTool('delete_load_balancer', {
   inputSchema: { loadBalancerId: z.string() },
 }, async ({ loadBalancerId }) => run(() => api('DELETE', `/v1/load-balancers/${loadBalancerId}`)));
 
+server.registerTool('list_domains', {
+  title: 'List DNS zones',
+  description: 'Hosted DNS zones in the project and the nameservers to set at the registrar. Pass name to get one zone with its records.',
+  inputSchema: { name: z.string().optional(), project: z.string().optional() },
+}, async ({ name, project }) => run(() => name ? api('GET', `/v1/domains/${name}`) : api('GET', `/v1/domains${project ? `?project=${encodeURIComponent(project)}` : ''}`)));
+
+server.registerTool('create_domain', {
+  title: 'Add a DNS zone',
+  description: 'Hosts a domain on pgcloud nameservers (free). Optionally creates an apex A record pointing at ip, for example a server or load balancer address.',
+  inputSchema: { name: z.string(), ip: z.string().optional(), project: z.string().optional() },
+}, async (input) => run(() => api('POST', '/v1/domains', input)));
+
+server.registerTool('dns_record', {
+  title: 'Add, change or delete a DNS record',
+  description: 'add needs type and content (A: IPv4, AAAA: IPv6, CNAME/MX/NS: hostname, TXT: text, SRV: "weight port target", CAA: "flags tag value"); update and delete need recordId. Name is relative to the zone, "@" for the apex. Changes are live within seconds.',
+  inputSchema: { zone: z.string(), action: z.enum(['add', 'update', 'delete']), recordId: z.string().optional(), name: z.string().optional(), type: z.enum(['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA']).optional(), content: z.string().optional(), ttl: z.number().int().optional(), priority: z.number().int().optional() },
+}, async ({ zone, action, recordId, ...body }) => run(async () => {
+  if (action === 'add') return api('POST', `/v1/domains/${zone}/records`, body);
+  if (!recordId) throw new Error('recordId is required');
+  if (action === 'delete') return api('DELETE', `/v1/domains/${zone}/records/${recordId}`);
+  return api('PATCH', `/v1/domains/${zone}/records/${recordId}`, body);
+}));
+
 /* ───────────────────────── start ───────────────────────── */
 
 const transport = new StdioServerTransport();

@@ -115,6 +115,31 @@ services:
       DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
     networks: [internal]
 
+  # Authoritative nameserver. Runs on the management host in phase 0; in phase 1 run one on
+  # each of two hosts (ns1, ns2) against the same schema, both pointed at the API through
+  # PDNS_API_URL. Load the schema once: docker compose exec postgres psql -U pgcloud -d pdns
+  #   -f /usr/local/share/doc/pdns/schema.pgsql.sql (copy it out of the pdns image).
+  pdns:
+    image: powerdns/pdns-auth-49:4.9.4
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PDNS_AUTH_API_KEY: ${PDNS_API_KEY}
+      PDNS_launch: gpgsql
+      PDNS_gpgsql_host: postgres
+      PDNS_gpgsql_user: pgcloud
+      PDNS_gpgsql_password: ${POSTGRES_PASSWORD}
+      PDNS_gpgsql_dbname: pdns
+      PDNS_api: "yes"
+      PDNS_webserver: "yes"
+      PDNS_webserver_address: 0.0.0.0
+      PDNS_webserver_allow_from: 0.0.0.0/0
+      PDNS_default_soa_content: "ns1.@ hostmaster.@ 0 10800 3600 604800 3600"
+    ports: ["53:53/udp", "53:53/tcp"]
+    networks: [internal]
+    profiles: [dns]
+
   # Internal only: reach it over an SSH tunnel (ssh -L 8080:127.0.0.1:8080 mgmt), never exposed by Caddy.
   temporal-ui:
     image: temporalio/ui:2.31.2

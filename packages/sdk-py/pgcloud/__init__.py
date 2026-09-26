@@ -51,6 +51,7 @@ class Pgcloud:
         self.snapshots = _Snapshots(self)
         self.volumes = _Volumes(self)
         self.load_balancers = _LoadBalancers(self)
+        self.domains = _Domains(self)
         self.certificates = _Certificates(self)
         self.billing = _Billing(self)
         self.approvals = _Approvals(self)
@@ -283,6 +284,38 @@ class _Certificates(_Res):
 
     def delete(self, id: str):
         return self.c.request("DELETE", f"/v1/certificates/{id}")
+
+
+class _Domains(_Res):
+    def list(self):
+        return self.c.request("GET", "/v1/domains", query={"project": self.c.project})
+
+    def get(self, name: str):
+        return self.c.request("GET", f"/v1/domains/{name}")
+
+    def create(self, name: str, ip: Optional[str] = None):
+        body = {"name": name, "project": self.c.project}
+        if ip:
+            body["ip"] = ip
+        return self.c.request("POST", "/v1/domains", body)
+
+    def delete(self, name: str):
+        return self.c.request("DELETE", f"/v1/domains/{name}")
+
+    def add_record(self, zone: str, name: str, type: str, content: str, ttl: int = 3600, priority: Optional[int] = None):
+        body = {"name": name, "type": type, "content": content, "ttl": ttl}
+        if priority is not None:
+            body["priority"] = priority
+        return self.c.request("POST", f"/v1/domains/{zone}/records", body)
+
+    def update_record(self, zone: str, id: str, **fields):
+        return self.c.request("PATCH", f"/v1/domains/{zone}/records/{id}", fields)
+
+    def delete_record(self, zone: str, id: str):
+        return self.c.request("DELETE", f"/v1/domains/{zone}/records/{id}")
+
+    def set_reverse_dns(self, public_ip_id: str, hostname: Optional[str]):
+        return self.c.request("PUT", f"/v1/public-ips/{public_ip_id}/reverse-dns", {"name": hostname})
 
 
 class _Billing(_Res):

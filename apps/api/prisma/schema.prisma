@@ -131,6 +131,7 @@ model Project {
   volumes   Volume[]
   loadBalancers LoadBalancer[]
   certificates  Certificate[]
+  dnsZones      DnsZone[]
   apiTokens ApiToken[]
   usage     UsageRecord[]
   deployments Deployment[]
@@ -457,6 +458,8 @@ model PublicIp {
 
   @@index([status, regionId])
   loadBalancer LoadBalancer?
+  /// False while a reverse DNS change waits to reach the nameservers.
+  reverseDnsSynced Boolean @default(true)
 }
 
 enum FirewallDirection {
@@ -1115,4 +1118,63 @@ model LoadBalancerTarget {
   server       Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
 
   @@unique([loadBalancerId, serverId])
+}
+
+// ───────────────────────── DNS ─────────────────────────
+
+enum DnsZoneStatus {
+  pending
+  active
+  error
+  deleting
+  deleted
+}
+
+enum DnsRecordType {
+  A
+  AAAA
+  CNAME
+  MX
+  TXT
+  NS
+  SRV
+  CAA
+}
+
+/// A hosted zone. The database is the source of truth; every change bumps `serial` and the
+/// zone is pushed whole to the nameservers (PowerDNS), which report back through syncedSerial.
+model DnsZone {
+  id            String        @id @default(cuid())
+  projectId     String
+  name          String
+  status        DnsZoneStatus @default(pending)
+  statusMessage String?
+  serial        Int           @default(1)
+  syncedSerial  Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  project Project     @relation(fields: [projectId], references: [id])
+  records DnsRecord[]
+
+  @@index([projectId])
+}
+
+model DnsRecord {
+  id        String        @id @default(cuid())
+  zoneId    String
+  /// Relative name: "@" for the apex, "www", "_sip._tcp"
+  name      String
+  type      DnsRecordType
+  content   String
+  ttl       Int           @default(3600)
+  /// MX preference or SRV priority
+  priority  Int?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  zone DnsZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@index([zoneId])
 }

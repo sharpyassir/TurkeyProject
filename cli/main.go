@@ -95,6 +95,8 @@ func main() {
 		err = cmdLoadBalancers(rest)
 	case "certificates", "certs":
 		err = cmdCertificates(rest)
+	case "domains", "dns":
+		err = cmdDomains(rest)
 	case "tokens":
 		err = cmdTokens(rest)
 	case "firewalls":
@@ -124,6 +126,9 @@ ACCOUNT   login · logout · whoami · billing [invoices|payments|topup AMOUNT|p
 AGENTS    approvals [ls | approve ID | deny ID --reason TEXT]   (requests parked by agent tokens)
 LBS       load-balancers [ls | create NAME --rule http:80:80 [--rule https:443:80:CERT_ID] [--server ID ...] [--tag T] [--nodes 2] [--wait] | get ID | add ID SERVER_ID | remove ID SERVER_ID | delete ID]
           certificates [ls | add NAME --le example.com,www.example.com | add NAME --cert FILE --key FILE | delete ID]
+DNS       domains [ls | add NAME [--ip A.B.C.D] | get NAME | zone-file NAME | delete NAME]
+          domains records NAME [ls | add TYPE HOST CONTENT [--ttl 300] [--priority 10] | delete RECORD_ID]
+          domains rdns PUBLIC_IP_ID HOSTNAME|--clear
 VOLUMES   volumes [ls | create NAME --size GB [--server ID] | attach ID SERVER_ID | detach ID | resize ID --size GB | delete ID]
 MONITOR   servers metrics ID [--period 1h|6h|24h|7d|30d] · alerts [ls | incidents | create NAME --metric cpu --above 90 | mute ID | delete ID]
 SERVERS   servers ls | create NAME [--size s-2vcpu-4gb] [--image ubuntu-24-04|wordpress] [--key ID] [--wait]
@@ -201,6 +206,29 @@ func (e *apiError) Error() string {
 		return fmt.Sprintf("%s: %s %s", e.Code, e.Message, d)
 	}
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
+}
+
+// callText fetches a plain text endpoint (zone files) with the same auth as call.
+func callText(method, path string, out *string) error {
+	req, err := http.NewRequest(method, cfg.APIURL+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "pgcloud-cli/"+version)
+	if cfg.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("cannot reach %s: %w", cfg.APIURL, err)
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	if res.StatusCode >= 400 {
+		return fmt.Errorf("HTTP %d: %s", res.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	*out = string(raw)
+	return nil
 }
 
 func call(method, path string, body any, out any) error {
@@ -1174,6 +1202,132 @@ func cmdCertificates(args []string) error {
 		return nil
 	}
 	return errors.New("usage: pgcloud certificates [ls | add ... | delete ID]")
+}
+
+func cmdDomains(args []string) error {
+	if len(args) == 0 || args[0] == "ls" {
+		var out map[string]any
+		if err := call(http.MethodGet, "/v1/domains", nil, &out); err != nil {
+			return err
+		}
+		if jsonOut {
+			return printJSON(out)
+		}
+		rows := []map[string]any{}
+		for _, z := range out["data"].([]any) {
+			rows = append(rows, z.(map[string]any))
+		}
+		table(rows, []string{"name", "status", "synced", "recordCount", "id"})
+		fmt.Fprintf(stdout, "nameservers: %v\n", out["nameservers"])
+		return nil
+	}
+	usage := errors.New("usage: pgcloud domains [ls | add NAME [--ip IP] | get NAME | zone-file NAME | delete NAME | records NAME ... | rdns IP_ID HOSTNAME|--clear]")
+	var z map[string]any
+	switch args[0] {
+	case "add":
+		if len(args) < 2 {
+			return usage
+		}
+		ip, _ := flag(args[2:], "--ip")
+		body := map[string]any{"name": args[1]}
+		if ip != "" {
+			body["ip"] = ip
+		}
+		if err := call(http.MethodPost, "/v1/domains", body, &z); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ %s added; set its nameservers to %v\n", z["name"], z["nameservers"])
+	case "get":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodGet, "/v1/domains/"+args[1], nil, &z); err != nil {
+			return err
+		}
+		if jsonOut {
+			return printJSON(z)
+		}
+		fmt.Fprintf(stdout, "%s  %v  serial=%v  synced=%v\n", z["name"], z["status"], z["serial"], z["synced"])
+		rows := []map[string]any{}
+		for _, r := range z["records"].([]any) {
+			rows = append(rows, r.(map[string]any))
+		}
+		table(rows, []string{"type", "name", "priority", "content", "ttl", "id"})
+	case "zone-file":
+		if len(args) < 2 {
+			return usage
+		}
+		var text string
+		if err := callText(http.MethodGet, "/v1/domains/"+args[1]+"/zone-file", &text); err != nil {
+			return err
+		}
+		fmt.Fprint(stdout, text)
+	case "delete", "rm":
+		if len(args) < 2 {
+			return usage
+		}
+		if err := call(http.MethodDelete, "/v1/domains/"+args[1], nil, nil); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "✓ deleted")
+	case "records":
+		if len(args) < 3 {
+			return errors.New("usage: pgcloud domains records NAME [ls | add TYPE HOST CONTENT [--ttl N] [--priority N] | delete RECORD_ID]")
+		}
+		zone := args[1]
+		switch args[2] {
+		case "ls":
+			return cmdDomains([]string{"get", zone})
+		case "add":
+			if len(args) < 6 {
+				return errors.New("usage: pgcloud domains records NAME add TYPE HOST CONTENT [--ttl N] [--priority N]")
+			}
+			ttl, rest := flag(args[6:], "--ttl")
+			prio, _ := flag(rest, "--priority")
+			body := map[string]any{"type": strings.ToUpper(args[3]), "name": args[4], "content": args[5]}
+			if ttl != "" {
+				var n int
+				fmt.Sscanf(ttl, "%d", &n)
+				body["ttl"] = n
+			}
+			if prio != "" {
+				var n int
+				fmt.Sscanf(prio, "%d", &n)
+				body["priority"] = n
+			}
+			var r map[string]any
+			if err := call(http.MethodPost, "/v1/domains/"+zone+"/records", body, &r); err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "✓ %v %v -> %v (%v)\n", r["type"], r["name"], r["content"], r["id"])
+		case "delete", "rm":
+			if len(args) < 4 {
+				return errors.New("record id required")
+			}
+			if err := call(http.MethodDelete, "/v1/domains/"+zone+"/records/"+args[3], nil, nil); err != nil {
+				return err
+			}
+			fmt.Fprintln(stdout, "✓ deleted")
+		default:
+			return errors.New("usage: pgcloud domains records NAME [ls | add ... | delete RECORD_ID]")
+		}
+	case "rdns":
+		if len(args) < 3 {
+			return errors.New("usage: pgcloud domains rdns PUBLIC_IP_ID HOSTNAME|--clear")
+		}
+		body := map[string]any{"name": nil}
+		if args[2] != "--clear" {
+			body["name"] = args[2]
+		}
+		var r map[string]any
+		if err := call(http.MethodPut, "/v1/public-ips/"+args[1]+"/reverse-dns", body, &r); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "✓ %v -> %v\n", r["address"], orEmpty(r["reverseDns"]))
+	default:
+		return usage
+	}
+	return nil
 }
 
 func cmdVolumes(args []string) error {

@@ -44,6 +44,12 @@ const schema = z.object({
   MAIL_API_KEY: z.string().optional(),
   /** When true, team owners must enable two factor sign in before using the console. */
   REQUIRE_TOTP_FOR_OWNERS: z.coerce.boolean().default(false),
+  DNS_PROVIDER: z.enum(['fake', 'powerdns']).default('fake'),
+  PDNS_API_URL: z.string().url().default('http://localhost:8081'),
+  PDNS_API_KEY: z.string().optional(),
+  /** Comma separated, published as the NS set of every zone and shown to customers. */
+  DNS_NAMESERVERS: z.string().default('ns1.pgcloud.example,ns2.pgcloud.example'),
+  DNS_HOSTMASTER: z.string().default('hostmaster.pgcloud.example'),
   FX_PROVIDER_URL: z.string().url().default('https://open.er-api.com/v6/latest/USD'),
 });
 

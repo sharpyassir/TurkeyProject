@@ -107,7 +107,7 @@ async function main() {
     await prisma.credit.create({ data: { teamId: team.id, kind: 'promo', currency: 'TRY', amountMinor: 410000, remainingMinor: 410000, reason: 'dev seed ($100 at 41)' } });
     const raw = 'pgc_' + randomBytes(32).toString('base64url');
     await prisma.apiToken.create({
-      data: { teamId: team.id, userId: user.id, name: 'dev', prefix: raw.slice(0, 12), hash: createHash('sha256').update(raw).digest('hex'), scopes: ['servers:read', 'servers:write', 'servers:delete', 'images:read', 'snapshots:read', 'snapshots:write', 'volumes:read', 'volumes:write', 'network:read', 'network:write', 'apps:read', 'billing:read', 'billing:write', 'iam:read', 'iam:write'] },
+      data: { teamId: team.id, userId: user.id, name: 'dev', prefix: raw.slice(0, 12), hash: createHash('sha256').update(raw).digest('hex'), scopes: ['servers:read', 'servers:write', 'servers:delete', 'images:read', 'snapshots:read', 'snapshots:write', 'volumes:read', 'volumes:write', 'dns:read', 'dns:write', 'network:read', 'network:write', 'apps:read', 'billing:read', 'billing:write', 'iam:read', 'iam:write'] },
     });
     const admin = 'pgc_' + randomBytes(32).toString('base64url');
     await prisma.apiToken.create({ data: { teamId: team.id, userId: user.id, name: 'staff-admin', prefix: admin.slice(0, 12), hash: createHash('sha256').update(admin).digest('hex'), scopes: ['admin'] } });

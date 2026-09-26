@@ -96,6 +96,17 @@ holds in flight host agent jobs; the worker retries them. Temporal state lives i
 - **Adding a Proxmox node**: create the `Host` row through the admin API, put its id in the inventory, run
   the playbook with `--limit pve_nodes`. The agent starts sending heartbeats within a minute.
 
+## DNS (PowerDNS)
+
+Hosted zones and reverse DNS are served by PowerDNS Authoritative with the Postgres backend.
+Create the `pdns` database once, load the schema from the image, start the service with
+`docker compose --profile dns up -d pdns`, and set `DNS_PROVIDER=powerdns` with the API key in
+the settings file. The API pushes every zone whole through the PowerDNS HTTP API and the
+minute job retries anything that did not land. Glue: register `ns1` and `ns2` at your registrar
+pointing at the hosts that run PowerDNS, and set the same names in `DNS_NAMESERVERS`. Reverse
+DNS needs the in-addr.arpa zones of your IP blocks delegated to the same nameservers by your
+RIR or upstream.
+
 ## GitHub App (Git Deploy)
 
 Create one app per environment at github.com/settings/apps (or under the organization):

@@ -53,6 +53,24 @@ resource "pgcloud_load_balancer" "web" {
   }
 }
 
+resource "pgcloud_domain" "site" {
+  name = "example.com"
+}
+
+resource "pgcloud_dns_record" "apex" {
+  domain = pgcloud_domain.site.name
+  name   = "@"
+  type   = "A"
+  value  = pgcloud_load_balancer.web.ip
+}
+
+resource "pgcloud_dns_record" "www" {
+  domain = pgcloud_domain.site.name
+  name   = "www"
+  type   = "CNAME"
+  value  = "example.com"
+}
+
 output "address" {
   value = pgcloud_server.web.ipv4_address
 }
