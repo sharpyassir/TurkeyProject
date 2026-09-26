@@ -91,7 +91,7 @@ write_files:
           b = c.get('backup') or {}
           if b.get('bucket'):
               write('/etc/pgbackrest/pgbackrest.conf', f"[main]\\npg1-path=/var/lib/postgresql/16/main\\n[global]\\nrepo1-type=s3\\nrepo1-s3-endpoint={b['endpoint']}\\nrepo1-s3-bucket={b['bucket']}\\nrepo1-s3-region={b['region']}\\nrepo1-s3-key={b['accessKey']}\\nrepo1-s3-key-secret={b['secretKey']}\\nrepo1-s3-uri-style=path\\nrepo1-path=/{c['cluster']['name']}\\nrepo1-retention-full=7\\nprocess-max=2\\nlog-level-console=info\\n", 0o600, 'postgres:postgres')
-          write('/etc/keepalived/keepalived.conf', "vrrp_script chk_primary {\\n  script \\"/usr/bin/curl -sf http://127.0.0.1:8008/primary\\"\\n  interval 2\\n  fall 2\\n  rise 2\\n}\\nvrrp_instance VI_db {\\n  state BACKUP\\n  interface eth0\\n  virtual_router_id %d\\n  priority %d\\n  advert_int 1\\n  nopreempt\\n  authentication { auth_type PASS auth_pass pgclouddb }\\n  virtual_ipaddress { %s/%d }\\n  track_script { chk_primary }\\n}\\n" % (c['cluster']['vrid'], 100 - me['index'], c['cluster']['vip'], c['cluster']['prefix']))
+          keepalived(c, me, '/usr/bin/curl -sf http://127.0.0.1:8008/primary')
           sh('systemctl enable --now patroni keepalived && systemctl restart keepalived && (systemctl is-active patroni || systemctl restart patroni)', check=False)
           # pgbouncer in front, transaction pooling, auth through pg_authid.
           write('/etc/pgbouncer/pgbouncer.ini', f"[databases]\\n* = host=127.0.0.1 port=5432\\n[pgbouncer]\\nlisten_addr = 0.0.0.0\\nlisten_port = 6432\\nauth_type = scram-sha-256\\nauth_file = /etc/pgbouncer/userlist.txt\\nauth_user = {c['admin']['user']}\\nauth_query = SELECT usename, passwd FROM pg_shadow WHERE usename=$1\\npool_mode = transaction\\nmax_client_conn = 1000\\ndefault_pool_size = 20\\nclient_tls_sslmode = allow\\nclient_tls_cert_file = /etc/pgcloud/server.crt\\nclient_tls_key_file = /etc/pgcloud/server.key\\n")
@@ -165,7 +165,7 @@ write_files:
           return len(body)
 
       def keepalived(c, me, check):
-          write('/etc/keepalived/keepalived.conf', "vrrp_script chk_primary {\\n  script \"%s\"\\n  interval 2\\n  fall 2\\n  rise 2\\n}\\nvrrp_instance VI_db {\\n  state BACKUP\\n  interface eth0\\n  virtual_router_id %d\\n  priority %d\\n  advert_int 1\\n  nopreempt\\n  authentication { auth_type PASS auth_pass pgclouddb }\\n  virtual_ipaddress { %s/%d }\\n  track_script { chk_primary }\\n}\\n" % (check, c['cluster']['vrid'], 100 - me['index'], c['cluster']['vip'], c['cluster']['prefix']))
+          write('/etc/keepalived/keepalived.conf', "vrrp_script chk_primary {\\n  script \\"%s\\"\\n  interval 2\\n  fall 2\\n  rise 2\\n}\\nvrrp_instance VI_db {\\n  state BACKUP\\n  interface eth0\\n  virtual_router_id %d\\n  priority %d\\n  advert_int 1\\n  nopreempt\\n  authentication { auth_type PASS auth_pass pgclouddb }\\n  virtual_ipaddress { %s/%d }\\n  track_script { chk_primary }\\n}\\n" % (check, c['cluster']['vrid'], 100 - me['index'], c['cluster']['vip'], c['cluster']['prefix']))
           sh('systemctl enable --now keepalived && systemctl restart keepalived', check=False)
 
       # ---- valkey: replication plus sentinel on three nodes, ACL users, RDB backups ----
